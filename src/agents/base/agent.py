@@ -246,13 +246,4 @@ class Agent(BaseModel):
         raise NotImplementedError(f"Agent `{self.name}` doesn't implement last_report_current_process function.")
     
 
-    def fetch_from_github(self):
 
-        raise NotImplementedError(f"Agent `{self.name}` doesn't implement fetch_from_github function.")
-    
-    
-    def pr_to_github(self):
-        
-        raise NotImplementedError(f"Agent `{self.name}` doesn't implement pr_to_github function.")
-    
-    
