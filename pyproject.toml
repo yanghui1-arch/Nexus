@@ -1,0 +1,25 @@
+[project]
+name = "nexus"
+version = "0.1.0-beta"
+description = "Coding automatically as a team in an enterprise level"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "mwin>=0.2.2",
+    "openai>=2.29.0",
+    "mcp>=1.0.0",
+    "mcp-server-fetch>=0.1.0",
+    "docker>=7.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "integration: hits real network and MCP server (deselect with '-m not integration')",
+]
