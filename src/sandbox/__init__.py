@@ -1,5 +1,5 @@
 from .docker_sandbox import (
-    CodeSandbox,
+    Sandbox,
     SandboxConfig,
     PYTHON_310,
     PYTHON_311,
@@ -12,7 +12,7 @@ from .docker_sandbox import (
 )
 
 __all__ = [
-    "CodeSandbox",
+    "Sandbox",
     "SandboxConfig",
     "PYTHON_310",
     "PYTHON_311",

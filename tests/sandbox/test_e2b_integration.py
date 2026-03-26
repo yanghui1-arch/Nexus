@@ -1,13 +1,13 @@
 import pytest
 
-from src.sandbox import CodeSandbox, SandboxConfig, PYTHON_312, NODE_20, JAVA_21
+from src.sandbox import Sandbox, SandboxConfig, PYTHON_312, NODE_20, JAVA_21
 
 
 # ── Python ────────────────────────────────────────────────────────────────────
 
 @pytest.fixture
 async def py_sandbox():
-    async with CodeSandbox(PYTHON_312) as sbx:
+    async with Sandbox(PYTHON_312) as sbx:
         yield sbx
 
 
@@ -39,7 +39,7 @@ async def test_python_run_code_error(py_sandbox):
 
 @pytest.fixture
 async def node_sandbox():
-    async with CodeSandbox(NODE_20) as sbx:
+    async with Sandbox(NODE_20) as sbx:
         yield sbx
 
 
@@ -63,7 +63,7 @@ async def test_node_run_code_error(node_sandbox):
 
 @pytest.fixture
 async def java_sandbox():
-    async with CodeSandbox(JAVA_21) as sbx:
+    async with Sandbox(JAVA_21) as sbx:
         yield sbx
 
 
@@ -81,7 +81,7 @@ async def test_java_run_code(java_sandbox):
 @pytest.mark.integration
 async def test_custom_config():
     cfg = SandboxConfig(image="python:3.11-slim", code_runner="python", code_ext=".py")
-    async with CodeSandbox(cfg) as sandbox:
+    async with Sandbox(cfg) as sandbox:
         result = await sandbox.run_code("import sys; print(sys.version)")
 
     assert result["success"] is True
@@ -92,7 +92,7 @@ async def test_custom_config():
 
 @pytest.fixture
 async def sandbox():
-    async with CodeSandbox(PYTHON_312) as sbx:
+    async with Sandbox(PYTHON_312) as sbx:
         yield sbx
 
 

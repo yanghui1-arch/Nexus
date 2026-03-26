@@ -15,12 +15,12 @@ class SandboxConfig:
     Pick a built-in preset or build for custom images:
 
     ## Built-in
-    CodeSandbox(PYTHON_312) \n
-    CodeSandbox(NODE_20) \n
-    CodeSandbox(JAVA_21) \n
+    Sandbox(PYTHON_312) \n
+    Sandbox(NODE_20) \n
+    Sandbox(JAVA_21) \n
 
     ## Custom image (e.g. Python + Nginx, TS + Java, specific version)
-    CodeSandbox(SandboxConfig(
+    Sandbox(SandboxConfig(
         image="myorg/python-nginx:latest",
         code_runner="python",
         code_ext=".py",
@@ -48,7 +48,7 @@ JAVA_21    = SandboxConfig("eclipse-temurin:21-jdk-jammy", "java", ".java", mem_
 
 
 
-class CodeSandbox:
+class Sandbox:
     """Async context manager that runs an isolated Docker container as a sandbox.
 
     A single container is started on entry and killed on exit. All operations
@@ -63,15 +63,15 @@ class CodeSandbox:
 
     Usage::
 
-        async with CodeSandbox(PYTHON_312) as sandbox:
+        async with Sandbox(PYTHON_312) as sandbox:
             await sandbox.run_code("print('hello')")
 
-        async with CodeSandbox(NODE_20) as sandbox:
+        async with Sandbox(NODE_20) as sandbox:
             await sandbox.run_code("console.log('hello')")
 
         # Custom image
         cfg = SandboxConfig("myorg/ts-java:latest", "ts-node", ".ts")
-        async with CodeSandbox(cfg) as sandbox:
+        async with Sandbox(cfg) as sandbox:
             await sandbox.run_code("console.log('hello from ts')")
     """
 
@@ -82,7 +82,7 @@ class CodeSandbox:
         self._workdir: str | None = None
 
 
-    async def __aenter__(self) -> "CodeSandbox":
+    async def __aenter__(self) -> "Sandbox":
         self._client = await asyncio.to_thread(docker.from_env)
         self._workdir = tempfile.mkdtemp(prefix="nexus_sandbox_")
         self._container = await asyncio.to_thread(
