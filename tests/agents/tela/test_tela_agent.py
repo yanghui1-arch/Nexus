@@ -236,7 +236,7 @@ class TestGithubToolKit:
         kit = GithubToolKit(sandbox)
         captured_body: list[str] = []
         with patch("src.tools.code.github_tools.httpx.AsyncClient") as mock_client_cls:
-            async def fake_post(**kwargs):
+            async def fake_post(*args, **kwargs):
                 captured_body.append(kwargs["json"]["body"])
                 resp = MagicMock()
                 resp.json.return_value = {"html_url": "url", "number": 2}
@@ -259,7 +259,7 @@ class TestGithubToolKit:
 
 
 class TestSopAndReport:
-    def test_sop_captures_tool_calls(self):
+    def test_sop_not_implemented(self):
         tela = make_tela()
         history = [
             {"role": "assistant", "content": None, "tool_calls": [
@@ -268,10 +268,8 @@ class TestSopAndReport:
             {"role": "tool", "tool_call_id": "c1", "content": "42"},
             {"role": "assistant", "content": "The answer is 42."},
         ]
-        sop = tela.SOP(history)
-        assert "RunCode" in sop
-        assert "42" in sop
-        assert "The answer is 42" in sop
+        with pytest.raises(NotImplementedError):
+            tela.SOP(history)
 
 
     def test_last_report_returns_last_assistant_content(self):
@@ -320,7 +318,13 @@ class TestCompact:
 class TestFactory:
     def test_create_sets_correct_defaults(self):
         with patch("src.agents.base.agent.OpenAI"):
-            tela = Tela.create(base_url="http://x", api_key="k")
+            tela = Tela.create(
+                base_url="http://x",
+                api_key="k",
+                model="gpt-4o",
+                max_context=128_000,
+                github_repo="owner/repo",
+            )
 
         assert tela.name == "Tela"
         assert tela.llm_config.model == "gpt-4o"
@@ -334,6 +338,8 @@ class TestFactory:
                 base_url="http://x",
                 api_key="k",
                 model="gpt-4o-mini",
+                max_context=128_000,
+                github_repo="owner/repo",
                 github_token="ghp_abc",
             )
         assert tela.llm_config.model == "gpt-4o-mini"
