@@ -97,8 +97,8 @@ async def sandbox():
 
 
 @pytest.mark.integration
-async def test_run_command(sandbox):
-    result = await sandbox.run_command("echo 'nexus sandbox'")
+async def test_run_shell(sandbox):
+    result = await sandbox.run_shell("echo 'nexus sandbox'")
 
     assert result["success"] is True
     assert "nexus sandbox" in result["stdout"]
@@ -106,8 +106,8 @@ async def test_run_command(sandbox):
 
 
 @pytest.mark.integration
-async def test_run_command_failure(sandbox):
-    result = await sandbox.run_command("exit 1")
+async def test_run_shell_failure(sandbox):
+    result = await sandbox.run_shell("exit 1")
 
     assert result["success"] is False
     assert result["exit_code"] != 0
@@ -187,7 +187,7 @@ async def test_write_and_read_file(sandbox):
 @pytest.mark.integration
 async def test_write_then_execute(sandbox):
     await sandbox.write_file("/workspace/add.py", "print(1 + 2)")
-    result = await sandbox.run_command("python /workspace/add.py")
+    result = await sandbox.run_shell("python /workspace/add.py")
 
     assert result["success"] is True
     assert "3" in result["stdout"]

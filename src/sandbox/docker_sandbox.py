@@ -16,6 +16,7 @@ class SandboxConfig:
 
     ## Built-in
     Sandbox(PYTHON_312) \n
+    Sandbox(PYTHON_312_GIT)  # includes git \n
     Sandbox(NODE_20) \n
     Sandbox(JAVA_21) \n
 
@@ -28,14 +29,17 @@ class SandboxConfig:
     """
 
     image: str
-    code_runner: str   # executable used by run_code(), e.g. "python", "node", "java"
-    code_ext: str      # file extension for the temp script, e.g. ".py", ".js", ".java"
-    mem_limit: str = "128m"  # Docker memory limit; JVM needs at least 256m
+    code_runner: str            # executable used by run_code(), e.g. "python", "node", "java"
+    code_ext: str               # file extension for the temp script, e.g. ".py", ".js", ".java"
+    mem_limit: str = "128m"    # Docker memory limit; JVM needs at least 256m
+    init_commands: tuple[str, ...] = ()  # shell commands run once after the container starts
 
 
-PYTHON_310 = SandboxConfig("python:3.10-slim", "python", ".py")
-PYTHON_311 = SandboxConfig("python:3.11-slim", "python", ".py")
-PYTHON_312 = SandboxConfig("python:3.12-slim", "python", ".py")
+_GIT_INSTALL = "apt-get install -y --no-install-recommends git"
+
+PYTHON_310 = SandboxConfig("python:3.10-slim", "python", ".py", init_commands=(_GIT_INSTALL,))
+PYTHON_311 = SandboxConfig("python:3.11-slim", "python", ".py", init_commands=(_GIT_INSTALL,))
+PYTHON_312 = SandboxConfig("python:3.12-slim", "python", ".py", init_commands=(_GIT_INSTALL,))
 
 NODE_18    = SandboxConfig("node:18-slim",  "node", ".js")
 NODE_20    = SandboxConfig("node:20-slim",  "node", ".js")
@@ -95,6 +99,8 @@ class Sandbox:
             volumes={self._workdir: {"bind": "/workspace", "mode": "rw"}},
             working_dir="/workspace",
         )
+        for cmd in self._config.init_commands:
+            await self.run_shell(cmd)
         return self
 
 
@@ -127,7 +133,7 @@ class Sandbox:
         return result
 
 
-    async def run_command(self, cmd: str) -> dict:
+    async def run_shell(self, cmd: str) -> dict:
         """Run a shell command inside the container.
 
         Returns dict with keys: success, stdout, stderr, exit_code, error.

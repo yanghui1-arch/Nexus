@@ -1,5 +1,6 @@
 from typing import List, Any
 
+import httpx
 from pydantic import PrivateAttr, ConfigDict
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_message_param import (
@@ -38,6 +39,7 @@ class Tela(Agent):
     """
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
+    TELA_GITHUB_NICKNAME: str = "Nexus-Tela"
     github_token: str | None = None
     github_repo: str | None = None   # owner/repo, e.g. "acme/nexus"
     sandbox_config: SandboxConfig = PYTHON_312
@@ -61,20 +63,46 @@ class Tela(Agent):
 
         if self.github_repo or self.github_token:
             repo_lines = ["\n## Your Repository"]
-            if self.github_repo:
-                repo_lines.append(f"- Repo: {self.github_repo}")
             if self.github_token:
                 repo_lines.append(f"- Token: {self.github_token}  (use for git auth and all GitHub API calls)")
             if self.github_repo:
-                clone_url = (
-                    f"https://{self.github_token}@github.com/{self.github_repo}"
-                    if self.github_token
-                    else f"https://github.com/{self.github_repo}"
-                )
-                repo_lines.append(f"- Clone URL: {clone_url}")
+                upstream_url = f"https://github.com/{self.github_repo}"
+                repo_lines.append(f"- Upstream repo: {self.github_repo}  (create issues and open PRs here)")
+                repo_lines.append(f"- Upstream URL: {upstream_url}")
+                if self.github_token:
+                    fork_repo = await self._ensure_fork(self.github_token, self.github_repo)
+                    fork_clone_url = f"https://x-access-token:{self.github_token}@github.com/{fork_repo}"
+                    repo_lines.append(f"- Your fork: {fork_repo}  (clone this as `origin`, push here frequently)")
+                    repo_lines.append(f"- Fork clone URL: {fork_clone_url}")
             self.system_prompt = self.system_prompt + "\n".join(repo_lines) + "\n"
 
         return self
+
+    async def _ensure_fork(self, token: str, upstream_repo: str) -> str:
+        """Check if Tela's fork exists; create it if not. Returns the fork name."""
+        from src.logger import logger
+        repo_name = upstream_repo.split("/")[-1]
+        fork_repo = f"{self.TELA_GITHUB_NICKNAME}/{repo_name}"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"https://api.github.com/repos/{fork_repo}",
+                headers=headers,
+            )
+            if response.status_code == 404:
+                logger.info(f"Fork {fork_repo} not found — creating from {upstream_repo}")
+                await client.post(
+                    f"https://api.github.com/repos/{upstream_repo}/forks",
+                    headers=headers,
+                )
+                logger.info(f"Fork {fork_repo} created.")
+            else:
+                logger.info(f"Fork {fork_repo} already exists.")
+        return fork_repo
 
     async def __aexit__(self, *args) -> None:
         if self._sandbox:

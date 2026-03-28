@@ -103,6 +103,54 @@ class TestContextManager:
         with pytest.raises(RuntimeError, match="async context manager"):
             tela.step([])
 
+    async def test_enter_forks_when_not_exists(self):
+        tela = make_tela(github_repo="owner/repo", github_token="ghp_test")
+        mock_sandbox = AsyncMock()
+
+        with patch("src.agents.tela.agent.Sandbox", return_value=mock_sandbox):
+            with patch("src.agents.tela.agent.httpx.AsyncClient") as mock_client_cls:
+                mock_http = AsyncMock()
+                mock_http.get.return_value = MagicMock(status_code=404)
+                mock_http.post.return_value = MagicMock(status_code=202)
+                mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_http)
+                mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+                async with tela:
+                    pass
+
+        mock_http.post.assert_awaited_once()
+        post_url = mock_http.post.call_args[0][0]
+        assert "owner/repo/forks" in post_url
+
+    async def test_enter_skips_fork_creation_when_exists(self):
+        tela = make_tela(github_repo="owner/repo", github_token="ghp_test")
+        mock_sandbox = AsyncMock()
+
+        with patch("src.agents.tela.agent.Sandbox", return_value=mock_sandbox):
+            with patch("src.agents.tela.agent.httpx.AsyncClient") as mock_client_cls:
+                mock_http = AsyncMock()
+                mock_http.get.return_value = MagicMock(status_code=200)
+                mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_http)
+                mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+                async with tela:
+                    pass
+
+        mock_http.post.assert_not_awaited()
+
+    async def test_enter_injects_fork_urls_into_system_prompt(self):
+        tela = make_tela(github_repo="owner/repo", github_token="ghp_test")
+        mock_sandbox = AsyncMock()
+
+        with patch("src.agents.tela.agent.Sandbox", return_value=mock_sandbox):
+            with patch("src.agents.tela.agent.httpx.AsyncClient") as mock_client_cls:
+                mock_http = AsyncMock()
+                mock_http.get.return_value = MagicMock(status_code=200)
+                mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_http)
+                mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+                async with tela:
+                    assert "Nexus-Tela/repo" in tela.system_prompt
+                    assert "owner/repo" in tela.system_prompt
+                    assert "upstream" in tela.system_prompt
+
 
 class TestStep:
     async def test_stop_result_parsed_correctly(self):
@@ -160,12 +208,12 @@ class TestGithubToolKit:
 
     def _make_kit(self) -> GithubToolKit:
         sandbox = AsyncMock()
-        sandbox.run_command = AsyncMock(return_value={"success": True, "stdout": "", "stderr": ""})
+        sandbox.run_shell = AsyncMock(return_value={"success": True, "stdout": "", "stderr": ""})
         return GithubToolKit(sandbox)
 
     async def test_fetch_clones_when_no_git_dir(self):
         sandbox = AsyncMock()
-        sandbox.run_command = AsyncMock(side_effect=[
+        sandbox.run_shell = AsyncMock(side_effect=[
             {"success": True, "stdout": "new", "stderr": ""},   # test -d .git
             {"success": True, "stdout": "", "stderr": ""},       # git clone
         ])
@@ -175,13 +223,13 @@ class TestGithubToolKit:
             local_path="/workspace/myproject",
         )
         assert result["success"] is True
-        clone_call = sandbox.run_command.call_args_list[1][0][0]
+        clone_call = sandbox.run_shell.call_args_list[1][0][0]
         assert "git clone" in clone_call
         assert "/workspace/myproject" in clone_call
 
     async def test_fetch_pulls_when_already_cloned(self):
         sandbox = AsyncMock()
-        sandbox.run_command = AsyncMock(side_effect=[
+        sandbox.run_shell = AsyncMock(side_effect=[
             {"success": True, "stdout": "exists", "stderr": ""},  # test -d .git
             {"success": True, "stdout": "", "stderr": ""},         # git fetch/checkout/pull
         ])
@@ -191,12 +239,42 @@ class TestGithubToolKit:
             local_path="/workspace/myproject",
         )
         assert result["success"] is True
-        pull_call = sandbox.run_command.call_args_list[1][0][0]
+        pull_call = sandbox.run_shell.call_args_list[1][0][0]
         assert "pull" in pull_call
+
+    async def test_fetch_sets_upstream_remote_after_clone(self):
+        sandbox = AsyncMock()
+        sandbox.run_shell = AsyncMock(side_effect=[
+            {"success": True, "stdout": "new", "stderr": ""},   # test -d .git
+            {"success": True, "stdout": "", "stderr": ""},       # git clone
+            {"success": True, "stdout": "", "stderr": ""},       # git remote add upstream
+        ])
+        kit = GithubToolKit(sandbox)
+        await kit.fetch_from_github(
+            repo_url="https://github.com/Nexus-Tela/repo",
+            local_path="/workspace/myproject",
+            upstream_url="https://github.com/owner/repo",
+        )
+        upstream_cmd = sandbox.run_shell.call_args_list[2][0][0]
+        assert "remote" in upstream_cmd and "upstream" in upstream_cmd
+        assert "https://github.com/owner/repo" in upstream_cmd
+
+    async def test_fetch_skips_upstream_when_not_provided(self):
+        sandbox = AsyncMock()
+        sandbox.run_shell = AsyncMock(side_effect=[
+            {"success": True, "stdout": "new", "stderr": ""},
+            {"success": True, "stdout": "", "stderr": ""},
+        ])
+        kit = GithubToolKit(sandbox)
+        await kit.fetch_from_github(
+            repo_url="https://github.com/Nexus-Tela/repo",
+            local_path="/workspace/myproject",
+        )
+        assert sandbox.run_shell.call_count == 2
 
     async def test_fetch_injects_token_into_url(self):
         sandbox = AsyncMock()
-        sandbox.run_command = AsyncMock(side_effect=[
+        sandbox.run_shell = AsyncMock(side_effect=[
             {"success": True, "stdout": "new", "stderr": ""},
             {"success": True, "stdout": "", "stderr": ""},
         ])
@@ -206,12 +284,12 @@ class TestGithubToolKit:
             local_path="/workspace/myproject",
             token="ghp_secret",
         )
-        clone_call = sandbox.run_command.call_args_list[1][0][0]
-        assert "ghp_secret@github.com" in clone_call
+        clone_call = sandbox.run_shell.call_args_list[1][0][0]
+        assert "x-access-token:ghp_secret@github.com" in clone_call
 
     async def test_pr_pushes_via_sandbox(self):
         sandbox = AsyncMock()
-        sandbox.run_command = AsyncMock(return_value={"success": True, "stdout": "", "stderr": ""})
+        sandbox.run_shell = AsyncMock(return_value={"success": True, "stdout": "", "stderr": ""})
         kit = GithubToolKit(sandbox)
         with patch("src.tools.code.github_tools.httpx.AsyncClient") as mock_client_cls:
             mock_resp = MagicMock()
@@ -227,12 +305,12 @@ class TestGithubToolKit:
                 head="feature",
                 local_path="/workspace/myproject",
             )
-        push_cmd = sandbox.run_command.call_args[0][0]
+        push_cmd = sandbox.run_shell.call_args[0][0]
         assert "git" in push_cmd and "push" in push_cmd and "feature" in push_cmd
 
     async def test_pr_appends_closes_issues(self):
         sandbox = AsyncMock()
-        sandbox.run_command = AsyncMock(return_value={"success": True, "stdout": "", "stderr": ""})
+        sandbox.run_shell = AsyncMock(return_value={"success": True, "stdout": "", "stderr": ""})
         kit = GithubToolKit(sandbox)
         captured_body: list[str] = []
         with patch("src.tools.code.github_tools.httpx.AsyncClient") as mock_client_cls:

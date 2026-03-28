@@ -54,7 +54,7 @@ class ListFiles(BaseModel):
 
 
 RUN_CODE    = pydantic_function_tool(RunCode)
-RUN_COMMAND = pydantic_function_tool(RunCommand)
+RUN_SHELL = pydantic_function_tool(RunCommand)
 WRITE_FILE  = pydantic_function_tool(WriteFile)
 READ_FILE   = pydantic_function_tool(ReadFile)
 APPEND_FILE = pydantic_function_tool(AppendFile)
@@ -62,7 +62,7 @@ EDIT_FILE   = pydantic_function_tool(EditFile)
 LIST_FILES  = pydantic_function_tool(ListFiles)
 
 SANDBOX_TOOL_DEFINITIONS: list = [
-    RUN_CODE, RUN_COMMAND, WRITE_FILE, READ_FILE, APPEND_FILE, EDIT_FILE, LIST_FILES,
+    RUN_CODE, RUN_SHELL, WRITE_FILE, READ_FILE, APPEND_FILE, EDIT_FILE, LIST_FILES,
 ]
 
 
@@ -75,8 +75,8 @@ class SandboxToolKit:
     async def run_code(self, code: str) -> dict:
         return await self._sandbox.run_code(code)
 
-    async def run_command(self, cmd: str) -> dict:
-        return await self._sandbox.run_command(cmd)
+    async def run_shell(self, cmd: str) -> dict:
+        return await self._sandbox.run_shell(cmd)
 
     async def write_file(self, path: str, content: str) -> dict:
         return await self._sandbox.write_file(path, content)
@@ -97,7 +97,7 @@ class SandboxToolKit:
         """Return a name→callable mapping where names match pydantic_function_tool class names."""
         return {
             "RunCode":    self.run_code,
-            "RunCommand": self.run_command,
+            "RunCommand": self.run_shell,
             "WriteFile":  self.write_file,
             "ReadFile":   self.read_file,
             "AppendFile": self.append_file,

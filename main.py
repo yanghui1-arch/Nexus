@@ -20,21 +20,26 @@ import asyncio
 import os
 import sys
 
+from dotenv import load_dotenv
+
 from src.agents.tela.agent import Tela
 from src.agents.base.agent import WorkTempStatus
 from src.logger import logger
 
+load_dotenv()
 
 def _on_progress(status: WorkTempStatus) -> None:
     process = status["process"]
     content = status.get("agent_content")
     tools = status.get("current_use_tool")
+    tools_args = status.get("current_use_tool_args")
 
     if process == "START":
         logger.info("[Tela] Starting task...")
     elif process == "PROCESS":
         if tools:
             logger.info(f"[Tela] Tools: {', '.join(tools)}")
+            logger.info(f"[Tela] Tool args: {', '.join(tools_args)}")
         if content:
             logger.debug(f"[Tela] {content}")
     elif process == "COMPLETED":
@@ -48,7 +53,7 @@ async def run(task: str) -> None:
     api_key = os.environ.get("NEXUS_API_KEY")
     model = os.environ.get("NEXUS_MODEL", "gpt-4o")
     max_context = int(os.environ.get("NEXUS_MAX_CONTEXT", "128000"))
-    max_attempts = int(os.environ.get("NEXUS_MAX_ATTEMPTS", "30"))
+    max_attempts = int(os.environ.get("NEXUS_MAX_ATTEMPTS", "256"))
     github_repo = os.environ.get("NEXUS_GITHUB_REPO")
     github_token = os.environ.get("NEXUS_GITHUB_TOKEN")
 
