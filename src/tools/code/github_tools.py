@@ -203,8 +203,6 @@ class GithubToolKit:
         """
         
         authenticated_url = repo_url
-        if token and repo_url.startswith("https://"):
-            authenticated_url = repo_url.replace("https://", f"https://x-access-token:{token}@", 1)
 
         check = await self._sandbox.run_shell(
             f"test -d {local_path}/.git && echo exists || echo new"
