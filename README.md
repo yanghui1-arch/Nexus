@@ -1,6 +1,14 @@
-# Nexus: Enhanced Tela Agent
+# Nexus: Multi-Agent Development Platform
 
-Coding automatically as a team in an enterprise level with enhanced AI agent capabilities.
+Coding automatically as a team in an enterprise level with specialized AI agents.
+
+## Agents
+
+### Tela — Senior Python Engineer
+Tela is a senior Python software engineer who delivers clean, well-tested code. She has enhanced capabilities for code analysis, testing, and dependency management.
+
+### Sophie — React Developer & Designer
+Sophie is a React developer and web designer with exceptional taste, following Anthropic's design principles. She creates beautiful, accessible, and human-centered interfaces.
 
 ## What's New: Enhanced Tela Agent
 
@@ -111,6 +119,70 @@ async with Tela.create(
     result = await tela.work("Your task here")
 ```
 
+### Using Sophie (React & Web Design)
+```python
+from src.agents.sophie import Sophie
+
+async with Sophie.create(
+    base_url="https://api.openai.com/v1",
+    api_key="your_api_key",
+    model="gpt-4o",
+    max_context=128000,
+    github_repo="owner/repo",
+    github_token="your_token"
+) as sophie:
+    result = await sophie.work("Create a beautiful React button component")
+```
+
+## Sophie's Design Philosophy (Anthropic Style)
+
+Sophie embodies Anthropic's design principles:
+
+### 1. Clarity
+- Interfaces should be self-evident and reduce cognitive load
+- Every interaction should have clear intent and outcome
+- Remove ambiguity through thoughtful information hierarchy
+
+### 2. Craft
+- Attention to detail in spacing, typography, and color
+- Consistency across all design elements
+- Micro-interactions that feel natural and responsive
+
+### 3. Trust
+- Transparent, honest, and predictable interactions
+- Clear feedback for all user actions
+- Error states that help, not frustrate
+
+### 4. Thoughtfulness
+- Every element has purpose; nothing arbitrary
+- Design for edge cases and accessibility
+- Consider the user's emotional journey
+
+### 5. Human-centered
+- Design for real people, not just aesthetics
+- Accessibility is not an afterthought
+- Inclusive design that works for everyone
+
+## Sophie's Capabilities
+
+### React Development
+- Modern React with hooks and functional components
+- State management (Context, Redux, Zustand, Jotai)
+- Performance optimization
+- TypeScript for type safety
+
+### Web Design
+- CSS-in-JS, Tailwind CSS, CSS Modules
+- Responsive and adaptive design
+- Animation (Framer Motion, CSS transitions)
+- Accessibility (ARIA, keyboard navigation)
+
+### GitHub Operations (Full Suite)
+- Repository cloning and branch management
+- Issue creation and discussion
+- Pull request workflow with reviews
+- Activity tracking and notifications
+
 ## Enhanced Workflow
 
 Tela now follows an enhanced workflow for software development tasks:
@@ -190,9 +262,13 @@ See `examples/github_collaboration_demo.py` for a complete demonstration.
 ## Project Structure
 ```
 nexus/
-├── src/agents/tela/              # Tela agent implementation
-│   ├── agent.py                  # Enhanced Tela agent with all tools
-│   └── system_prompt.py          # System prompt
+├── src/agents/                   # Agent implementations
+│   ├── tela/                     # Tela — Python engineer
+│   │   ├── agent.py              # Enhanced Tela agent with all tools
+│   │   └── system_prompt.py
+│   └── sophie/                   # Sophie — React developer & designer
+│       ├── agent.py
+│       └── system_prompt.py
 ├── src/tools/                    # Enhanced tool implementations
 │   ├── code_analysis.py          # Code analysis tools
 │   ├── testing.py                # Testing tools
@@ -200,13 +276,18 @@ nexus/
 │   ├── sandbox.py                # Sandbox operations
 │   ├── web_search.py             # Web operations
 │   └── code/github_tools.py      # GitHub operations (including review/comment interaction)
-├── tests/tools/                  # Tests for tools
-│   ├── test_github_tools.py      # Tests for GitHub tools
-│   ├── test_code_analysis.py     # Tests for code analysis tools
-│   └── test_testing.py           # Tests for testing tools
+├── tests/                        # Test suites
+│   ├── agents/
+│   │   ├── test_tela.py
+│   │   └── test_sophie.py
+│   └── tools/
+│       ├── test_github_tools.py      # Tests for GitHub tools
+│       ├── test_code_analysis.py     # Tests for code analysis tools
+│       └── test_testing.py           # Tests for testing tools
 ├── examples/                     # Usage examples
 │   ├── github_collaboration_demo.py  # Demo of GitHub collaboration features
-│   └── enhanced_tela_demo.py     # Demo of analysis/testing features
+│   ├── enhanced_tela_demo.py         # Demo of analysis/testing features
+│   └── sophie_demo.py
 └── main.py                       # Entry point
 ```
 
