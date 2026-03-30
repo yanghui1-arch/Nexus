@@ -196,9 +196,11 @@ class GithubToolKit:
         token: str | None = None,
         upstream_url: str | None = None,
     ) -> dict:
+        """Fetch from github
+        repo_url should always be authenticated_url if github_token is provided.
+        """
+        
         authenticated_url = repo_url
-        if token and repo_url.startswith("https://"):
-            authenticated_url = repo_url.replace("https://", f"https://x-access-token:{token}@", 1)
 
         check = await self._sandbox.run_shell(
             f"test -d {local_path}/.git && echo exists || echo new"

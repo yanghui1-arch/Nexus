@@ -30,6 +30,7 @@ _ALL_TOOL_DEFINITIONS = [
 
 class Tela(Agent):
     """Tela — a Python coding agent with a sandboxed Docker workspace.
+    Always be a contributor to write python.
 
     Must be used as an async context manager so the sandbox container
     is started and stopped cleanly:
@@ -141,27 +142,17 @@ class Tela(Agent):
         completion: ChatCompletion = self.openai_client.chat.completions.create(**kwargs)
         choice = completion.choices[0]
         message = choice.message
-
-        msg_param: ChatCompletionAssistantMessageParam = {
-            "role": "assistant",
-            "content": message.content,
-        }
-        if message.tool_calls:
-            msg_param["tool_calls"] = [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
-                }
-                for tc in message.tool_calls
-            ]
+        reasoning = None
+        if hasattr(message, "reasoning_content"):
+            reasoning = getattr(message, "reasoning_content")
+            
 
         return BaseAgentStepResult(
             finish_reason=choice.finish_reason,
-            reasoning=None,
+            reasoning=reasoning,
             completion_content=message.content,
             tool_calls=message.tool_calls or None,
-            message_param=msg_param,
+            message_param=message,
             current_step_consume_tokens=completion.usage.total_tokens if completion.usage else 0,
         )
 
