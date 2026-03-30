@@ -779,5 +779,3 @@ class GithubToolKit:
                     "notifications": [],
                     "message": f"GitHub API error {e.response.status_code}: {error_detail}",
                 }
-
-

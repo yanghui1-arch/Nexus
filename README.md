@@ -1,10 +1,24 @@
-# Nexus: Enhanced Tela Agent
+# Nexus: Multi-Agent Development Platform
 
-Coding automatically as a team in an enterprise level with enhanced AI agent capabilities.
+Coding automatically as a team in an enterprise level with specialized AI agents.
+
+## Agents
+
+### Tela — Senior Python Engineer
+Tela is a senior Python software engineer who delivers clean, well-tested code. She has enhanced capabilities for code analysis, testing, and dependency management.
+
+### Sophie — React Developer & Designer
+Sophie is a React developer and web designer with exceptional taste, following Anthropic's design principles. She creates beautiful, accessible, and human-centered interfaces.
 
 ## What's New: Enhanced Tela Agent
 
-Tela, the Python coding agent in Nexus, has been significantly enhanced with GitHub review and comment interaction capabilities. These enhancements make Tela a more collaborative team member.
+Tela, the Python coding agent in Nexus, has been significantly enhanced with:
+1. **GitHub Review and Comment Interaction** - Collaborate effectively with team members
+2. **Code Analysis Tools** - Comprehensive code quality analysis
+3. **Testing Tools** - Execute tests and analyze coverage
+4. **Dependency Management Tools** - Manage project dependencies
+
+These enhancements make Tela a more powerful, self-sufficient, and collaborative agent for software development tasks.
 
 ## New Enhanced Capabilities
 
@@ -22,7 +36,31 @@ Tela, the Python coding agent in Nexus, has been significantly enhanced with Git
 
 These tools enable Tela to actively participate in code reviews, respond to feedback, and collaborate effectively with team members.
 
-### 2. **Enhanced Existing Tools**
+### 2. **Code Analysis Tools**
+- **AnalyzeCode**: Comprehensive code quality analysis including complexity, style, and imports
+- **LintCode**: Run linters (flake8, pylint, ruff) on Python code
+- **CheckTypeHints**: Type checking with mypy
+- **CalculateMetrics**: Code metrics calculation (cyclomatic complexity, LOC, Halstead metrics)
+- **CheckSecurity**: Security vulnerability detection (SQL injection, command injection, hardcoded secrets)
+- **FindDuplicates**: Duplicate code detection
+
+### 3. **Testing Tools**
+- **RunTests**: Execute tests with pytest, unittest, or nose
+- **AnalyzeTestCoverage**: Test coverage analysis and reporting
+- **GenerateTests**: Automatic test case generation
+- **CheckTestQuality**: Test code quality assessment
+- **BenchmarkPerformance**: Performance benchmarking
+- **ProfileCode**: Code profiling with cProfile or other profilers
+
+### 4. **Dependency Management Tools**
+- **AnalyzeDependencies**: Dependency analysis from code and requirements files
+- **CheckDependencyUpdates**: Check for available dependency updates
+- **GenerateRequirements**: Generate requirements.txt from code analysis
+- **CheckDependencyConflicts**: Dependency conflict detection
+- **AnalyzeImportUsage**: Import usage analysis and alternative suggestions
+- **ManageVirtualEnvironment**: Virtual environment management
+
+### 5. **Enhanced Existing Tools**
 - **GitHub Operations**: Improved with token injection for authenticated operations
 - **Sandbox Operations**: All existing tools remain available
 - **Web Operations**: Web fetching and searching capabilities
@@ -61,6 +99,9 @@ python main.py "Your task here"
 
 # Run the GitHub collaboration demo
 python examples/github_collaboration_demo.py
+
+# Run the enhanced demo
+python examples/enhanced_tela_demo.py
 ```
 
 ### Advanced Usage
@@ -78,15 +119,81 @@ async with Tela.create(
     result = await tela.work("Your task here")
 ```
 
+### Using Sophie (React & Web Design)
+```python
+from src.agents.sophie import Sophie
+
+async with Sophie.create(
+    base_url="https://api.openai.com/v1",
+    api_key="your_api_key",
+    model="gpt-4o",
+    max_context=128000,
+    github_repo="owner/repo",
+    github_token="your_token"
+) as sophie:
+    result = await sophie.work("Create a beautiful React button component")
+```
+
+## Sophie's Design Philosophy (Anthropic Style)
+
+Sophie embodies Anthropic's design principles:
+
+### 1. Clarity
+- Interfaces should be self-evident and reduce cognitive load
+- Every interaction should have clear intent and outcome
+- Remove ambiguity through thoughtful information hierarchy
+
+### 2. Craft
+- Attention to detail in spacing, typography, and color
+- Consistency across all design elements
+- Micro-interactions that feel natural and responsive
+
+### 3. Trust
+- Transparent, honest, and predictable interactions
+- Clear feedback for all user actions
+- Error states that help, not frustrate
+
+### 4. Thoughtfulness
+- Every element has purpose; nothing arbitrary
+- Design for edge cases and accessibility
+- Consider the user's emotional journey
+
+### 5. Human-centered
+- Design for real people, not just aesthetics
+- Accessibility is not an afterthought
+- Inclusive design that works for everyone
+
+## Sophie's Capabilities
+
+### React Development
+- Modern React with hooks and functional components
+- State management (Context, Redux, Zustand, Jotai)
+- Performance optimization
+- TypeScript for type safety
+
+### Web Design
+- CSS-in-JS, Tailwind CSS, CSS Modules
+- Responsive and adaptive design
+- Animation (Framer Motion, CSS transitions)
+- Accessibility (ARIA, keyboard navigation)
+
+### GitHub Operations (Full Suite)
+- Repository cloning and branch management
+- Issue creation and discussion
+- Pull request workflow with reviews
+- Activity tracking and notifications
+
 ## Enhanced Workflow
 
 Tela now follows an enhanced workflow for software development tasks:
 
-1. **Planning Phase**: Understand the task and create a plan
-2. **Implementation Phase**: Write clean, well-tested code
-3. **Quality Assurance Phase**: Verify code quality and security
-4. **Documentation Phase**: Generate documentation and reports
-5. **Collaboration Phase**: Respond to reviews and participate in discussions
+1. **Code Analysis Phase**: Analyze code quality, security, and complexity
+2. **Testing Phase**: Generate, run, and analyze tests
+3. **Dependency Management Phase**: Analyze and manage project dependencies
+4. **Implementation Phase**: Write clean, well-tested code
+5. **Quality Assurance Phase**: Verify code quality and security
+6. **Documentation Phase**: Generate documentation and reports
+7. **Collaboration Phase**: Respond to reviews and participate in discussions
 
 ## GitHub Collaboration Workflow
 
@@ -149,22 +256,38 @@ See `examples/github_collaboration_demo.py` for a complete demonstration.
 
 ## Examples
 
-See `examples/github_collaboration_demo.py` for a demonstration of GitHub collaboration features.
+- See `examples/github_collaboration_demo.py` for GitHub collaboration features
+- See `examples/enhanced_tela_demo.py` for code analysis, testing, and dependency management features
 
 ## Project Structure
 ```
 nexus/
-├── src/agents/tela/              # Tela agent implementation
-│   ├── agent.py                  # Tela agent with GitHub collaboration tools
-│   └── system_prompt.py          # System prompt
-├── src/tools/                    # Tool implementations
+├── src/agents/                   # Agent implementations
+│   ├── tela/                     # Tela — Python engineer
+│   │   ├── agent.py              # Enhanced Tela agent with all tools
+│   │   └── system_prompt.py
+│   └── sophie/                   # Sophie — React developer & designer
+│       ├── agent.py
+│       └── system_prompt.py
+├── src/tools/                    # Enhanced tool implementations
+│   ├── code_analysis.py          # Code analysis tools
+│   ├── testing.py                # Testing tools
+│   ├── dependencies.py           # Dependency management tools
 │   ├── sandbox.py                # Sandbox operations
 │   ├── web_search.py             # Web operations
 │   └── code/github_tools.py      # GitHub operations (including review/comment interaction)
-├── tests/tools/                  # Tests for tools
-│   └── test_github_tools.py      # Tests for GitHub review/comment tools
+├── tests/                        # Test suites
+│   ├── agents/
+│   │   ├── test_tela.py
+│   │   └── test_sophie.py
+│   └── tools/
+│       ├── test_github_tools.py      # Tests for GitHub tools
+│       ├── test_code_analysis.py     # Tests for code analysis tools
+│       └── test_testing.py           # Tests for testing tools
 ├── examples/                     # Usage examples
-│   └── github_collaboration_demo.py  # Demo of GitHub collaboration features
+│   ├── github_collaboration_demo.py  # Demo of GitHub collaboration features
+│   ├── enhanced_tela_demo.py         # Demo of analysis/testing features
+│   └── sophie_demo.py
 └── main.py                       # Entry point
 ```
 
