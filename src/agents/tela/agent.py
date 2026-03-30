@@ -19,17 +19,11 @@ from src.tools.code import (
 )
 from src.mcps import web_fetch, WEB_FETCH
 from src.tools.web_search import web_search, TOOL_DEFINITION as WEB_SEARCH
-from src.tools.code_analysis import CodeAnalysisToolKit, CODE_ANALYSIS_TOOL_DEFINITIONS
-from src.tools.testing import TestingToolKit, TESTING_TOOL_DEFINITIONS
-from src.tools.dependencies import DependencyToolKit, DEPENDENCY_TOOL_DEFINITIONS
 
 
 _ALL_TOOL_DEFINITIONS = [
     *SANDBOX_TOOL_DEFINITIONS,
     *GITHUB_TOOL_DEFINITIONS,
-    *CODE_ANALYSIS_TOOL_DEFINITIONS,
-    *TESTING_TOOL_DEFINITIONS,
-    *DEPENDENCY_TOOL_DEFINITIONS,
     WEB_FETCH,
     WEB_SEARCH,
 ]
@@ -60,9 +54,6 @@ class Tela(Agent):
         await self._sandbox.__aenter__()
         self._sandbox_tools = SandboxToolKit(self._sandbox)
         github_kit = GithubToolKit(self._sandbox)
-        code_analysis_kit = CodeAnalysisToolKit(self._sandbox)
-        testing_kit = TestingToolKit(self._sandbox)
-        dependency_kit = DependencyToolKit(self._sandbox)
 
         kits = self._sandbox_tools.as_tool_kits()
         kits["FetchFromGithub"] = github_kit.fetch_from_github
@@ -80,15 +71,6 @@ class Tela(Agent):
         kits["GetMyOpenPRs"] = github_kit.get_my_open_prs
         kits["GetMyIssues"] = github_kit.get_my_issues
         kits["GetNotifications"] = github_kit.get_notifications
-        
-        # Add code analysis tools
-        kits.update(code_analysis_kit.as_tool_kits())
-        
-        # Add testing tools
-        kits.update(testing_kit.as_tool_kits())
-        
-        # Add dependency tools
-        kits.update(dependency_kit.as_tool_kits())
         
         kits["WebFetch"] = web_fetch
         kits["WebSearch"] = web_search
