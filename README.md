@@ -37,6 +37,20 @@ Tela, the Python coding agent in Nexus, has been significantly enhanced with new
 - **Sandbox Operations**: All existing tools remain available
 - **Web Operations**: Web fetching and searching capabilities
 
+### 5. **GitHub Review and Comment Interaction** (NEW)
+- **GetIssueComments**: Fetch all comments on a GitHub issue
+- **ReplyToIssue**: Add a comment to respond to issue discussions
+- **GetPRReviews**: Fetch reviews on a pull request (APPROVED, CHANGES_REQUESTED, COMMENTED)
+- **GetPRReviewComments**: Fetch inline code review comments on a PR
+- **ReplyToPRReviewComment**: Reply to specific inline review comments
+- **GetPRComments**: Fetch general discussion comments on a PR
+- **ReplyToPR**: Add general comments to PR discussions
+- **GetMyOpenPRs**: List your open PRs to track feedback
+- **GetMyIssues**: List your issues to check for new comments
+- **GetNotifications**: Get GitHub notifications for activity on your contributions
+
+These tools enable Tela to actively participate in code reviews, respond to feedback, and collaborate effectively with team members.
+
 ## Getting Started
 
 ### Installation
@@ -98,6 +112,66 @@ Tela now follows an enhanced workflow for software development tasks:
 4. **Implementation Phase**: Write clean, well-tested code
 5. **Quality Assurance Phase**: Verify code quality and security
 6. **Documentation Phase**: Generate documentation and reports
+7. **Collaboration Phase**: Respond to reviews and participate in discussions
+
+## GitHub Collaboration Workflow
+
+Tela can now actively collaborate with team members through GitHub:
+
+### Starting a Session (Checking for Updates)
+```python
+# Check for new notifications
+notifications = await github_kit.get_notifications(token=token)
+
+# Check your open PRs for new comments
+my_prs = await github_kit.get_my_open_prs(
+    token=token, repo="owner/repo", creator="your-username"
+)
+
+# For each PR with new activity, read the comments
+for pr in my_prs["pull_requests"]:
+    if pr["review_comments"] > 0:
+        reviews = await github_kit.get_pr_reviews(token, repo, pr["number"])
+        review_comments = await github_kit.get_pr_review_comments(token, repo, pr["number"])
+    if pr["comments"] > 0:
+        comments = await github_kit.get_pr_comments(token, repo, pr["number"])
+```
+
+### Responding to Code Reviews
+```python
+# Reply to inline review comments
+await github_kit.reply_to_pr_review_comment(
+    token=token,
+    repo="owner/repo",
+    pull_number=42,
+    comment_id=12345,
+    body="Thanks for the feedback! I've updated the code accordingly."
+)
+
+# Add a general response to the PR
+await github_kit.reply_to_pr(
+    token=token,
+    repo="owner/repo",
+    pull_number=42,
+    body="All review comments have been addressed. Ready for another review!"
+)
+```
+
+### Participating in Issue Discussions
+```python
+# Read issue comments
+comments = await github_kit.get_issue_comments(token, repo, issue_number=10)
+
+# Respond to the discussion
+await github_kit.reply_to_issue(
+    token=token,
+    repo="owner/repo",
+    issue_number=10,
+    body="This has been implemented in PR #42. Please review!"
+)
+```
+
+See `examples/github_collaboration_demo.py` for a complete demonstration.
 
 ## Examples
 
@@ -115,12 +189,14 @@ nexus/
 │   ├── dependencies.py           # Dependency management tools
 │   ├── sandbox.py                # Sandbox operations
 │   ├── web_search.py             # Web operations
-│   └── code/github_tools.py      # GitHub operations
+│   └── code/github_tools.py      # GitHub operations (including review/comment interaction)
 ├── tests/tools/                  # Tests for new tools
 │   ├── test_code_analysis.py
-│   └── test_testing.py
+│   ├── test_testing.py
+│   └── test_github_tools.py      # Tests for GitHub review/comment tools
 ├── examples/                     # Usage examples
-│   └── enhanced_tela_demo.py
+│   ├── enhanced_tela_demo.py
+│   └── github_collaboration_demo.py  # Demo of GitHub collaboration features
 └── main.py                       # Entry point
 ```
 
