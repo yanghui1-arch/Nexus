@@ -1,135 +1,270 @@
-import type { AgentWorkflow, Stage } from '@/types/agent';
+import type { Agent, AgentTask } from '@/types/agent';
 
 const now = new Date();
 
-const createLogEntries = (stageName: string) => [
-  {
-    timestamp: new Date(now.getTime() - 5000).toISOString(),
-    level: 'info' as const,
-    message: `Starting ${stageName} stage...`,
-  },
-  {
-    timestamp: new Date(now.getTime() - 4000).toISOString(),
-    level: 'info' as const,
-    message: 'Initializing environment...',
-  },
-  {
-    timestamp: new Date(now.getTime() - 3000).toISOString(),
-    level: 'success' as const,
-    message: 'Environment ready',
-  },
-  {
-    timestamp: new Date(now.getTime() - 2000).toISOString(),
-    level: 'info' as const,
-    message: 'Processing tasks...',
-  },
-  {
-    timestamp: new Date(now.getTime() - 1000).toISOString(),
-    level: 'info' as const,
-    message: 'Validating results...',
-  },
-];
+const createLogEntries = (taskName: string, duration: number = 30): AgentTask['logs'] => {
+  const entries: AgentTask['logs'] = [];
+  const levels: Array<'info' | 'warning' | 'error' | 'success'> = ['info', 'info', 'success', 'info', 'info'];
+  const messages = [
+    `Initializing ${taskName}...`,
+    'Setting up environment...',
+    'Environment ready',
+    'Executing task...',
+    'Task execution completed',
+    'Validating results...',
+    'Cleaning up...',
+    'Task finished successfully',
+  ];
 
-const createStage = (
+  const stepDuration = duration * 1000 / messages.length;
+
+  for (let i = 0; i < messages.length; i++) {
+    entries.push({
+      timestamp: new Date(now.getTime() - (messages.length - i) * stepDuration).toISOString(),
+      level: levels[i % levels.length],
+      message: messages[i],
+    });
+  }
+
+  return entries;
+};
+
+const createTask = (
   id: string,
-  name: string,
-  status: Stage['status'],
+  title: string,
+  status: AgentTask['status'],
+  agentName: string,
   offsetMinutes: number,
   duration?: number,
   error?: string
-): Stage => {
+): AgentTask => {
   const baseTime = new Date(now.getTime() - offsetMinutes * 60000);
+  const actualDuration = duration || Math.floor(Math.random() * 300) + 60;
+
   return {
     id,
-    name,
+    title,
     status,
+    agentName,
+    agentId: agentName.toLowerCase().replace(/\s+/g, '-'),
     startTime: baseTime.toISOString(),
-    endTime: status === 'running' || status === 'pending' 
-      ? undefined 
-      : new Date(baseTime.getTime() + (duration || 30) * 1000).toISOString(),
-    duration: duration || 30,
-    logs: createLogEntries(name),
+    endTime: status === 'running' || status === 'waiting'
+      ? undefined
+      : new Date(baseTime.getTime() + actualDuration * 1000).toISOString(),
+    duration: status === 'running' || status === 'waiting' ? undefined : actualDuration,
+    logs: createLogEntries(title, actualDuration),
     error,
+    metadata: {
+      repository: 'yanghui1-arch/Nexus',
+      branch: ['main', 'feature/auth', 'fix/bug-123'][Math.floor(Math.random() * 3)],
+      commit: Math.random().toString(36).substring(2, 10),
+      command: `./scripts/${id}.sh`,
+    },
   };
 };
 
-export const mockWorkflows: AgentWorkflow[] = [
+// Generate mock agents with tasks
+export const mockAgents: Agent[] = [
   {
-    id: 'workflow-1',
-    name: 'Feature Branch Build #124',
-    status: 'running',
-    repository: 'yanghui1-arch/Nexus',
-    branch: 'feature/user-authentication',
-    startTime: new Date(now.getTime() - 15 * 60000).toISOString(),
-    stages: [
-      createStage('init', 'Init', 'completed', 15, 45),
-      createStage('github', 'GitHub Operations', 'completed', 14, 120),
-      createStage('work', 'Work', 'completed', 12, 300),
-      createStage('git', 'Git Operations', 'running', 7, undefined),
-      createStage('finish', 'Finish', 'pending', 0),
+    id: 'agent-1',
+    name: 'Agent Alpha',
+    status: 'busy',
+    currentTask: createTask(
+      'task-1-1',
+      'Building Docker image for vLLM inference',
+      'running',
+      'Agent Alpha',
+      5,
+      undefined
+    ),
+    taskQueue: [
+      createTask('task-1-2', 'Running unit tests', 'waiting', 'Agent Alpha', 0),
+      createTask('task-1-3', 'Deploying to staging', 'waiting', 'Agent Alpha', 0),
+    ],
+    completedTasks: [
+      createTask('task-1-0', 'Checkout repository', 'completed', 'Agent Alpha', 30, 45),
     ],
   },
   {
-    id: 'workflow-2',
-    name: 'Main Branch Deploy #523',
-    status: 'completed',
-    repository: 'yanghui1-arch/Nexus',
-    branch: 'main',
-    startTime: new Date(now.getTime() - 45 * 60000).toISOString(),
-    endTime: new Date(now.getTime() - 30 * 60000).toISOString(),
-    stages: [
-      createStage('init', 'Init', 'completed', 45, 60),
-      createStage('github', 'GitHub Operations', 'completed', 44, 180),
-      createStage('work', 'Work', 'completed', 41, 600),
-      createStage('git', 'Git Operations', 'completed', 31, 120),
-      createStage('finish', 'Finish', 'completed', 29, 30),
+    id: 'agent-2',
+    name: 'Agent Beta',
+    status: 'busy',
+    currentTask: createTask(
+      'task-2-1',
+      'Running integration tests',
+      'running',
+      'Agent Beta',
+      10,
+      undefined
+    ),
+    taskQueue: [
+      createTask('task-2-2', 'Code quality checks', 'waiting', 'Agent Beta', 0),
+    ],
+    completedTasks: [
+      createTask('task-2-0', 'Setup build environment', 'completed', 'Agent Beta', 25, 60),
     ],
   },
   {
-    id: 'workflow-3',
-    name: 'Bug Fix Build #125',
-    status: 'failed',
-    repository: 'yanghui1-arch/Nexus',
-    branch: 'fix/navigation-issue',
-    startTime: new Date(now.getTime() - 60 * 60000).toISOString(),
-    endTime: new Date(now.getTime() - 55 * 60000).toISOString(),
-    stages: [
-      createStage('init', 'Init', 'completed', 60, 50),
-      createStage('github', 'GitHub Operations', 'completed', 59, 150),
-      createStage('work', 'Work', 'failed', 56, 180, 'Tests failed: Component rendering issue in Navigation.test.tsx'),
-      createStage('git', 'Git Operations', 'pending', 0),
-      createStage('finish', 'Finish', 'pending', 0),
+    id: 'agent-3',
+    name: 'Agent Gamma',
+    status: 'online',
+    currentTask: undefined,
+    taskQueue: [
+      createTask('task-3-1', 'Security scan', 'waiting', 'Agent Gamma', 0),
+      createTask('task-3-2', 'Performance benchmarks', 'waiting', 'Agent Gamma', 0),
+    ],
+    completedTasks: [
+      createTask('task-3-0', 'Install dependencies', 'completed', 'Agent Gamma', 40, 120),
     ],
   },
   {
-    id: 'workflow-4',
-    name: 'Hotfix Deploy #524',
-    status: 'error',
-    repository: 'yanghui1-arch/Nexus',
-    branch: 'hotfix/security-patch',
-    startTime: new Date(now.getTime() - 90 * 60000).toISOString(),
-    endTime: new Date(now.getTime() - 85 * 60000).toISOString(),
-    stages: [
-      createStage('init', 'Init', 'completed', 90, 40),
-      createStage('github', 'GitHub Operations', 'error', 89, 100, 'GitHub API rate limit exceeded'),
-      createStage('work', 'Work', 'pending', 0),
-      createStage('git', 'Git Operations', 'pending', 0),
-      createStage('finish', 'Finish', 'pending', 0),
+    id: 'agent-4',
+    name: 'Agent Delta',
+    status: 'busy',
+    currentTask: createTask(
+      'task-4-1',
+      'Compiling CUDA kernels',
+      'running',
+      'Agent Delta',
+      2,
+      undefined
+    ),
+    taskQueue: [],
+    completedTasks: [
+      createTask('task-4-0', 'Clone repository', 'completed', 'Agent Delta', 15, 30),
     ],
   },
   {
-    id: 'workflow-5',
-    name: 'Documentation Update #42',
-    status: 'running',
-    repository: 'yanghui1-arch/Nexus',
-    branch: 'docs/api-reference',
-    startTime: new Date(now.getTime() - 5 * 60000).toISOString(),
-    stages: [
-      createStage('init', 'Init', 'completed', 5, 30),
-      createStage('github', 'GitHub Operations', 'running', 4, undefined),
-      createStage('work', 'Work', 'pending', 0),
-      createStage('git', 'Git Operations', 'pending', 0),
-      createStage('finish', 'Finish', 'pending', 0),
+    id: 'agent-5',
+    name: 'Agent Epsilon',
+    status: 'offline',
+    currentTask: undefined,
+    taskQueue: [],
+    completedTasks: [
+      createTask('task-5-0', 'Documentation build', 'completed', 'Agent Epsilon', 60, 180),
+      createTask('task-5-1', 'Lint checks', 'completed', 'Agent Epsilon', 57, 90),
+    ],
+  },
+  {
+    id: 'agent-6',
+    name: 'Agent Zeta',
+    status: 'busy',
+    currentTask: createTask(
+      'task-6-1',
+      'Running model inference tests',
+      'running',
+      'Agent Zeta',
+      8,
+      undefined
+    ),
+    taskQueue: [
+      createTask('task-6-2', 'Export test results', 'waiting', 'Agent Zeta', 0),
+      createTask('task-6-3', 'Cleanup workspace', 'waiting', 'Agent Zeta', 0),
+    ],
+    completedTasks: [
+      createTask('task-6-0', 'Download test data', 'completed', 'Agent Zeta', 20, 300),
+    ],
+  },
+  {
+    id: 'agent-7',
+    name: 'Agent Eta',
+    status: 'busy',
+    currentTask: createTask(
+      'task-7-1',
+      'Packaging Python wheel',
+      'running',
+      'Agent Eta',
+      3,
+      undefined
+    ),
+    taskQueue: [],
+    completedTasks: [],
+  },
+  {
+    id: 'agent-8',
+    name: 'Agent Theta',
+    status: 'online',
+    currentTask: undefined,
+    taskQueue: [
+      createTask('task-8-1', 'API compatibility tests', 'waiting', 'Agent Theta', 0),
+    ],
+    completedTasks: [
+      createTask('task-8-0', 'Environment setup', 'completed', 'Agent Theta', 45, 60),
+      createTask('task-8-1', 'Dependency resolution', 'completed', 'Agent Theta', 44, 30),
+    ],
+  },
+  // Add some failed tasks
+  {
+    id: 'agent-9',
+    name: 'Agent Iota',
+    status: 'online',
+    currentTask: undefined,
+    taskQueue: [],
+    completedTasks: [
+      createTask('task-9-0', 'Syntax validation', 'completed', 'Agent Iota', 50, 45),
+      createTask('task-9-1', 'Type checking', 'failed', 'Agent Iota', 49, 120, 'Type error in model.py: Invalid type annotation'),
+    ],
+  },
+  {
+    id: 'agent-10',
+    name: 'Agent Kappa',
+    status: 'online',
+    currentTask: undefined,
+    taskQueue: [],
+    completedTasks: [
+      createTask('task-10-0', 'Static analysis', 'completed', 'Agent Kappa', 70, 90),
+      createTask('task-10-1', 'Memory leak detection', 'error', 'Agent Kappa', 68, 600, 'Process terminated unexpectedly'),
     ],
   },
 ];
+
+// Helper functions to get tasks by status
+export const getRunningTasks = (): AgentTask[] => {
+  return mockAgents
+    .filter(agent => agent.currentTask && agent.currentTask.status === 'running')
+    .map(agent => agent.currentTask!);
+};
+
+export const getWaitingTasks = (): AgentTask[] => {
+  return mockAgents.flatMap(agent =>
+    agent.taskQueue.filter(task => task.status === 'waiting')
+  );
+};
+
+export const getCompletedTasks = (): AgentTask[] => {
+  return mockAgents.flatMap(agent =>
+    [...agent.completedTasks].sort((a, b) =>
+      new Date(b.endTime || 0).getTime() - new Date(a.endTime || 0).getTime()
+    )
+  );
+};
+
+export const getAllTasks = (): AgentTask[] => {
+  return [
+    ...getRunningTasks(),
+    ...getWaitingTasks(),
+    ...getCompletedTasks(),
+  ];
+};
+
+export const getTaskById = (taskId: string): AgentTask | undefined => {
+  for (const agent of mockAgents) {
+    if (agent.currentTask?.id === taskId) return agent.currentTask;
+    const waiting = agent.taskQueue.find(t => t.id === taskId);
+    if (waiting) return waiting;
+    const completed = agent.completedTasks.find(t => t.id === taskId);
+    if (completed) return completed;
+  }
+  return undefined;
+};
+
+export const getAgentByTaskId = (taskId: string): Agent | undefined => {
+  return mockAgents.find(agent =>
+    agent.currentTask?.id === taskId ||
+    agent.taskQueue.some(t => t.id === taskId) ||
+    agent.completedTasks.some(t => t.id === taskId)
+  );
+};
+
+// Legacy export for backward compatibility
+export const mockWorkflows = [];

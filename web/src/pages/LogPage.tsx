@@ -1,76 +1,69 @@
 import { useState, useMemo } from 'react';
-import { 
-  GitBranch, 
-  Play, 
-  CheckCircle, 
-  XCircle, 
-  AlertCircle, 
+import { useNavigate } from 'react-router-dom';
+import {
+  CheckCircle,
+  XCircle,
+  AlertCircle,
   Clock,
-  ChevronRight,
-  Terminal,
-  Calendar,
-  GitCommit,
-  Settings,
-  Code,
   Circle,
-  Loader2
+  Loader2,
+  Terminal,
+  GitBranch,
+  Server,
+  ChevronRight,
+  Activity,
+  Timer,
+  Calendar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { mockWorkflows } from '@/data/mockWorkflows';
-import type { AgentWorkflow, Stage, StageStatus } from '@/types/agent';
+import { mockAgents, getRunningTasks, getWaitingTasks, getCompletedTasks } from '@/data/mockWorkflows';
+import type { AgentTask, TaskStatus } from '@/types/agent';
 
-const stageIcons: Record<string, React.ReactNode> = {
-  init: <Settings className="h-5 w-5" />,
-  github: <GitBranch className="h-5 w-5" />,
-  work: <Code className="h-5 w-5" />,
-  git: <GitCommit className="h-5 w-5" />,
-  finish: <CheckCircle className="h-5 w-5" />,
-};
+type TabType = 'running' | 'waiting' | 'completed';
 
-const statusConfig: Record<StageStatus, { 
-  icon: React.ReactNode; 
-  color: string; 
+const statusConfig: Record<TaskStatus, {
+  icon: React.ReactNode;
+  color: string;
   bgColor: string;
   borderColor: string;
   label: string;
+  pulse?: boolean;
 }> = {
-  pending: {
-    icon: <Circle className="h-4 w-4" />,
-    color: 'text-slate-400',
-    bgColor: 'bg-slate-50',
-    borderColor: 'border-slate-200',
-    label: 'Pending',
-  },
   running: {
     icon: <Loader2 className="h-4 w-4 animate-spin" />,
     color: 'text-blue-500',
-    bgColor: 'bg-blue-50',
+    bgColor: 'bg-blue-500',
     borderColor: 'border-blue-200',
     label: 'Running',
+    pulse: true,
+  },
+  waiting: {
+    icon: <Clock className="h-4 w-4" />,
+    color: 'text-amber-500',
+    bgColor: 'bg-amber-500',
+    borderColor: 'border-amber-200',
+    label: 'Waiting',
   },
   completed: {
     icon: <CheckCircle className="h-4 w-4" />,
     color: 'text-emerald-500',
-    bgColor: 'bg-emerald-50',
+    bgColor: 'bg-emerald-500',
     borderColor: 'border-emerald-200',
     label: 'Completed',
   },
   failed: {
     icon: <XCircle className="h-4 w-4" />,
     color: 'text-red-500',
-    bgColor: 'bg-red-50',
+    bgColor: 'bg-red-500',
     borderColor: 'border-red-200',
     label: 'Failed',
   },
   error: {
     icon: <AlertCircle className="h-4 w-4" />,
-    color: 'text-amber-500',
-    bgColor: 'bg-amber-50',
-    borderColor: 'border-amber-200',
+    color: 'text-orange-500',
+    bgColor: 'bg-orange-500',
+    borderColor: 'border-orange-200',
     label: 'Error',
   },
 };
@@ -79,352 +72,351 @@ function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
   const remaining = seconds % 60;
-  return remaining > 0 ? `${minutes}m ${remaining}s` : `${minutes}m`;
+  if (minutes < 60) {
+    return remaining > 0 ? `${minutes}m ${remaining}s` : `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
 }
 
-function formatTime(isoString: string): string {
-  return new Date(isoString).toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
+function formatRelativeTime(isoString: string): string {
+  const date = new Date(isoString);
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function StageBlock({ 
-  stage, 
-  isLast, 
-  onClick 
-}: { 
-  stage: Stage; 
-  isLast: boolean;
+interface TaskListItemProps {
+  task: AgentTask;
+  isSelected: boolean;
   onClick: () => void;
-}) {
-  const config = statusConfig[stage.status];
-  const isClickable = stage.status !== 'pending' && stage.logs.length > 0;
-  
-  return (
-    <div className="relative flex flex-col items-center">
-      {/* Stage Block */}
-      <button
-        onClick={onClick}
-        disabled={!isClickable}
-        className={cn(
-          "relative flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all duration-300",
-          "min-w-[140px] max-w-[180px]",
-          config.bgColor,
-          config.borderColor,
-          isClickable && "hover:shadow-md hover:scale-105 cursor-pointer",
-          !isClickable && "cursor-default opacity-70"
-        )}
-      >
-        {/* Icon */}
-        <div className={cn("flex items-center justify-center w-10 h-10 rounded-full bg-white shadow-sm", config.color)}>
-          {stageIcons[stage.id] || <Play className="h-5 w-5" />}
-        </div>
-        
-        {/* Stage Name */}
-        <span className="font-medium text-sm text-slate-700 text-center leading-tight">
-          {stage.name}
-        </span>
-        
-        {/* Status Badge */}
-        <Badge 
-          variant="outline" 
-          className={cn(
-            "text-xs font-medium border-current",
-            config.color,
-            stage.status === 'running' && "animate-pulse"
-          )}
-        >
-          {config.label}
-        </Badge>
-        
-        {/* Duration */}
-        {stage.duration && (
-          <div className="flex items-center gap-1 text-xs text-slate-500">
-            <Clock className="h-3 w-3" />
-            {formatDuration(stage.duration)}
-          </div>
-        )}
-        
-        {/* Running Indicator - Circle Animation */}
-        {stage.status === 'running' && (
-          <div className="absolute -top-2 -right-2">
-            <span className="relative flex h-4 w-4">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-4 w-4 bg-blue-500"></span>
-            </span>
-          </div>
-        )}
-      </button>
-      
-      {/* Connector Line */}
-      {!isLast && (
-        <div className="hidden md:flex items-center absolute left-full top-1/2 -translate-y-1/2 w-8">
-          <div className={cn(
-            "h-0.5 flex-1 transition-all duration-500",
-            stage.status === 'completed' ? "bg-emerald-400" : "bg-slate-200"
-          )} />
-          <ChevronRight className={cn(
-            "h-4 w-4 -ml-1",
-            stage.status === 'completed' ? "text-emerald-400" : "text-slate-300"
-          )} />
-        </div>
-      )}
-    </div>
-  );
 }
 
-function WorkflowCard({ 
-  workflow, 
-  onStageClick 
-}: { 
-  workflow: AgentWorkflow;
-  onStageClick: (stage: Stage) => void;
-}) {
-  const overallConfig = statusConfig[workflow.status];
-  
+function TaskListItem({ task, isSelected, onClick }: TaskListItemProps) {
+  const config = statusConfig[task.status];
+
   return (
-    <Card className="w-full overflow-hidden border-slate-200">
-      <CardHeader className="pb-4">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className={cn("p-2 rounded-lg", overallConfig.bgColor)}>
-              {overallConfig.icon}
-            </div>
-            <div>
-              <CardTitle className="text-lg font-semibold text-slate-800">
-                {workflow.name}
-              </CardTitle>
-              <CardDescription className="flex items-center gap-2 mt-1 flex-wrap">
-                <span className="flex items-center gap-1">
-                  <GitBranch className="h-3.5 w-3.5" />
-                  {workflow.branch}
-                </span>
-                <span className="text-slate-300">|</span>
-                <span className="flex items-center gap-1">
-                  <GitBranch className="h-3.5 w-3.5" />
-                  {workflow.repository}
-                </span>
-              </CardDescription>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-4 text-sm text-slate-500">
-            <div className="flex items-center gap-1.5">
-              <Calendar className="h-4 w-4" />
-              {new Date(workflow.startTime).toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </div>
-            <Badge className={cn(overallConfig.color, overallConfig.bgColor, overallConfig.borderColor)}>
-              {overallConfig.label}
-            </Badge>
-          </div>
-        </div>
-      </CardHeader>
-      
-      <CardContent className="pt-0">
-        {/* Stage Pipeline - Horizontal on desktop, vertical on mobile */}
-        <div className="flex flex-col md:flex-row md:items-center gap-6 md:gap-4 overflow-x-auto pb-4">
-          {workflow.stages.map((stage, index) => (
-            <StageBlock
-              key={stage.id}
-              stage={stage}
-              isLast={index === workflow.stages.length - 1}
-              onClick={() => onStageClick(stage)}
-            />
-          ))}
-        </div>
-        
-        {/* Error Message */}
-        {workflow.stages.some(s => s.error) && (
-          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-            <div className="flex items-center gap-2 text-red-700">
-              <AlertCircle className="h-4 w-4" />
-              <span className="font-medium text-sm">
-                {workflow.stages.find(s => s.error)?.error}
+    <button
+      onClick={onClick}
+      className={cn(
+        "w-full text-left p-4 border-b transition-all duration-200",
+        "hover:bg-slate-50/50 dark:hover:bg-slate-800/50",
+        "focus:outline-none focus:bg-slate-50 dark:focus:bg-slate-800/50",
+        isSelected
+          ? "bg-blue-50/80 dark:bg-blue-900/20 border-l-4 border-l-blue-500"
+          : "border-l-4 border-l-transparent"
+      )}
+    >
+      <div className="flex items-start gap-3">
+        {/* Status Icon with pulse for running */}
+        <div className="relative flex-shrink-0 mt-0.5">
+          {task.status === 'running' ? (
+            <div className="relative">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-30"></span>
+              <span className="relative inline-flex rounded-full p-1.5 bg-blue-100 dark:bg-blue-900/30">
+                <Circle className="h-4 w-4 text-blue-500 fill-blue-500" />
               </span>
             </div>
+          ) : (
+            <span className={cn("inline-flex rounded-full p-1.5", config.color.replace('text-', 'bg-').replace('500', '100'), config.color.replace('text-', 'dark:bg-').replace('500', '900/30'))}>
+              {config.icon}
+            </span>
+          )}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          {/* Title */}
+          <h3 className={cn(
+            "font-medium text-sm leading-tight mb-1 pr-2",
+            isSelected ? "text-blue-700 dark:text-blue-300" : "text-slate-900 dark:text-slate-100"
+          )}>
+            {task.title}
+          </h3>
+
+          {/* Agent & Meta */}
+          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
+            <span className="flex items-center gap-1">
+              <Server className="h-3 w-3" />
+              {task.agentName}
+            </span>
+            {task.metadata?.branch && (
+              <>
+                <span className="text-slate-300 dark:text-slate-600">•</span>
+                <span className="flex items-center gap-1">
+                  <GitBranch className="h-3 w-3" />
+                  {task.metadata.branch}
+                </span>
+              </>
+            )}
           </div>
+
+          {/* Timing */}
+          <div className="flex items-center gap-3 mt-2 text-xs">
+            {task.status === 'running' && task.startTime && (
+              <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                <Timer className="h-3 w-3" />
+                Running for {formatDuration(Math.floor((Date.now() - new Date(task.startTime).getTime()) / 1000))}
+              </span>
+            )}
+            {task.status === 'waiting' && (
+              <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                <Clock className="h-3 w-3" />
+                Queued
+              </span>
+            )}
+            {(task.status === 'completed' || task.status === 'failed' || task.status === 'error') && task.duration && (
+              <span className="flex items-center gap-1 text-slate-500">
+                <Activity className="h-3 w-3" />
+                {formatDuration(task.duration)}
+              </span>
+            )}
+            {task.endTime && (
+              <span className="text-slate-400">
+                {formatRelativeTime(task.endTime)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Arrow for selected */}
+        {isSelected && (
+          <ChevronRight className="h-4 w-4 text-blue-500 self-center flex-shrink-0" />
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </button>
   );
 }
 
-function StageDetailsDialog({ 
-  stage, 
-  open, 
-  onOpenChange 
-}: { 
-  stage: Stage | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  if (!stage) return null;
-  
-  const config = statusConfig[stage.status];
-  
+interface TabButtonProps {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  count: number;
+  color: 'blue' | 'amber' | 'emerald';
+}
+
+function TabButton({ active, onClick, label, count, color }: TabButtonProps) {
+  const colorClasses = {
+    blue: {
+      active: 'bg-blue-500 text-white',
+      inactive: 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800',
+      badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
+    },
+    amber: {
+      active: 'bg-amber-500 text-white',
+      inactive: 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800',
+      badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
+    },
+    emerald: {
+      active: 'bg-emerald-500 text-white',
+      inactive: 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800',
+      badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
+    },
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
-        <DialogHeader>
-          <div className="flex items-center gap-3">
-            <div className={cn("p-2 rounded-lg", config.bgColor)}>
-              {stageIcons[stage.id] || <Terminal className="h-5 w-5" />}
-            </div>
-            <div>
-              <DialogTitle className="text-xl">{stage.name}</DialogTitle>
-              <DialogDescription className="flex items-center gap-2 mt-1">
-                <Badge variant="outline" className={cn(config.color)}>
-                  {config.label}
-                </Badge>
-                {stage.duration && (
-                  <span className="text-slate-500">
-                    Duration: {formatDuration(stage.duration)}
-                  </span>
-                )}
-              </DialogDescription>
-            </div>
-          </div>
-        </DialogHeader>
-        
-        <div className="mt-4 space-y-4">
-          {/* Timeline Info */}
-          <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-lg">
-            {stage.startTime && (
-              <div>
-                <p className="text-sm text-slate-500">Started</p>
-                <p className="font-medium text-slate-700">{formatTime(stage.startTime)}</p>
-              </div>
-            )}
-            {stage.endTime && (
-              <div>
-                <p className="text-sm text-slate-500">Ended</p>
-                <p className="font-medium text-slate-700">{formatTime(stage.endTime)}</p>
-              </div>
-            )}
-          </div>
-          
-          {/* Error Display */}
-          {stage.error && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-              <div className="flex items-center gap-2 text-red-700 mb-2">
-                <AlertCircle className="h-4 w-4" />
-                <span className="font-medium">Error</span>
-              </div>
-              <p className="text-red-600 text-sm font-mono">{stage.error}</p>
-            </div>
-          )}
-          
-          {/* Logs */}
-          <div>
-            <h4 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
-              <Terminal className="h-4 w-4" />
-              Execution Logs
-            </h4>
-            <ScrollArea className="h-[300px] w-full rounded-md border bg-slate-950 p-4">
-              <div className="space-y-2">
-                {stage.logs.map((log, index) => (
-                  <div key={index} className="flex gap-3 text-sm font-mono">
-                    <span className="text-slate-500 shrink-0">
-                      {formatTime(log.timestamp)}
-                    </span>
-                    <span className={cn(
-                      "shrink-0 w-16 text-right",
-                      log.level === 'error' && "text-red-400",
-                      log.level === 'warning' && "text-amber-400",
-                      log.level === 'success' && "text-emerald-400",
-                      log.level === 'info' && "text-blue-400",
-                    )}>
-                      [{log.level.toUpperCase()}]
-                    </span>
-                    <span className="text-slate-300">{log.message}</span>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex-1 flex items-center justify-center gap-2 px-3 py-3 text-sm font-medium transition-all duration-200 rounded-lg",
+        active ? colorClasses[color].active : colorClasses[color].inactive
+      )}
+    >
+      {label}
+      <span className={cn(
+        "px-2 py-0.5 rounded-full text-xs font-semibold",
+        active ? "bg-white/20 text-white" : colorClasses[color].badge
+      )}>
+        {count}
+      </span>
+    </button>
   );
 }
 
 export default function LogPage() {
-  const [selectedStage, setSelectedStage] = useState<Stage | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  
-  const workflows = useMemo(() => mockWorkflows, []);
-  
-  const handleStageClick = (stage: Stage) => {
-    setSelectedStage(stage);
-    setDialogOpen(true);
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<TabType>('running');
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+
+  const runningTasks = useMemo(() => getRunningTasks(), []);
+  const waitingTasks = useMemo(() => getWaitingTasks(), []);
+  const completedTasks = useMemo(() => getCompletedTasks(), []);
+
+  const currentTasks = useMemo(() => {
+    switch (activeTab) {
+      case 'running': return runningTasks;
+      case 'waiting': return waitingTasks;
+      case 'completed': return completedTasks;
+      default: return runningTasks;
+    }
+  }, [activeTab, runningTasks, waitingTasks, completedTasks]);
+
+  const handleTaskClick = (taskId: string) => {
+    setSelectedTaskId(taskId);
+    navigate(`/task/${taskId}`);
   };
-  
-  // Summary statistics
-  const stats = useMemo(() => {
-    const running = workflows.filter(w => w.status === 'running').length;
-    const completed = workflows.filter(w => w.status === 'completed').length;
-    const failed = workflows.filter(w => w.status === 'failed' || w.status === 'error').length;
-    return { running, completed, failed };
-  }, [workflows]);
-  
+
+  const onlineAgents = mockAgents.filter(a => a.status !== 'offline').length;
+  const busyAgents = mockAgents.filter(a => a.status === 'busy').length;
+
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-white dark:bg-slate-950">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-800">Agent Workflows</h1>
-              <p className="text-slate-500 text-sm mt-1">
-                Monitor and track agent execution pipelines
-              </p>
+      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 shadow-lg shadow-violet-500/20">
+                <Terminal className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-slate-900 dark:text-white">
+                  Nexus CI
+                </h1>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Agent Workflow Monitor
+                </p>
+              </div>
             </div>
-            
+
             {/* Stats */}
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-lg">
-                <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
-                <span className="text-sm font-medium text-blue-700">{stats.running} Running</span>
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                  <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                    {onlineAgents} Agents Online
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 rounded-lg">
-                <CheckCircle className="h-4 w-4 text-emerald-500" />
-                <span className="text-sm font-medium text-emerald-700">{stats.completed} Completed</span>
-              </div>
-              <div className="flex items-center gap-2 px-4 py-2 bg-red-50 rounded-lg">
-                <XCircle className="h-4 w-4 text-red-500" />
-                <span className="text-sm font-medium text-red-700">{stats.failed} Failed</span>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20">
+                  <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin" />
+                  <span className="text-sm font-medium text-blue-700 dark:text-blue-400">
+                    {busyAgents} Busy
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </header>
-      
+
       {/* Main Content */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="space-y-6">
-          {workflows.map((workflow) => (
-            <WorkflowCard
-              key={workflow.id}
-              workflow={workflow}
-              onStageClick={handleStageClick}
-            />
-          ))}
+      <div className="max-w-7xl mx-auto">
+        <div className="flex h-[calc(100vh-64px)]">
+          {/* Left Sidebar */}
+          <aside className="w-full max-w-md border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex flex-col">
+            {/* Tabs */}
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+              <div className="flex gap-2">
+                <TabButton
+                  active={activeTab === 'running'}
+                  onClick={() => setActiveTab('running')}
+                  label="RUNNING"
+                  count={runningTasks.length}
+                  color="blue"
+                />
+                <TabButton
+                  active={activeTab === 'waiting'}
+                  onClick={() => setActiveTab('waiting')}
+                  label="WAITING"
+                  count={waitingTasks.length}
+                  color="amber"
+                />
+                <TabButton
+                  active={activeTab === 'completed'}
+                  onClick={() => setActiveTab('completed')}
+                  label="COMPLETED"
+                  count={completedTasks.length}
+                  color="emerald"
+                />
+              </div>
+            </div>
+
+            {/* Task List */}
+            <ScrollArea className="flex-1">
+              {currentTasks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+                  <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
+                    {activeTab === 'running' && <Circle className="h-8 w-8 text-slate-400" />}
+                    {activeTab === 'waiting' && <Clock className="h-8 w-8 text-slate-400" />}
+                    {activeTab === 'completed' && <CheckCircle className="h-8 w-8 text-slate-400" />}
+                  </div>
+                  <h3 className="text-sm font-medium text-slate-900 dark:text-slate-100 mb-1">
+                    No {activeTab} tasks
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {activeTab === 'running' && "All agents are currently idle or waiting"}
+                    {activeTab === 'waiting' && "No tasks are queued at the moment"}
+                    {activeTab === 'completed' && "No tasks have been completed yet"}
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                  {currentTasks.map((task) => (
+                    <TaskListItem
+                      key={task.id}
+                      task={task}
+                      isSelected={selectedTaskId === task.id}
+                      onClick={() => handleTaskClick(task.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+
+            {/* Footer */}
+            <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                <span>{currentTasks.length} tasks</span>
+                <span className="flex items-center gap-1">
+                  <Calendar className="h-3 w-3" />
+                  Updated {formatRelativeTime(new Date().toISOString())}
+                </span>
+              </div>
+            </div>
+          </aside>
+
+          {/* Right Content Area - Empty State */}
+          <main className="flex-1 bg-slate-50/30 dark:bg-slate-950/30 flex items-center justify-center p-8">
+            <div className="text-center max-w-md">
+              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 flex items-center justify-center mx-auto mb-6 shadow-inner">
+                <Activity className="h-10 w-10 text-slate-400 dark:text-slate-500" />
+              </div>
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
+                Select a task to view details
+              </h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                Click on any task from the sidebar to view real-time logs,
+                execution details, and agent information.
+              </p>
+              <div className="mt-6 flex items-center justify-center gap-4 text-xs text-slate-400">
+                <span className="flex items-center gap-1">
+                  <Circle className="h-3 w-3 text-blue-500 fill-blue-500" />
+                  Running
+                </span>
+                <span className="flex items-center gap-1">
+                  <Clock className="h-3 w-3 text-amber-500" />
+                  Waiting
+                </span>
+                <span className="flex items-center gap-1">
+                  <CheckCircle className="h-3 w-3 text-emerald-500" />
+                  Completed
+                </span>
+              </div>
+            </div>
+          </main>
         </div>
-      </main>
-      
-      {/* Stage Details Dialog */}
-      <StageDetailsDialog
-        stage={selectedStage}
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-      />
+      </div>
     </div>
   );
 }
