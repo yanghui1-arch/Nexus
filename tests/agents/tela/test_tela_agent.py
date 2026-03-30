@@ -149,7 +149,8 @@ class TestContextManager:
                 async with tela:
                     assert "Nexus-Tela/repo" in tela.system_prompt
                     assert "owner/repo" in tela.system_prompt
-                    assert "upstream" in tela.system_prompt
+                    assert "Upstream repo" in tela.system_prompt
+                    assert "Upstream URL" in tela.system_prompt
 
 
 class TestStep:
