@@ -78,12 +78,12 @@ class TestSophieSystemPrompt:
         
         prompt = sophie.system_prompt
         
-        # Check for design philosophy keywords
+        # Check for design philosophy keywords (case-insensitive for human-centered)
         assert "Clarity" in prompt
         assert "Craft" in prompt
         assert "Trust" in prompt
         assert "Thoughtfulness" in prompt
-        assert "Human-centered" in prompt
+        assert "human-centered" in prompt.lower()
 
     def test_system_prompt_contains_react_capabilities(self):
         """Test that system prompt includes React development capabilities."""
@@ -313,6 +313,11 @@ class TestSophieToolAccess:
             mock_sandbox_tools.as_tool_kits.return_value = {
                 "RunCode": AsyncMock(),
                 "RunCommand": AsyncMock(),
+                "WriteFile": AsyncMock(),
+                "ReadFile": AsyncMock(),
+                "AppendFile": AsyncMock(),
+                "EditFile": AsyncMock(),
+                "ListFiles": AsyncMock(),
             }
             mock_toolkit_class.return_value = mock_sandbox_tools
             
