@@ -104,7 +104,7 @@ class SandboxToolKit:
         return await self._sandbox.edit_file(path, old_str, new_str)
 
 
-    run_shell@track(step_type=StepType.TOOL)
+    @track(step_type=StepType.TOOL)
     async def list_files(self, path: str = "/workspace") -> dict:
         return await self._sandbox.list_files(path)
 
