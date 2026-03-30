@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from src.agents.tela import Tela
 from src.agents.base.agent import ModelConfig
 from src.tools.code.github_tools import GithubToolKit
+from openai.types.chat.chat_completion_message import ChatCompletionMessage
 from openai.types.chat.chat_completion_message_tool_call import (
     ChatCompletionMessageToolCall,
     Function,
@@ -35,8 +36,7 @@ def make_stop_response(content: str = "done"):
     """Build a minimal OpenAI chat completion response that stops."""
     choice = MagicMock()
     choice.finish_reason = "stop"
-    choice.message.content = content
-    choice.message.tool_calls = None
+    choice.message = ChatCompletionMessage(role="assistant", content=content)
     resp = MagicMock()
     resp.choices = [choice]
     resp.usage.total_tokens = 42
@@ -50,8 +50,7 @@ def make_tool_response(name: str, args: str, call_id: str = "c1"):
     )
     choice = MagicMock()
     choice.finish_reason = "tool_calls"
-    choice.message.content = None
-    choice.message.tool_calls = [tc]
+    choice.message = ChatCompletionMessage(role="assistant", content=None, tool_calls=[tc])
     resp = MagicMock()
     resp.choices = [choice]
     resp.usage.total_tokens = 20
