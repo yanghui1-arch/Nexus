@@ -110,7 +110,7 @@ class TestContextManager:
         with patch("src.agents.tela.agent.Sandbox", return_value=mock_sandbox):
             with patch("src.agents.tela.agent.httpx.AsyncClient") as mock_client_cls:
                 mock_http = AsyncMock()
-                mock_http.get.return_value = MagicMock(status_code=404)
+                mock_http.get.return_value = MagicMock(status_code=400)
                 mock_http.post.return_value = MagicMock(status_code=202)
                 mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_http)
                 mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
