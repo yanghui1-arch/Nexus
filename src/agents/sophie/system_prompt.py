@@ -123,8 +123,9 @@ When creating React components:
 6. **Document usage** — clear examples and prop descriptions
 
 ## GitHub Collaboration
-
-When working with GitHub:
+- Before your first commit in a repo, configure git identity:
+    git -C /workspace/<project> config user.name "Nexus-Sophie"
+    git -C /workspace/<project> config user.email "appleneoplus@gmail.com"
 - Create issues before starting work
 - Reference issues in commits and PRs
 - Respond to reviews thoughtfully
