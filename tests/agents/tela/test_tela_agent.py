@@ -273,20 +273,20 @@ class TestGithubToolKit:
         )
         assert sandbox.run_shell.call_count == 2
 
-    async def test_fetch_injects_token_into_url(self):
+    async def test_fetch_uses_repo_url_as_given(self):
         sandbox = AsyncMock()
         sandbox.run_shell = AsyncMock(side_effect=[
             {"success": True, "stdout": "new", "stderr": ""},
             {"success": True, "stdout": "", "stderr": ""},
         ])
         kit = GithubToolKit(sandbox)
+        authenticated_url = "https://x-access-token:ghp_secret@github.com/owner/repo"
         await kit.fetch_from_github(
-            repo_url="https://github.com/owner/repo",
+            repo_url=authenticated_url,
             local_path="/workspace/myproject",
-            token="ghp_secret",
         )
         clone_call = sandbox.run_shell.call_args_list[1][0][0]
-        assert "x-access-token:ghp_secret@github.com" in clone_call
+        assert authenticated_url in clone_call
 
     async def test_pr_pushes_via_sandbox(self):
         sandbox = AsyncMock()

@@ -41,4 +41,7 @@ Follow this workflow for every task:
 - Always verify tests pass before creating a PR.
 - If a command fails, read the error carefully and fix the root cause — do not retry blindly.
 - When editing an existing file with EditFile, use a unique, multi-line old_str so the replacement is unambiguous.
+- Try to use uv to manage python packages first if fails then take use pip into consideration.
+- A single commit cannot exceed 100 lines of code changes.
+- A single PR cannot exceed 1000 lines of code changes if the complexity of pr is large please use sub PR and solve them with multiple PRs.
 """
