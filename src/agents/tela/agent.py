@@ -67,6 +67,18 @@ class Tela(Agent):
         kits["CreateGithubIssue"] = github_kit.create_github_issue
         kits["PrToGithub"] = github_kit.pr_to_github
         
+        # Add GitHub review and comment interaction tools
+        kits["GetIssueComments"] = github_kit.get_issue_comments
+        kits["ReplyToIssue"] = github_kit.reply_to_issue
+        kits["GetPRReviews"] = github_kit.get_pr_reviews
+        kits["GetPRReviewComments"] = github_kit.get_pr_review_comments
+        kits["ReplyToPRReviewComment"] = github_kit.reply_to_pr_review_comment
+        kits["GetPRComments"] = github_kit.get_pr_comments
+        kits["ReplyToPR"] = github_kit.reply_to_pr
+        kits["GetMyOpenPRs"] = github_kit.get_my_open_prs
+        kits["GetMyIssues"] = github_kit.get_my_issues
+        kits["GetNotifications"] = github_kit.get_notifications
+        
         # Add code analysis tools
         kits.update(code_analysis_kit.as_tool_kits())
         
