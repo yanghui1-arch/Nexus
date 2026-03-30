@@ -11,7 +11,7 @@ from mwin import track, StepType
 
 from src.agents.base.agent import Agent, BaseAgentStepResult, ModelConfig
 from src.agents.sophie.system_prompt import SOPHIE_SYSTEM_PROMPT
-from src.sandbox import Sandbox, SandboxConfig, PYTHON_312
+from src.sandbox import Sandbox, SandboxConfig, VITE_REACT_TS
 from src.tools.sandbox import SandboxToolKit, SANDBOX_TOOL_DEFINITIONS
 from src.tools.code import (
     GITHUB_TOOL_DEFINITIONS,
@@ -44,7 +44,7 @@ class Sophie(Agent):
     SOPHIE_GITHUB_NICKNAME: str = "Nexus-Sophie"
     github_token: str | None = None
     github_repo: str | None = None   # owner/repo, e.g. "acme/nexus"
-    sandbox_config: SandboxConfig = PYTHON_312
+    sandbox_config: SandboxConfig = VITE_REACT_TS
 
     _sandbox: Sandbox | None = PrivateAttr(default=None)
     _sandbox_tools: SandboxToolKit | None = PrivateAttr(default=None)
@@ -197,7 +197,7 @@ class Sophie(Agent):
         github_repo: str,
         max_attempts: int = 30,
         github_token: str | None = None,
-        sandbox_config: SandboxConfig = PYTHON_312,
+        sandbox_config: SandboxConfig = VITE_REACT_TS,
     ) -> "Sophie":
         """Convenience factory with sensible defaults."""
         return cls(

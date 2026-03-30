@@ -9,6 +9,7 @@ from .docker_sandbox import (
     NODE_22,
     JAVA_17,
     JAVA_21,
+    VITE_REACT_TS,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "NODE_22",
     "JAVA_17",
     "JAVA_21",
+    "VITE_REACT_TS",
 ]

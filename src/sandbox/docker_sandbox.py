@@ -44,6 +44,11 @@ class SandboxConfig:
 
 
 _GIT_INSTALL = CommandConfig(name="git", command="apt-get update && apt-get install -y --no-install-recommends git", type="install")
+_NODE_REACT_SETUP = CommandConfig(
+    name="node-react-setup",
+    command="apt-get update && apt-get install -y --no-install-recommends git && npm install -g tsx",
+    type="install",
+)
 
 PYTHON_310 = SandboxConfig("python:3.10-slim", "python", ".py", init_commands=(_GIT_INSTALL,))
 PYTHON_311 = SandboxConfig("python:3.11-slim", "python", ".py", init_commands=(_GIT_INSTALL,))
@@ -52,6 +57,8 @@ PYTHON_312 = SandboxConfig("python:3.12-slim", "python", ".py", init_commands=(_
 NODE_18    = SandboxConfig("node:18-slim",  "node", ".js")
 NODE_20    = SandboxConfig("node:20-slim",  "node", ".js")
 NODE_22    = SandboxConfig("node:22-slim",  "node", ".js")
+
+VITE_REACT_TS = SandboxConfig("node:20-slim", "tsx", ".ts", mem_limit="512m", init_commands=(_NODE_REACT_SETUP,))
 
 # eclipse-temurin ships a proper JDK; java <File>.java works since Java 11
 # JVM requires more headroom than Python/Node
