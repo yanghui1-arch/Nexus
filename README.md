@@ -4,7 +4,13 @@ Coding automatically as a team in an enterprise level with enhanced AI agent cap
 
 ## What's New: Enhanced Tela Agent
 
-Tela, the Python coding agent in Nexus, has been significantly enhanced with GitHub review and comment interaction capabilities. These enhancements make Tela a more collaborative team member.
+Tela, the Python coding agent in Nexus, has been significantly enhanced with:
+1. **GitHub Review and Comment Interaction** - Collaborate effectively with team members
+2. **Code Analysis Tools** - Comprehensive code quality analysis
+3. **Testing Tools** - Execute tests and analyze coverage
+4. **Dependency Management Tools** - Manage project dependencies
+
+These enhancements make Tela a more powerful, self-sufficient, and collaborative agent for software development tasks.
 
 ## New Enhanced Capabilities
 
@@ -22,7 +28,31 @@ Tela, the Python coding agent in Nexus, has been significantly enhanced with Git
 
 These tools enable Tela to actively participate in code reviews, respond to feedback, and collaborate effectively with team members.
 
-### 2. **Enhanced Existing Tools**
+### 2. **Code Analysis Tools**
+- **AnalyzeCode**: Comprehensive code quality analysis including complexity, style, and imports
+- **LintCode**: Run linters (flake8, pylint, ruff) on Python code
+- **CheckTypeHints**: Type checking with mypy
+- **CalculateMetrics**: Code metrics calculation (cyclomatic complexity, LOC, Halstead metrics)
+- **CheckSecurity**: Security vulnerability detection (SQL injection, command injection, hardcoded secrets)
+- **FindDuplicates**: Duplicate code detection
+
+### 3. **Testing Tools**
+- **RunTests**: Execute tests with pytest, unittest, or nose
+- **AnalyzeTestCoverage**: Test coverage analysis and reporting
+- **GenerateTests**: Automatic test case generation
+- **CheckTestQuality**: Test code quality assessment
+- **BenchmarkPerformance**: Performance benchmarking
+- **ProfileCode**: Code profiling with cProfile or other profilers
+
+### 4. **Dependency Management Tools**
+- **AnalyzeDependencies**: Dependency analysis from code and requirements files
+- **CheckDependencyUpdates**: Check for available dependency updates
+- **GenerateRequirements**: Generate requirements.txt from code analysis
+- **CheckDependencyConflicts**: Dependency conflict detection
+- **AnalyzeImportUsage**: Import usage analysis and alternative suggestions
+- **ManageVirtualEnvironment**: Virtual environment management
+
+### 5. **Enhanced Existing Tools**
 - **GitHub Operations**: Improved with token injection for authenticated operations
 - **Sandbox Operations**: All existing tools remain available
 - **Web Operations**: Web fetching and searching capabilities
@@ -61,6 +91,9 @@ python main.py "Your task here"
 
 # Run the GitHub collaboration demo
 python examples/github_collaboration_demo.py
+
+# Run the enhanced demo
+python examples/enhanced_tela_demo.py
 ```
 
 ### Advanced Usage
@@ -82,11 +115,13 @@ async with Tela.create(
 
 Tela now follows an enhanced workflow for software development tasks:
 
-1. **Planning Phase**: Understand the task and create a plan
-2. **Implementation Phase**: Write clean, well-tested code
-3. **Quality Assurance Phase**: Verify code quality and security
-4. **Documentation Phase**: Generate documentation and reports
-5. **Collaboration Phase**: Respond to reviews and participate in discussions
+1. **Code Analysis Phase**: Analyze code quality, security, and complexity
+2. **Testing Phase**: Generate, run, and analyze tests
+3. **Dependency Management Phase**: Analyze and manage project dependencies
+4. **Implementation Phase**: Write clean, well-tested code
+5. **Quality Assurance Phase**: Verify code quality and security
+6. **Documentation Phase**: Generate documentation and reports
+7. **Collaboration Phase**: Respond to reviews and participate in discussions
 
 ## GitHub Collaboration Workflow
 
@@ -149,22 +184,29 @@ See `examples/github_collaboration_demo.py` for a complete demonstration.
 
 ## Examples
 
-See `examples/github_collaboration_demo.py` for a demonstration of GitHub collaboration features.
+- See `examples/github_collaboration_demo.py` for GitHub collaboration features
+- See `examples/enhanced_tela_demo.py` for code analysis, testing, and dependency management features
 
 ## Project Structure
 ```
 nexus/
 ├── src/agents/tela/              # Tela agent implementation
-│   ├── agent.py                  # Tela agent with GitHub collaboration tools
+│   ├── agent.py                  # Enhanced Tela agent with all tools
 │   └── system_prompt.py          # System prompt
-├── src/tools/                    # Tool implementations
+├── src/tools/                    # Enhanced tool implementations
+│   ├── code_analysis.py          # Code analysis tools
+│   ├── testing.py                # Testing tools
+│   ├── dependencies.py           # Dependency management tools
 │   ├── sandbox.py                # Sandbox operations
 │   ├── web_search.py             # Web operations
 │   └── code/github_tools.py      # GitHub operations (including review/comment interaction)
 ├── tests/tools/                  # Tests for tools
-│   └── test_github_tools.py      # Tests for GitHub review/comment tools
+│   ├── test_github_tools.py      # Tests for GitHub tools
+│   ├── test_code_analysis.py     # Tests for code analysis tools
+│   └── test_testing.py           # Tests for testing tools
 ├── examples/                     # Usage examples
-│   └── github_collaboration_demo.py  # Demo of GitHub collaboration features
+│   ├── github_collaboration_demo.py  # Demo of GitHub collaboration features
+│   └── enhanced_tela_demo.py     # Demo of analysis/testing features
 └── main.py                       # Entry point
 ```
 
