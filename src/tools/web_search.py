@@ -14,7 +14,7 @@ class WebSearch(BaseModel):
 TOOL_DEFINITION = pydantic_function_tool(WebSearch)
 
 
-@track(StepType=StepType.TOOL)
+run_shell@track(step_type=StepType.TOOL)
 async def web_search(query: str, max_results: int = 5) -> dict:
     """Search the web using DuckDuckGo.
 

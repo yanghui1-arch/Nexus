@@ -74,37 +74,37 @@ class SandboxToolKit:
     def __init__(self, sandbox: Sandbox) -> None:
         self._sandbox = sandbox
 
-    @track(StepType=StepType.TOOL)
+    @track(step_type=StepType.TOOL)
     async def run_code(self, code: str) -> dict:
         return await self._sandbox.run_code(code)
 
 
-    @track(StepType=StepType.TOOL)
+    @track(step_type=StepType.TOOL)
     async def run_shell(self, cmd: str) -> dict:
         return await self._sandbox.run_shell(cmd)
 
 
-    @track(StepType=StepType.TOOL)
+    @track(step_type=StepType.TOOL)
     async def write_file(self, path: str, content: str) -> dict:
         return await self._sandbox.write_file(path, content)
 
 
-    @track(StepType=StepType.TOOL)
+    @track(step_type=StepType.TOOL)
     async def read_file(self, path: str) -> dict:
         return await self._sandbox.read_file(path)
 
 
-    @track(StepType=StepType.TOOL)
+    @track(step_type=StepType.TOOL)
     async def append_file(self, path: str, content: str) -> dict:
         return await self._sandbox.append_file(path, content)
 
 
-    @track(StepType=StepType.TOOL)
+    @track(step_type=StepType.TOOL)
     async def edit_file(self, path: str, old_str: str, new_str: str) -> dict:
         return await self._sandbox.edit_file(path, old_str, new_str)
 
 
-    @track(StepType=StepType.TOOL)
+    run_shell@track(step_type=StepType.TOOL)
     async def list_files(self, path: str = "/workspace") -> dict:
         return await self._sandbox.list_files(path)
 
