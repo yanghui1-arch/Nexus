@@ -1,0 +1,225 @@
+from typing import List
+
+from pydantic import PrivateAttr, ConfigDict
+from openai.types.chat.chat_completion import ChatCompletion
+from openai.types.chat.chat_completion_message_param import (
+    ChatCompletionMessageParam,
+    ChatCompletionAssistantMessageParam,
+)
+
+from src.agents.base.agent import Agent, BaseAgentStepResult, ModelConfig
+from src.agents.sophie.system_prompt import SOPHIE_SYSTEM_PROMPT
+from src.sandbox import Sandbox, SandboxConfig, PYTHON_312
+from src.tools.sandbox import SandboxToolKit, SANDBOX_TOOL_DEFINITIONS
+from src.tools.code import (
+    GITHUB_TOOL_DEFINITIONS,
+    GithubToolKit,
+)
+from src.mcps import web_fetch, WEB_FETCH
+from src.tools.web_search import web_search, TOOL_DEFINITION as WEB_SEARCH
+
+
+_ALL_TOOL_DEFINITIONS = [
+    *SANDBOX_TOOL_DEFINITIONS,
+    *GITHUB_TOOL_DEFINITIONS,
+    WEB_FETCH,
+    WEB_SEARCH,
+]
+
+
+class Sophie(Agent):
+    """Sophie — a React developer and web designer with Anthropic-style taste.
+
+    Must be used as an async context manager so the sandbox container
+    is started and stopped cleanly:
+
+        async with Sophie(...) as sophie:
+            result = await sophie.work(question=..., ...)
+    """
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    SOPHIE_GITHUB_NICKNAME: str = "Nexus-Tela"
+    github_token: str | None = None
+    github_repo: str | None = None   # owner/repo, e.g. "acme/nexus"
+    sandbox_config: SandboxConfig = PYTHON_312
+
+    _sandbox: Sandbox | None = PrivateAttr(default=None)
+    _sandbox_tools: SandboxToolKit | None = PrivateAttr(default=None)
+
+    async def __aenter__(self) -> "Sophie":
+        self._sandbox = Sandbox(self.sandbox_config)
+        await self._sandbox.__aenter__()
+        self._sandbox_tools = SandboxToolKit(self._sandbox)
+        github_kit = GithubToolKit(self._sandbox)
+
+        kits = self._sandbox_tools.as_tool_kits()
+        
+        # GitHub repository operations
+        kits["FetchFromGithub"] = github_kit.fetch_from_github
+        kits["CreateGithubIssue"] = github_kit.create_github_issue
+        kits["PrToGithub"] = github_kit.pr_to_github
+        
+        # GitHub issue management
+        kits["GetIssueComments"] = github_kit.get_issue_comments
+        kits["ReplyToIssue"] = github_kit.reply_to_issue
+        
+        # GitHub PR review workflow
+        kits["GetPRReviews"] = github_kit.get_pr_reviews
+        kits["GetPRReviewComments"] = github_kit.get_pr_review_comments
+        kits["ReplyToPRReviewComment"] = github_kit.reply_to_pr_review_comment
+        kits["GetPRComments"] = github_kit.get_pr_comments
+        kits["ReplyToPR"] = github_kit.reply_to_pr
+        
+        # GitHub user activity
+        kits["GetMyOpenPRs"] = github_kit.get_my_open_prs
+        kits["GetMyIssues"] = github_kit.get_my_issues
+        kits["GetNotifications"] = github_kit.get_notifications
+        
+        # Web operations
+        kits["WebFetch"] = web_fetch
+        kits["WebSearch"] = web_search
+        
+        self.tool_kits = kits
+
+        if self.github_repo or self.github_token:
+            repo_lines = ["\n## Your Repository"]
+            if self.github_token:
+                repo_lines.append(f"- Token: {self.github_token}  (use for git auth and all GitHub API calls)")
+            if self.github_repo:
+                upstream_url = f"https://github.com/{self.github_repo}"
+                repo_lines.append(f"- Upstream repo: {self.github_repo}  (create issues and open PRs here)")
+                repo_lines.append(f"- Upstream URL: {upstream_url}")
+                if self.github_token:
+                    fork_repo = await self._ensure_fork(self.github_token, self.github_repo)
+                    fork_clone_url = f"https://x-access-token:{self.github_token}@github.com/{fork_repo}"
+                    repo_lines.append(f"- Your fork: {fork_repo}  (clone this as `origin`, push here frequently)")
+                    repo_lines.append(f"- Fork clone URL: {fork_clone_url}")
+            self.system_prompt = self.system_prompt + "\n".join(repo_lines) + "\n"
+
+        return self
+
+    async def _ensure_fork(self, token: str, upstream_repo: str) -> str:
+        """Check if Sophie's fork exists; create it if not. Returns the fork name."""
+        from src.logger import logger
+        import httpx
+        
+        repo_name = upstream_repo.split("/")[-1]
+        fork_repo = f"{self.SOPHIE_GITHUB_NICKNAME}/{repo_name}"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"https://api.github.com/repos/{fork_repo}",
+                headers=headers,
+            )
+            if response.status_code == 404:
+                logger.info(f"Fork {fork_repo} not found — creating from {upstream_repo}")
+                await client.post(
+                    f"https://api.github.com/repos/{upstream_repo}/forks",
+                    headers=headers,
+                )
+                logger.info(f"Fork {fork_repo} created.")
+            else:
+                logger.info(f"Fork {fork_repo} already exists.")
+        return fork_repo
+
+    async def __aexit__(self, *args) -> None:
+        if self._sandbox:
+            await self._sandbox.__aexit__(*args)
+            self._sandbox = None
+            self._sandbox_tools = None
+
+    def step(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> BaseAgentStepResult:
+        if self._sandbox is None:
+            raise RuntimeError("Sophie must be used as an async context manager (async with Sophie(...) as sophie:)")
+
+        kwargs: dict = {
+            "model": self.llm_config.model,
+            "messages": current_turn_ctx,
+            "tools": _ALL_TOOL_DEFINITIONS,
+        }
+        if self.sample_config:
+            if self.sample_config.top_p is not None:
+                kwargs["top_p"] = self.sample_config.top_p
+            if self.sample_config.extra_body:
+                kwargs["extra_body"] = self.sample_config.extra_body
+
+        completion: ChatCompletion = self.openai_client.chat.completions.create(**kwargs)
+        choice = completion.choices[0]
+        message = choice.message
+
+        msg_param: ChatCompletionAssistantMessageParam = {
+            "role": "assistant",
+            "content": message.content,
+        }
+        if message.tool_calls:
+            msg_param["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                }
+                for tc in message.tool_calls
+            ]
+
+        return BaseAgentStepResult(
+            finish_reason=choice.finish_reason,
+            reasoning=None,
+            completion_content=message.content,
+            tool_calls=message.tool_calls or None,
+            message_param=msg_param,
+            current_step_consume_tokens=completion.usage.total_tokens if completion.usage else 0,
+        )
+
+    def last_report_current_process(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> str:
+        for msg in reversed(current_turn_ctx):
+            if isinstance(msg, dict) and msg.get("role") == "assistant":
+                content = msg.get("content")
+                if content:
+                    return content
+        return "Sophie reached the maximum number of attempts without completing the task."
+
+    def compact(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> List[ChatCompletionMessageParam]:
+        """Keep system message + first user message + last 10 messages."""
+        if len(current_turn_ctx) <= 12:
+            return current_turn_ctx
+        system_msg = current_turn_ctx[0]
+        first_user = next(
+            (m for m in current_turn_ctx[1:] if isinstance(m, dict) and m.get("role") == "user"),
+            None,
+        )
+        recent = current_turn_ctx[-10:]
+        result: List[ChatCompletionMessageParam] = [system_msg]
+        if first_user and first_user not in recent:
+            result.append(first_user)
+        result.extend(recent)
+        return result
+
+    @classmethod
+    def create(
+        cls,
+        base_url: str,
+        api_key: str,
+        model: str,
+        max_context: int,
+        github_repo: str | None = None,
+        max_attempts: int = 30,
+        github_token: str | None = None,
+        sandbox_config: SandboxConfig = PYTHON_312,
+    ) -> "Sophie":
+        """Convenience factory with sensible defaults."""
+        return cls(
+            name="Sophie",
+            tool_kits=None,
+            base_url=base_url,
+            api_key=api_key,
+            system_prompt=SOPHIE_SYSTEM_PROMPT,
+            llm_config=ModelConfig(model=model, max_length_context=max_context),
+            github_repo=github_repo,
+            max_attempts=max_attempts,
+            github_token=github_token,
+            sandbox_config=sandbox_config,
+        )
