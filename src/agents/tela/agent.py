@@ -101,20 +101,23 @@ class Tela(Agent):
         headers = {
             "Authorization": f"Bearer {token}",
             "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
+            "X-GitHub-Api-Version": "2026-03-10",
         }
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"https://api.github.com/repos/{fork_repo}",
+                f"https://api.github.com/repos/{fork_repo}/folks",
                 headers=headers,
             )
-            if response.status_code == 404:
+            if response.status_code == 400:
                 logger.info(f"Fork {fork_repo} not found — creating from {upstream_repo}")
-                await client.post(
+                create_folk = await client.post(
                     f"https://api.github.com/repos/{upstream_repo}/forks",
                     headers=headers,
                 )
-                logger.info(f"Fork {fork_repo} created.")
+                if create_folk.status_code != 202:
+                    logger.error(f"Failed to create folk {fork_repo}")
+                else:
+                    logger.info(f"Fork {fork_repo} created.")
             else:
                 logger.info(f"Fork {fork_repo} already exists.")
         return fork_repo
