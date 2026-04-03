@@ -1,9 +1,9 @@
-import httpx
+﻿import httpx
 from pydantic import BaseModel, Field
 from openai import pydantic_function_tool
 from mwin import track, StepType
 
-from src.sandbox import Sandbox
+from src.sandbox import Sandbox, canonicalize_repo_url
 
 
 class FetchFromGithub(BaseModel):
@@ -198,32 +198,61 @@ class GithubToolKit:
         token: str | None = None,
         upstream_url: str | None = None,
     ) -> dict:
-        """Fetch from github
+        """Fetch from github.
         repo_url should always be authenticated_url if github_token is provided.
         """
-        
+
         authenticated_url = repo_url
+        expected_repo_url = canonicalize_repo_url(repo_url)
+        result: dict | None = None
+        message = ""
 
         check = await self._sandbox.run_shell(
-            f"test -d {local_path}/.git && echo exists || echo new"
+            f"test -d '{local_path}/.git' && echo exists || echo new"
         )
+
         if "exists" in check.get("stdout", ""):
-            result = await self._sandbox.run_shell(
-                f"git -C {local_path} fetch --all && "
-                f"git -C {local_path} checkout {branch} && "
-                f"git -C {local_path} pull origin {branch}"
+            remote_result = await self._sandbox.run_shell(
+                f"git -C '{local_path}' config --get remote.origin.url"
             )
-            message = f"Pulled latest on branch '{branch}' at {local_path}"
-        else:
+            existing_remote = remote_result.get("stdout", "").strip()
+            existing_remote_canonical = canonicalize_repo_url(existing_remote)
+
+            remote_missing = not remote_result.get("success", False) or not existing_remote
+            remote_mismatch = (
+                expected_repo_url is not None
+                and existing_remote_canonical != expected_repo_url
+            )
+
+            if remote_missing or remote_mismatch:
+                await self._sandbox.recreate()
+                check = {"stdout": "new"}
+            else:
+                result = await self._sandbox.run_shell(
+                    f"git -C '{local_path}' fetch --all && "
+                    f"git -C '{local_path}' checkout {branch} && "
+                    f"git -C '{local_path}' pull origin {branch}"
+                )
+                message = f"Pulled latest on branch '{branch}' at {local_path}"
+
+        if "new" in check.get("stdout", ""):
             result = await self._sandbox.run_shell(
-                f"git clone --branch {branch} {authenticated_url} {local_path}"
+                f"git clone --branch {branch} '{authenticated_url}' '{local_path}'"
             )
             if result.get("success", False) and upstream_url:
                 await self._sandbox.run_shell(
-                    f"git -C {local_path} remote add upstream {upstream_url} 2>/dev/null || "
-                    f"git -C {local_path} remote set-url upstream {upstream_url}"
+                    f"git -C '{local_path}' remote add upstream '{upstream_url}' 2>/dev/null || "
+                    f"git -C '{local_path}' remote set-url upstream '{upstream_url}'"
                 )
             message = f"Cloned '{repo_url}' (branch: {branch}) into {local_path}"
+
+        if result is None:
+            return {
+                "success": False,
+                "path": local_path,
+                "branch": branch,
+                "message": "Failed to determine repository state for fetch.",
+            }
 
         if not result.get("success", False):
             return {
@@ -297,6 +326,14 @@ class GithubToolKit:
             else f"git push origin {push_branch}"
         )
         result = await self._sandbox.run_shell(push_cmd)
+        if result is None:
+            return {
+                "success": False,
+                "path": local_path,
+                "branch": branch,
+                "message": "Failed to determine repository state for fetch.",
+            }
+
         if not result.get("success", False):
             return {
                 "success": False,
@@ -781,5 +818,7 @@ class GithubToolKit:
                     "notifications": [],
                     "message": f"GitHub API error {e.response.status_code}: {error_detail}",
                 }
+
+
 
 

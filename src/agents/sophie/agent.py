@@ -1,4 +1,4 @@
-from typing import List, Any
+﻿from typing import List, Any
 
 import httpx
 from pydantic import PrivateAttr, ConfigDict
@@ -11,7 +11,7 @@ from mwin import track, StepType
 
 from src.agents.base.agent import Agent, BaseAgentStepResult, ModelConfig
 from src.agents.sophie.system_prompt import SOPHIE_SYSTEM_PROMPT
-from src.sandbox import Sandbox, SandboxConfig, VITE_REACT_TS
+from src.sandbox import Sandbox, SandboxConfig, VITE_REACT_TS, SandboxPoolManager, get_sandbox_pool_manager
 from src.tools.sandbox import SandboxToolKit, SANDBOX_TOOL_DEFINITIONS
 from src.tools.code import (
     GITHUB_TOOL_DEFINITIONS,
@@ -48,10 +48,15 @@ class Sophie(Agent):
 
     _sandbox: Sandbox | None = PrivateAttr(default=None)
     _sandbox_tools: SandboxToolKit | None = PrivateAttr(default=None)
+    _sandbox_pool_manager: SandboxPoolManager | None = PrivateAttr(default=None)
 
     async def __aenter__(self) -> "Sophie":
-        self._sandbox = Sandbox(self.sandbox_config)
-        await self._sandbox.__aenter__()
+        repo_url = f"https://github.com/{self.github_repo}" if self.github_repo else None
+        self._sandbox_pool_manager = get_sandbox_pool_manager()
+        self._sandbox = await self._sandbox_pool_manager.acquire(
+            config=self.sandbox_config,
+            repo_url=repo_url,
+        )
         self._sandbox_tools = SandboxToolKit(self._sandbox)
         github_kit = GithubToolKit(self._sandbox)
 
@@ -121,9 +126,13 @@ class Sophie(Agent):
 
     async def __aexit__(self, *args) -> None:
         if self._sandbox:
-            await self._sandbox.__aexit__(*args)
+            if self._sandbox_pool_manager:
+                await self._sandbox_pool_manager.release(self._sandbox)
+            else:
+                await self._sandbox.__aexit__(*args)
             self._sandbox = None
             self._sandbox_tools = None
+            self._sandbox_pool_manager = None
 
 
     @track(tags=["exec", "sophie"], step_type=StepType.LLM)
@@ -212,3 +221,4 @@ class Sophie(Agent):
             github_token=github_token,
             sandbox_config=sandbox_config,
         )
+

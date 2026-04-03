@@ -1,4 +1,4 @@
-"""Unit tests for Tela.
+﻿"""Unit tests for Tela.
 
 All tests use mocked OpenAI client and a mocked Docker sandbox so they run
 without any real API keys or Docker daemon.
@@ -32,6 +32,13 @@ def make_tela(**kwargs) -> Tela:
         )
 
 
+def make_pool_manager(mock_sandbox):
+    pool_manager = AsyncMock()
+    pool_manager.acquire = AsyncMock(return_value=mock_sandbox)
+    pool_manager.release = AsyncMock(return_value=None)
+    return pool_manager
+
+
 def make_stop_response(content: str = "done"):
     """Build a minimal OpenAI chat completion response that stops."""
     choice = MagicMock()
@@ -62,23 +69,26 @@ class TestContextManager:
         tela = make_tela()
         mock_sandbox = AsyncMock()
         mock_sandbox._workdir = "/tmp/nexus_test"
+        mock_pool_manager = make_pool_manager(mock_sandbox)
 
-        with patch("src.agents.tela.agent.Sandbox", return_value=mock_sandbox):
+        with patch("src.agents.tela.agent.get_sandbox_pool_manager", return_value=mock_pool_manager):
             async with tela:
                 assert tela._sandbox is mock_sandbox
-                mock_sandbox.__aenter__.assert_awaited_once()
+
+        mock_pool_manager.acquire.assert_awaited_once()
 
 
     async def test_exit_stops_sandbox(self):
         tela = make_tela()
         mock_sandbox = AsyncMock()
         mock_sandbox._workdir = "/tmp/nexus_test"
+        mock_pool_manager = make_pool_manager(mock_sandbox)
 
-        with patch("src.agents.tela.agent.Sandbox", return_value=mock_sandbox):
+        with patch("src.agents.tela.agent.get_sandbox_pool_manager", return_value=mock_pool_manager):
             async with tela:
                 pass
 
-        mock_sandbox.__aexit__.assert_awaited_once()
+        mock_pool_manager.release.assert_awaited_once_with(mock_sandbox)
         assert tela._sandbox is None
 
 
@@ -87,7 +97,7 @@ class TestContextManager:
         mock_sandbox = AsyncMock()
         mock_sandbox._workdir = "/tmp/nexus_test"
 
-        with patch("src.agents.tela.agent.Sandbox", return_value=mock_sandbox):
+        with patch("src.agents.tela.agent.get_sandbox_pool_manager", return_value=make_pool_manager(mock_sandbox)):
             async with tela:
                 assert tela.tool_kits is not None
                 assert "RunCode" in tela.tool_kits
@@ -106,7 +116,7 @@ class TestContextManager:
         tela = make_tela(github_repo="owner/repo", github_token="ghp_test")
         mock_sandbox = AsyncMock()
 
-        with patch("src.agents.tela.agent.Sandbox", return_value=mock_sandbox):
+        with patch("src.agents.tela.agent.get_sandbox_pool_manager", return_value=make_pool_manager(mock_sandbox)):
             with patch("src.agents.tela.agent.httpx.AsyncClient") as mock_client_cls:
                 mock_http = AsyncMock()
                 mock_http.get.return_value = MagicMock(status_code=400)
@@ -124,7 +134,7 @@ class TestContextManager:
         tela = make_tela(github_repo="owner/repo", github_token="ghp_test")
         mock_sandbox = AsyncMock()
 
-        with patch("src.agents.tela.agent.Sandbox", return_value=mock_sandbox):
+        with patch("src.agents.tela.agent.get_sandbox_pool_manager", return_value=make_pool_manager(mock_sandbox)):
             with patch("src.agents.tela.agent.httpx.AsyncClient") as mock_client_cls:
                 mock_http = AsyncMock()
                 mock_http.get.return_value = MagicMock(status_code=200)
@@ -139,7 +149,7 @@ class TestContextManager:
         tela = make_tela(github_repo="owner/repo", github_token="ghp_test")
         mock_sandbox = AsyncMock()
 
-        with patch("src.agents.tela.agent.Sandbox", return_value=mock_sandbox):
+        with patch("src.agents.tela.agent.get_sandbox_pool_manager", return_value=make_pool_manager(mock_sandbox)):
             with patch("src.agents.tela.agent.httpx.AsyncClient") as mock_client_cls:
                 mock_http = AsyncMock()
                 mock_http.get.return_value = MagicMock(status_code=200)
@@ -158,7 +168,7 @@ class TestStep:
         mock_sandbox = AsyncMock()
         mock_sandbox._workdir = "/tmp/nexus_test"
 
-        with patch("src.agents.tela.agent.Sandbox", return_value=mock_sandbox):
+        with patch("src.agents.tela.agent.get_sandbox_pool_manager", return_value=make_pool_manager(mock_sandbox)):
             async with tela:
                 tela.openai_client.chat.completions.create.return_value = make_stop_response("all done")
                 result = tela.step([{"role": "user", "content": "hello"}])
@@ -173,7 +183,7 @@ class TestStep:
         mock_sandbox = AsyncMock()
         mock_sandbox._workdir = "/tmp/nexus_test"
 
-        with patch("src.agents.tela.agent.Sandbox", return_value=mock_sandbox):
+        with patch("src.agents.tela.agent.get_sandbox_pool_manager", return_value=make_pool_manager(mock_sandbox)):
             async with tela:
                 tela.openai_client.chat.completions.create.return_value = make_tool_response(
                     "RunCode", '{"code": "print(1)"}'
@@ -192,7 +202,7 @@ class TestStep:
         mock_sandbox = AsyncMock()
         mock_sandbox._workdir = "/tmp/nexus_test"
 
-        with patch("src.agents.tela.agent.Sandbox", return_value=mock_sandbox):
+        with patch("src.agents.tela.agent.get_sandbox_pool_manager", return_value=make_pool_manager(mock_sandbox)):
             async with tela:
                 tela.openai_client.chat.completions.create.return_value = make_stop_response()
                 tela.step([])
@@ -229,9 +239,11 @@ class TestGithubToolKit:
 
     async def test_fetch_pulls_when_already_cloned(self):
         sandbox = AsyncMock()
+        sandbox.recreate = AsyncMock()
         sandbox.run_shell = AsyncMock(side_effect=[
-            {"success": True, "stdout": "exists", "stderr": ""},  # test -d .git
-            {"success": True, "stdout": "", "stderr": ""},         # git fetch/checkout/pull
+            {"success": True, "stdout": "exists", "stderr": ""},                         # test -d .git
+            {"success": True, "stdout": "https://github.com/owner/repo\n", "stderr": ""},  # origin remote
+            {"success": True, "stdout": "", "stderr": ""},                                # git fetch/checkout/pull
         ])
         kit = GithubToolKit(sandbox)
         result = await kit.fetch_from_github(
@@ -239,8 +251,9 @@ class TestGithubToolKit:
             local_path="/workspace/myproject",
         )
         assert result["success"] is True
-        pull_call = sandbox.run_shell.call_args_list[1][0][0]
+        pull_call = sandbox.run_shell.call_args_list[2][0][0]
         assert "pull" in pull_call
+        sandbox.recreate.assert_not_awaited()
 
     async def test_fetch_sets_upstream_remote_after_clone(self):
         sandbox = AsyncMock()
@@ -286,6 +299,44 @@ class TestGithubToolKit:
         )
         clone_call = sandbox.run_shell.call_args_list[1][0][0]
         assert authenticated_url in clone_call
+
+    async def test_fetch_recreates_sandbox_when_origin_remote_missing(self):
+        sandbox = AsyncMock()
+        sandbox.recreate = AsyncMock()
+        sandbox.run_shell = AsyncMock(side_effect=[
+            {"success": True, "stdout": "exists", "stderr": ""},  # test -d .git
+            {"success": False, "stdout": "", "stderr": "missing"}, # git remote get-url
+            {"success": True, "stdout": "", "stderr": ""},         # git clone
+        ])
+        kit = GithubToolKit(sandbox)
+        result = await kit.fetch_from_github(
+            repo_url="https://github.com/owner/repo",
+            local_path="/workspace/myproject",
+        )
+
+        assert result["success"] is True
+        sandbox.recreate.assert_awaited_once()
+        clone_call = sandbox.run_shell.call_args_list[2][0][0]
+        assert "git clone" in clone_call
+
+    async def test_fetch_recreates_sandbox_when_origin_remote_mismatched(self):
+        sandbox = AsyncMock()
+        sandbox.recreate = AsyncMock()
+        sandbox.run_shell = AsyncMock(side_effect=[
+            {"success": True, "stdout": "exists", "stderr": ""},                           # test -d .git
+            {"success": True, "stdout": "https://github.com/other/repo\n", "stderr": ""},  # git remote get-url
+            {"success": True, "stdout": "", "stderr": ""},                                  # git clone
+        ])
+        kit = GithubToolKit(sandbox)
+        result = await kit.fetch_from_github(
+            repo_url="https://github.com/owner/repo",
+            local_path="/workspace/myproject",
+        )
+
+        assert result["success"] is True
+        sandbox.recreate.assert_awaited_once()
+        clone_call = sandbox.run_shell.call_args_list[2][0][0]
+        assert "git clone" in clone_call
 
     async def test_pr_pushes_via_sandbox(self):
         sandbox = AsyncMock()
@@ -422,3 +473,6 @@ class TestFactory:
             )
         assert tela.llm_config.model == "gpt-4o-mini"
         assert tela.github_token == "ghp_abc"
+
+
+

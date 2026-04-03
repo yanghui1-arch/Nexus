@@ -1,4 +1,4 @@
-"""
+﻿"""
 Tests for the Sophie agent.
 
 Sophie is a React developer and web designer with Anthropic-style design expertise.
@@ -6,12 +6,18 @@ These tests verify her capabilities and tool access.
 """
 
 import pytest
-import os
 from unittest.mock import MagicMock, AsyncMock, patch
 
 from src.agents.sophie import Sophie
-from src.agents.base.agent import ModelConfig, SampleConfig
+from src.agents.base.agent import ModelConfig
 from src.sandbox import PYTHON_312
+
+
+def make_pool_manager(mock_sandbox):
+    pool_manager = AsyncMock()
+    pool_manager.acquire = AsyncMock(return_value=mock_sandbox)
+    pool_manager.release = AsyncMock(return_value=None)
+    return pool_manager
 
 
 class TestSophieCreation:
@@ -123,14 +129,11 @@ class TestSophieSystemPrompt:
 class TestSophieAsyncContext:
     """Test Sophie's async context manager functionality."""
 
-    @patch("src.agents.sophie.agent.Sandbox")
-    async def test_async_context_manager_initializes_sandbox(self, mock_sandbox_class):
+    async def test_async_context_manager_initializes_sandbox(self):
         """Test that async context manager initializes sandbox."""
         mock_sandbox = AsyncMock()
-        mock_sandbox_class.return_value = mock_sandbox
-        mock_sandbox.__aenter__ = AsyncMock(return_value=mock_sandbox)
-        mock_sandbox.__aexit__ = AsyncMock(return_value=None)
-        
+        mock_pool_manager = make_pool_manager(mock_sandbox)
+
         sophie = Sophie.create(
             base_url="https://api.openai.com/v1",
             api_key="test-key",
@@ -138,19 +141,18 @@ class TestSophieAsyncContext:
             max_context=8192,
             github_repo="test/repo",
         )
-        
-        async with sophie as s:
-            assert s._sandbox is not None
-            mock_sandbox.__aenter__.assert_called_once()
 
-    @patch("src.agents.sophie.agent.Sandbox")
-    async def test_async_context_manager_cleans_up(self, mock_sandbox_class):
+        with patch("src.agents.sophie.agent.get_sandbox_pool_manager", return_value=mock_pool_manager):
+            async with sophie as s:
+                assert s._sandbox is not None
+
+        mock_pool_manager.acquire.assert_awaited_once()
+
+    async def test_async_context_manager_cleans_up(self):
         """Test that async context manager properly cleans up."""
         mock_sandbox = AsyncMock()
-        mock_sandbox_class.return_value = mock_sandbox
-        mock_sandbox.__aenter__ = AsyncMock(return_value=mock_sandbox)
-        mock_sandbox.__aexit__ = AsyncMock(return_value=None)
-        
+        mock_pool_manager = make_pool_manager(mock_sandbox)
+
         sophie = Sophie.create(
             base_url="https://api.openai.com/v1",
             api_key="test-key",
@@ -158,21 +160,19 @@ class TestSophieAsyncContext:
             max_context=8192,
             github_repo="test/repo",
         )
-        
-        async with sophie as s:
-            pass
-        
-        mock_sandbox.__aexit__.assert_called_once()
 
-    @patch("src.agents.sophie.agent.Sandbox")
+        with patch("src.agents.sophie.agent.get_sandbox_pool_manager", return_value=mock_pool_manager):
+            async with sophie:
+                pass
+
+        mock_pool_manager.release.assert_awaited_once_with(mock_sandbox)
+
     @patch("src.agents.sophie.agent.GithubToolKit")
-    async def test_tool_kits_initialized(self, mock_github_kit_class, mock_sandbox_class):
+    async def test_tool_kits_initialized(self, mock_github_kit_class):
         """Test that tool kits are properly initialized."""
         mock_sandbox = AsyncMock()
-        mock_sandbox_class.return_value = mock_sandbox
-        mock_sandbox.__aenter__ = AsyncMock(return_value=mock_sandbox)
-        mock_sandbox.__aexit__ = AsyncMock(return_value=None)
-        
+        mock_pool_manager = make_pool_manager(mock_sandbox)
+
         mock_sandbox_tools = MagicMock()
         mock_sandbox_tools.as_tool_kits.return_value = {
             "RunCode": AsyncMock(),
@@ -183,24 +183,24 @@ class TestSophieAsyncContext:
             "EditFile": AsyncMock(),
             "ListFiles": AsyncMock(),
         }
-        
-        with patch("src.agents.sophie.agent.SandboxToolKit") as mock_toolkit_class:
-            mock_toolkit_class.return_value = mock_sandbox_tools
-            
-            sophie = Sophie.create(
-                base_url="https://api.openai.com/v1",
-                api_key="test-key",
-                model="gpt-4",
-                max_context=8192,
-                github_repo="test/repo",
-            )
-            
-            async with sophie as s:
-                assert s.tool_kits is not None
-                # Check that GitHub tools are present
-                assert "FetchFromGithub" in s.tool_kits
-                assert "CreateGithubIssue" in s.tool_kits
-                assert "PrToGithub" in s.tool_kits
+
+        with patch("src.agents.sophie.agent.get_sandbox_pool_manager", return_value=mock_pool_manager):
+            with patch("src.agents.sophie.agent.SandboxToolKit") as mock_toolkit_class:
+                mock_toolkit_class.return_value = mock_sandbox_tools
+
+                sophie = Sophie.create(
+                    base_url="https://api.openai.com/v1",
+                    api_key="test-key",
+                    model="gpt-4",
+                    max_context=8192,
+                    github_repo="test/repo",
+                )
+
+                async with sophie as s:
+                    assert s.tool_kits is not None
+                    assert "FetchFromGithub" in s.tool_kits
+                    assert "CreateGithubIssue" in s.tool_kits
+                    assert "PrToGithub" in s.tool_kits
 
 
 class TestSophieCompact:
@@ -300,105 +300,99 @@ class TestSophieToolAccess:
     """Test that Sophie has access to expected tools."""
 
     @pytest.mark.asyncio
-    @patch("src.agents.sophie.agent.Sandbox")
-    async def test_sophie_has_sandbox_tools(self, mock_sandbox_class):
+    async def test_sophie_has_sandbox_tools(self):
         """Test that Sophie has access to sandbox tools."""
         mock_sandbox = AsyncMock()
-        mock_sandbox_class.return_value = mock_sandbox
-        mock_sandbox.__aenter__ = AsyncMock(return_value=mock_sandbox)
-        mock_sandbox.__aexit__ = AsyncMock(return_value=None)
-        
-        with patch("src.agents.sophie.agent.SandboxToolKit") as mock_toolkit_class:
-            mock_sandbox_tools = MagicMock()
-            mock_sandbox_tools.as_tool_kits.return_value = {
-                "RunCode": AsyncMock(),
-                "RunCommand": AsyncMock(),
-                "WriteFile": AsyncMock(),
-                "ReadFile": AsyncMock(),
-                "AppendFile": AsyncMock(),
-                "EditFile": AsyncMock(),
-                "ListFiles": AsyncMock(),
-            }
-            mock_toolkit_class.return_value = mock_sandbox_tools
-            
-            sophie = Sophie.create(
-                base_url="https://api.openai.com/v1",
-                api_key="test-key",
-                model="gpt-4",
-                max_context=8192,
-                github_repo="test/repo",
-            )
-            
-            async with sophie as s:
-                # Check sandbox tools
-                assert "RunCode" in s.tool_kits
-                assert "RunCommand" in s.tool_kits
-                assert "WriteFile" in s.tool_kits
-                assert "ReadFile" in s.tool_kits
-                assert "EditFile" in s.tool_kits
-                assert "ListFiles" in s.tool_kits
+        mock_pool_manager = make_pool_manager(mock_sandbox)
+
+        with patch("src.agents.sophie.agent.get_sandbox_pool_manager", return_value=mock_pool_manager):
+            with patch("src.agents.sophie.agent.SandboxToolKit") as mock_toolkit_class:
+                mock_sandbox_tools = MagicMock()
+                mock_sandbox_tools.as_tool_kits.return_value = {
+                    "RunCode": AsyncMock(),
+                    "RunCommand": AsyncMock(),
+                    "WriteFile": AsyncMock(),
+                    "ReadFile": AsyncMock(),
+                    "AppendFile": AsyncMock(),
+                    "EditFile": AsyncMock(),
+                    "ListFiles": AsyncMock(),
+                }
+                mock_toolkit_class.return_value = mock_sandbox_tools
+
+                sophie = Sophie.create(
+                    base_url="https://api.openai.com/v1",
+                    api_key="test-key",
+                    model="gpt-4",
+                    max_context=8192,
+                    github_repo="test/repo",
+                )
+
+                async with sophie as s:
+                    assert "RunCode" in s.tool_kits
+                    assert "RunCommand" in s.tool_kits
+                    assert "WriteFile" in s.tool_kits
+                    assert "ReadFile" in s.tool_kits
+                    assert "EditFile" in s.tool_kits
+                    assert "ListFiles" in s.tool_kits
 
     @pytest.mark.asyncio
-    @patch("src.agents.sophie.agent.Sandbox")
-    async def test_sophie_has_github_tools(self, mock_sandbox_class):
+    async def test_sophie_has_github_tools(self):
         """Test that Sophie has access to GitHub tools."""
         mock_sandbox = AsyncMock()
-        mock_sandbox_class.return_value = mock_sandbox
-        mock_sandbox.__aenter__ = AsyncMock(return_value=mock_sandbox)
-        mock_sandbox.__aexit__ = AsyncMock(return_value=None)
-        
-        with patch("src.agents.sophie.agent.SandboxToolKit") as mock_toolkit_class:
-            mock_sandbox_tools = MagicMock()
-            mock_sandbox_tools.as_tool_kits.return_value = {}
-            mock_toolkit_class.return_value = mock_sandbox_tools
-            
-            sophie = Sophie.create(
-                base_url="https://api.openai.com/v1",
-                api_key="test-key",
-                model="gpt-4",
-                max_context=8192,
-                github_repo="test/repo",
-            )
-            
-            async with sophie as s:
-                # Check GitHub tools
-                assert "FetchFromGithub" in s.tool_kits
-                assert "CreateGithubIssue" in s.tool_kits
-                assert "PrToGithub" in s.tool_kits
-                assert "GetIssueComments" in s.tool_kits
-                assert "ReplyToIssue" in s.tool_kits
-                assert "GetPRReviews" in s.tool_kits
-                assert "GetPRReviewComments" in s.tool_kits
-                assert "ReplyToPRReviewComment" in s.tool_kits
-                assert "GetPRComments" in s.tool_kits
-                assert "ReplyToPR" in s.tool_kits
-                assert "GetMyOpenPRs" in s.tool_kits
-                assert "GetMyIssues" in s.tool_kits
-                assert "GetNotifications" in s.tool_kits
+        mock_pool_manager = make_pool_manager(mock_sandbox)
+
+        with patch("src.agents.sophie.agent.get_sandbox_pool_manager", return_value=mock_pool_manager):
+            with patch("src.agents.sophie.agent.SandboxToolKit") as mock_toolkit_class:
+                mock_sandbox_tools = MagicMock()
+                mock_sandbox_tools.as_tool_kits.return_value = {}
+                mock_toolkit_class.return_value = mock_sandbox_tools
+
+                sophie = Sophie.create(
+                    base_url="https://api.openai.com/v1",
+                    api_key="test-key",
+                    model="gpt-4",
+                    max_context=8192,
+                    github_repo="test/repo",
+                )
+
+                async with sophie as s:
+                    assert "FetchFromGithub" in s.tool_kits
+                    assert "CreateGithubIssue" in s.tool_kits
+                    assert "PrToGithub" in s.tool_kits
+                    assert "GetIssueComments" in s.tool_kits
+                    assert "ReplyToIssue" in s.tool_kits
+                    assert "GetPRReviews" in s.tool_kits
+                    assert "GetPRReviewComments" in s.tool_kits
+                    assert "ReplyToPRReviewComment" in s.tool_kits
+                    assert "GetPRComments" in s.tool_kits
+                    assert "ReplyToPR" in s.tool_kits
+                    assert "GetMyOpenPRs" in s.tool_kits
+                    assert "GetMyIssues" in s.tool_kits
+                    assert "GetNotifications" in s.tool_kits
 
     @pytest.mark.asyncio
-    @patch("src.agents.sophie.agent.Sandbox")
-    async def test_sophie_has_web_tools(self, mock_sandbox_class):
+    async def test_sophie_has_web_tools(self):
         """Test that Sophie has access to web tools."""
         mock_sandbox = AsyncMock()
-        mock_sandbox_class.return_value = mock_sandbox
-        mock_sandbox.__aenter__ = AsyncMock(return_value=mock_sandbox)
-        mock_sandbox.__aexit__ = AsyncMock(return_value=None)
-        
-        with patch("src.agents.sophie.agent.SandboxToolKit") as mock_toolkit_class:
-            mock_sandbox_tools = MagicMock()
-            mock_sandbox_tools.as_tool_kits.return_value = {}
-            mock_toolkit_class.return_value = mock_sandbox_tools
-            
-            sophie = Sophie.create(
-                base_url="https://api.openai.com/v1",
-                api_key="test-key",
-                model="gpt-4",
-                max_context=8192,
-                github_repo="test/repo",
-            )
-            
-            async with sophie as s:
-                # Check web tools
-                assert "WebFetch" in s.tool_kits
-                assert "WebSearch" in s.tool_kits
+        mock_pool_manager = make_pool_manager(mock_sandbox)
+
+        with patch("src.agents.sophie.agent.get_sandbox_pool_manager", return_value=mock_pool_manager):
+            with patch("src.agents.sophie.agent.SandboxToolKit") as mock_toolkit_class:
+                mock_sandbox_tools = MagicMock()
+                mock_sandbox_tools.as_tool_kits.return_value = {}
+                mock_toolkit_class.return_value = mock_sandbox_tools
+
+                sophie = Sophie.create(
+                    base_url="https://api.openai.com/v1",
+                    api_key="test-key",
+                    model="gpt-4",
+                    max_context=8192,
+                    github_repo="test/repo",
+                )
+
+                async with sophie as s:
+                    assert "WebFetch" in s.tool_kits
+                    assert "WebSearch" in s.tool_kits
+
+
+

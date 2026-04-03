@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import base64
 import tempfile
 import shutil
@@ -130,6 +130,13 @@ class Sandbox:
         if self._workdir:
             shutil.rmtree(self._workdir, ignore_errors=True)
             self._workdir = None
+
+
+    async def recreate(self) -> "Sandbox":
+        """Recreate the underlying container and workspace in-place."""
+        await self.__aexit__(None, None, None)
+        await self.__aenter__()
+        return self
 
 
     async def run_code(self, code: str) -> dict:
@@ -280,3 +287,4 @@ class Sandbox:
         """
         rel = container_path.removeprefix("/workspace").lstrip("/")
         return Path(self._workdir) / rel
+

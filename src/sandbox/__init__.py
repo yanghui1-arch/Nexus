@@ -1,4 +1,4 @@
-from .docker_sandbox import (
+﻿from .docker_sandbox import (
     Sandbox,
     SandboxConfig,
     PYTHON_310,
@@ -10,6 +10,11 @@ from .docker_sandbox import (
     JAVA_17,
     JAVA_21,
     VITE_REACT_TS,
+)
+from .pool_management import (
+    SandboxPoolManager,
+    canonicalize_repo_url,
+    get_sandbox_pool_manager,
 )
 
 __all__ = [
@@ -24,4 +29,8 @@ __all__ = [
     "JAVA_17",
     "JAVA_21",
     "VITE_REACT_TS",
+    "SandboxPoolManager",
+    "canonicalize_repo_url",
+    "get_sandbox_pool_manager",
 ]
+
