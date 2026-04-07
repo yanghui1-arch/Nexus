@@ -1,4 +1,5 @@
-export type TaskStatus = 'running' | 'waiting' | 'completed' | 'failed' | 'error';
+export type TaskStatus = 'running' | 'waiting' | 'merged' | 'closed' | 'failed' | 'error';
+export type AgentType = 'Tela' | 'Sophie';
 
 export interface LogEntry {
   timestamp: string;
@@ -10,6 +11,7 @@ export interface AgentTask {
   id: string;
   title: string;        // What the agent is doing
   status: TaskStatus;
+  agentType: AgentType; // Which agent handles this task
   agentName: string;    // Agent identifier
   agentId: string;
   startTime?: string;
@@ -17,6 +19,7 @@ export interface AgentTask {
   duration?: number;    // in seconds
   logs: LogEntry[];
   error?: string;
+  prUrl?: string;       // GitHub PR URL if applicable
   metadata?: {
     repository?: string;
     branch?: string;
@@ -28,10 +31,19 @@ export interface AgentTask {
 export interface Agent {
   id: string;
   name: string;
+  agentType: AgentType;
   status: 'online' | 'offline' | 'busy';
   currentTask?: AgentTask;
   taskQueue: AgentTask[];
   completedTasks: AgentTask[];
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  description: string;
+  repo: string;        // e.g. "yanghui1-arch/Nexus"
+  agents: Agent[];
 }
 
 // Legacy types for backward compatibility
