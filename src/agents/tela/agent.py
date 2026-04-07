@@ -7,7 +7,7 @@ from openai.types.chat.chat_completion_message_param import (
     ChatCompletionMessageParam,
     ChatCompletionAssistantMessageParam,
 )
-from mwin import track, StepType
+from mwin import track
 
 from src.agents.base.agent import Agent, BaseAgentStepResult, ModelConfig
 from src.agents.tela.system_prompt import TELA_SYSTEM_PROMPT
@@ -138,7 +138,7 @@ class Tela(Agent):
             self._sandbox_pool_manager = None
 
 
-    @track(tags=["exec", "tela"], step_type=StepType.LLM)
+    @track(tags=["exec", "tela"], step_type="llm")
     def step(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> BaseAgentStepResult:
         if self._sandbox is None:
             raise RuntimeError("Tela must be used as an async context manager (async with Tela(...) as tela:)")

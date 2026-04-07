@@ -1,7 +1,7 @@
 from typing import Callable
 from pydantic import BaseModel, Field
 from openai import pydantic_function_tool
-from mwin import track, StepType
+from mwin import track
 
 from src.sandbox import Sandbox
 
@@ -74,37 +74,37 @@ class SandboxToolKit:
     def __init__(self, sandbox: Sandbox) -> None:
         self._sandbox = sandbox
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def run_code(self, code: str) -> dict:
         return await self._sandbox.run_code(code)
 
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def run_shell(self, cmd: str) -> dict:
         return await self._sandbox.run_shell(cmd)
 
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def write_file(self, path: str, content: str) -> dict:
         return await self._sandbox.write_file(path, content)
 
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def read_file(self, path: str) -> dict:
         return await self._sandbox.read_file(path)
 
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def append_file(self, path: str, content: str) -> dict:
         return await self._sandbox.append_file(path, content)
 
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def edit_file(self, path: str, old_str: str, new_str: str) -> dict:
         return await self._sandbox.edit_file(path, old_str, new_str)
 
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def list_files(self, path: str = "/workspace") -> dict:
         return await self._sandbox.list_files(path)
 

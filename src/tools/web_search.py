@@ -1,7 +1,7 @@
 import asyncio
 from pydantic import BaseModel, Field
 from openai import pydantic_function_tool
-from mwin import track, StepType
+from mwin import track
 
 
 class WebSearch(BaseModel):
@@ -14,7 +14,7 @@ class WebSearch(BaseModel):
 TOOL_DEFINITION = pydantic_function_tool(WebSearch)
 
 
-@track(step_type=StepType.TOOL)
+@track(step_type="tool")
 async def web_search(query: str, max_results: int = 5) -> dict:
     """Search the web using DuckDuckGo.
 

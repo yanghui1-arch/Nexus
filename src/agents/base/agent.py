@@ -15,7 +15,7 @@ from openai.types.chat.chat_completion_message_param import (
     ChatCompletionToolMessageParam
 )
 from openai.types.chat.chat_completion_message_tool_call import ChatCompletionMessageToolCall
-from mwin import track, StepType
+from mwin import track
 from src.logger import logger
 from src.exception import ToolNotFoundError
 from src.utils.asynchronous import make_async
@@ -72,6 +72,7 @@ class Agent(BaseModel):
     sample_config: SampleConfig | None = None
     max_attempts: int | None = None
     openai_client: OpenAI | None = None
+    current_turn_ctx_len: int = 0
 
 
     @model_validator(mode="after")
@@ -80,9 +81,9 @@ class Agent(BaseModel):
             self.openai_client = OpenAI(base_url=self.base_url, api_key=self.api_key)
         return self
 
-
+    @track(tags=["agent"])
     async def work(
-        self, 
+        self,
         question: str,
         current_session_ctx: List[ChatCompletionUserMessageParam | ChatCompletionAssistantMessageParam | ChatCompletionToolMessageParam],
         history_session_ctx: List[ChatCompletionUserMessageParam | ChatCompletionAssistantMessageParam | ChatCompletionToolMessageParam],
@@ -116,6 +117,9 @@ class Agent(BaseModel):
         )
 
         while not terminate and (True if self.max_attempts is None else tries <= self.max_attempts):
+            if self.current_turn_ctx_len >= self.llm_config.max_length_context * 0.9:
+                logger.info(f"Agent `{self.name}` is compacting...")
+                current_turn_ctx = self.compact(current_turn_ctx=current_turn_ctx)
             try:
                 step_response: BaseAgentStepResult = self.step(current_turn_ctx)
             except RateLimitError as rle:
@@ -127,6 +131,7 @@ class Agent(BaseModel):
         
             assistant_msg = step_response.message_param
             current_turn_ctx.append(assistant_msg)
+            self.current_turn_ctx_len = step_response.current_step_consume_tokens
 
             if step_response.finish_reason == "stop":
                 terminate = True
@@ -258,7 +263,7 @@ class Agent(BaseModel):
         raise NotImplementedError(f"Agent `{self.name}` doesn't implement last_report_current_process function.")
 
     
-    @track(tags=["compact"], step_type=StepType.LLM)
+    @track(tags=["compact"], step_type="llm")
     def compact(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> List[ChatCompletionMessageParam]:
         """Keep system message + last user message + optional[last turn of assistant+optional[tool] messages].
         Spilt current_turn_ctx into four parts - system, ctx before last user message, last user message, ctx after last user message.

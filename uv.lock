@@ -614,7 +614,7 @@ wheels = [
 
 [[package]]
 name = "mwin"
-version = "0.2.2"
+version = "0.2.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -624,9 +624,9 @@ dependencies = [
     { name = "requests" },
     { name = "uuid6" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9f/13/adfd0620033f2b175d6ba45ab937ebb5ee0c8be34458ba77c4aadec916dc/mwin-0.2.2.tar.gz", hash = "sha256:71e9c6441f7a54366aad632a08cf7898a8ee864537c3a535449e7c73ae5a1230", size = 38260, upload-time = "2026-03-22T09:32:17.546Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5c/42/8898280faa28f54dd02fd1221d073647a5eed81a061b4a51cfb9016a6394/mwin-0.2.3.tar.gz", hash = "sha256:368ad3ad1398f1f01afa4a05489d9ff45a06a5c5669fbe8289204220df77c4ce", size = 38089, upload-time = "2026-04-07T09:27:43.78Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/08/c0/e528f9fbbad3b0a064506ef140999bcac8b8b8e7c7263f56dba7c4c7d8f3/mwin-0.2.2-py3-none-any.whl", hash = "sha256:7a54ec522d036e4996b59bed9386fb29e735782d4ebc63e5b3beeeff77f0b3e0", size = 46952, upload-time = "2026-03-22T09:32:15.776Z" },
+    { url = "https://files.pythonhosted.org/packages/2e/22/c32032fa35996e417c233da849ebea1cc2b9dc4039ac6d15956fa781d543/mwin-0.2.3-py3-none-any.whl", hash = "sha256:107c50f3f94a7a4beec5671bfecc8400c0dbc7c6af9954598eefcd0567662d23", size = 47186, upload-time = "2026-04-07T09:27:42.312Z" },
 ]
 
 [[package]]

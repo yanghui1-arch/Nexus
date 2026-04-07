@@ -1,7 +1,7 @@
 import httpx
 from pydantic import BaseModel, Field
 from openai import pydantic_function_tool
-from mwin import track, StepType
+from mwin import track
 
 from src.sandbox import Sandbox
 
@@ -189,7 +189,7 @@ class GithubToolKit:
     def __init__(self, sandbox: Sandbox) -> None:
         self._sandbox = sandbox
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def fetch_from_github(
         self,
         repo_url: str,
@@ -264,7 +264,7 @@ class GithubToolKit:
         return {"success": True, "path": local_path, "branch": branch, "message": message}
 
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def create_github_issue(
         self,
         token: str,
@@ -302,7 +302,7 @@ class GithubToolKit:
                 }
 
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def pr_to_github(
         self,
         token: str,
@@ -374,7 +374,7 @@ class GithubToolKit:
     # Issue and PR Comment/Review Interaction Methods
     # ==========================================================================
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def get_issue_comments(
         self,
         token: str,
@@ -422,7 +422,7 @@ class GithubToolKit:
                 }
 
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def reply_to_issue(
         self,
         token: str,
@@ -459,7 +459,7 @@ class GithubToolKit:
                 }
 
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def get_pr_reviews(
         self,
         token: str,
@@ -505,7 +505,7 @@ class GithubToolKit:
                 }
 
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def get_pr_review_comments(
         self,
         token: str,
@@ -554,7 +554,7 @@ class GithubToolKit:
                 }
 
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def reply_to_pr_review_comment(
         self,
         token: str,
@@ -595,7 +595,7 @@ class GithubToolKit:
                 }
 
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def get_pr_comments(
         self,
         token: str,
@@ -642,7 +642,7 @@ class GithubToolKit:
                 }
 
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def reply_to_pr(
         self,
         token: str,
@@ -655,7 +655,7 @@ class GithubToolKit:
         return await self.reply_to_issue(token, repo, pull_number, body)
 
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def get_my_open_prs(
         self,
         token: str,
@@ -709,7 +709,7 @@ class GithubToolKit:
                 }
 
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def get_my_issues(
         self,
         token: str,
@@ -765,7 +765,7 @@ class GithubToolKit:
                 }
 
 
-    @track(step_type=StepType.TOOL)
+    @track(step_type="tool")
     async def get_notifications(
         self,
         token: str,
