@@ -411,7 +411,7 @@ class Agent(BaseModel):
             return content, ""
 
         base_content, existing_work_summary = content.split(_COMPACT_SUMMARY_HEADER, 1)
-        return base_content, existing_work_summary
+        return base_content.strip(), existing_work_summary.strip()
 
     def _inject_work_summary_into_system_message(
         self,
@@ -423,9 +423,12 @@ class Agent(BaseModel):
         if base_content:
             parts.append(base_content)
         if previous_work:
-            parts.append(previous_work)
+            parts.append(f"{_COMPACT_SUMMARY_HEADER}\n\n{previous_work}")
             if summary:
                 parts.append(summary)
+        elif not previous_work and summary:
+            parts.append(f"{_COMPACT_SUMMARY_HEADER}\n\n{summary}")
+
         return {
             "role": "system",
             "content": "\n\n".join(parts)

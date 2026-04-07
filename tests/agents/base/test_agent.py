@@ -1,5 +1,5 @@
-from unittest.mock import MagicMock, patch, AsyncMock
-
+﻿import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from openai.types.chat.chat_completion_message_tool_call import (
     ChatCompletionMessageToolCall,
@@ -11,6 +11,7 @@ from src.agents.base.agent import (
     BaseAgentStepResult,
     ModelConfig,
     WorkTempStatus,
+    _COMPACT_SUMMARY_HEADER,
 )
 
 
@@ -65,9 +66,6 @@ class ConcreteAgent(Agent):
     def last_report_current_process(self, current_turn_ctx: list) -> str:
         return "partial progress"
 
-    def compact(self, current_turn_ctx: list) -> list:
-        return current_turn_ctx
-
 
 def make_agent(tool_kits=None, max_attempts=None) -> ConcreteAgent:
     with patch("src.agents.base.agent.OpenAI"):
@@ -82,18 +80,34 @@ def make_agent(tool_kits=None, max_attempts=None) -> ConcreteAgent:
         )
 
 
+def set_compact_summary(agent: ConcreteAgent, summary: str) -> None:
+    completion = MagicMock()
+    completion.choices = [MagicMock(message=MagicMock(content=summary))]
+    agent.openai_client.chat.completions.create.return_value = completion
+
+
 class TestProcessCallback:
     def test_calls_callback_with_status(self):
         agent = make_agent()
         cb = MagicMock()
-        status: WorkTempStatus = {"process": "START", "agent_content": None, "current_use_tool": None}
+        status: WorkTempStatus = {
+            "process": "START",
+            "agent_content": None,
+            "current_use_tool": None,
+            "current_use_tool_args": None,
+        }
         agent._process_callback(cb, status)
         cb.assert_called_once_with(status)
 
     def test_none_callback_does_not_raise(self):
         agent = make_agent()
-        status: WorkTempStatus = {"process": "START", "agent_content": None, "current_use_tool": None}
-        agent._process_callback(None, status)  # must not raise
+        status: WorkTempStatus = {
+            "process": "START",
+            "agent_content": None,
+            "current_use_tool": None,
+            "current_use_tool_args": None,
+        }
+        agent._process_callback(None, status)
 
 
 class TestInitCurrentTurnCtx:
@@ -240,7 +254,6 @@ class TestWorkToolCalls:
         ]))
 
         await agent.work(question="q", current_session_ctx=[], history_session_ctx=[])
-        # fast should finish before slow since they run concurrently
         assert order.index("fast") < order.index("slow")
 
 
@@ -281,7 +294,6 @@ class TestWorkMaxAttempts:
         tool = MagicMock(return_value="out")
         agent = make_agent(tool_kits={"t": tool}, max_attempts=1)
         tc = make_tool_call("id1", "t", "{}")
-        # Always returns tool_calls — never stops
         set_step(agent, MagicMock(return_value=make_tool_result([tc])))
 
         events: list[WorkTempStatus] = []
@@ -306,7 +318,6 @@ class TestWorkMaxAttempts:
         assert result.response == "partial progress"
 
     async def test_none_max_attempts_runs_until_stop(self):
-        """max_attempts=None should keep looping — verify it stops on 'stop'."""
         tool = MagicMock(return_value="out")
         agent = make_agent(tool_kits={"t": tool}, max_attempts=None)
         tc = make_tool_call("id1", "t", "{}")
@@ -322,3 +333,119 @@ class TestWorkMaxAttempts:
 
         assert result.response == "finally done"
         assert step_mock.call_count == 4
+
+
+class TestCompactHelpers:
+    def test_inject_work_summary_adds_header(self):
+        agent = make_agent()
+
+        result = agent._inject_work_summary_into_system_message(
+            {"role": "system", "content": "Base prompt"},
+            "First summary",
+        )
+
+        assert result == {
+            "role": "system",
+            "content": "Base prompt\n\n## Previous Work Summary\n\nFirst summary",
+        }
+
+    def test_inject_work_summary_appends_to_existing_summary(self):
+        agent = make_agent()
+        system_message = {
+            "role": "system",
+            "content": "Base prompt\n\n## Previous Work Summary\n\nOld summary",
+        }
+
+        result = agent._inject_work_summary_into_system_message(system_message, "New summary")
+
+        assert result == {
+            "role": "system",
+            "content": "Base prompt\n\n## Previous Work Summary\n\nOld summary\n\nNew summary",
+        }
+
+
+class TestCompact:
+    def test_empty_context_returns_unchanged(self):
+        agent = make_agent()
+
+        assert agent.compact([]) == []
+
+    def test_single_user_turn_without_assistant_is_unchanged(self):
+        agent = make_agent()
+        ctx = [
+            {"role": "system", "content": "Base prompt"},
+            {"role": "user", "content": "Current task"},
+        ]
+
+        assert agent.compact(ctx) == ctx
+        agent.openai_client.chat.completions.create.assert_not_called()
+
+    def test_single_user_turn_with_one_assistant_is_unchanged(self):
+        agent = make_agent()
+        ctx = [
+            {"role": "system", "content": "Base prompt"},
+            {"role": "user", "content": "Current task"},
+            {"role": "assistant", "content": "In progress"},
+        ]
+
+        assert agent.compact(ctx) == ctx
+        agent.openai_client.chat.completions.create.assert_not_called()
+
+    def test_compact_keeps_last_user_when_new_request_starts(self):
+        agent = make_agent()
+        set_compact_summary(agent, "Summarized previous work")
+        ctx = [
+            {"role": "system", "content": "Base prompt"},
+            {"role": "user", "content": "Old request"},
+            {"role": "assistant", "content": "Old answer"},
+            {"role": "user", "content": "New request"},
+        ]
+
+        result = agent.compact(ctx)
+
+        assert result == [
+            {
+                "role": "system",
+                "content": f"Base prompt\n\n{_COMPACT_SUMMARY_HEADER}\n\nSummarized previous work",
+            },
+            {"role": "user", "content": "New request"},
+        ]
+
+        call_kwargs = agent.openai_client.chat.completions.create.call_args.kwargs
+        assert call_kwargs["model"] == "gpt-4o"
+        assert call_kwargs["messages"][:-1] == ctx[:3]
+        assert call_kwargs["messages"][-1]["role"] == "user"
+        assert "Compact the current context" in call_kwargs["messages"][-1]["content"]
+
+    def test_compact_keeps_active_assistant_and_tool_messages(self):
+        agent = make_agent()
+        set_compact_summary(agent, "Finished earlier work")
+        ctx = [
+            {"role": "system", "content": "Base prompt"},
+            {"role": "user", "content": "Old request"},
+            {"role": "assistant", "content": "Old answer"},
+            {"role": "user", "content": "Current request"},
+            {"role": "assistant", "content": "Current progress"},
+            {"role": "tool", "tool_call_id": "call-1", "content": "tool output"},
+        ]
+
+        result = agent.compact(ctx)
+
+        assert result == [
+            {
+                "role": "system",
+                "content": f"Base prompt\n\n{_COMPACT_SUMMARY_HEADER}\n\nFinished earlier work",
+            },
+            {"role": "user", "content": "Current request"},
+            {"role": "assistant", "content": "Current progress"},
+            {"role": "tool", "tool_call_id": "call-1", "content": "tool output"},
+        ]
+
+        summary_messages = agent.openai_client.chat.completions.create.call_args.kwargs["messages"]
+        assert summary_messages[:-1] == ctx[:4]
+
+    def test_compact_requires_user_message(self):
+        agent = make_agent()
+
+        with pytest.raises(AssertionError, match="don't have any user message"):
+            agent.compact([{"role": "system", "content": "Base prompt"}])

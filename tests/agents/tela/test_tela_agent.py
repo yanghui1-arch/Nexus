@@ -420,28 +420,36 @@ class TestSopAndReport:
 
 
 class TestCompact:
-    def test_short_context_unchanged(self):
+    def test_single_turn_is_unchanged(self):
         tela = make_tela()
-        ctx = [{"role": "system", "content": "s"}] * 5
+        ctx = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "current task"},
+        ]
+
         assert tela.compact(ctx) == ctx
 
-    def test_long_context_keeps_system_and_recent(self):
+    def test_compact_uses_shared_base_behavior(self):
         tela = make_tela()
-        system = {"role": "system", "content": "sys"}
-        first_user = {"role": "user", "content": "first"}
-        middle = [{"role": "assistant", "content": f"msg{i}"} for i in range(20)]
-        recent = [{"role": "assistant", "content": f"recent{i}"} for i in range(10)]
-        ctx = [system, first_user] + middle + recent
+        completion = MagicMock()
+        completion.choices = [MagicMock(message=MagicMock(content="Earlier work"))]
+        tela.openai_client.chat.completions.create.return_value = completion
+        ctx = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "old task"},
+            {"role": "assistant", "content": "old answer"},
+            {"role": "user", "content": "current task"},
+        ]
 
         result = tela.compact(ctx)
 
-        assert result[0] == system
-        assert first_user in result
-        for msg in recent:
-            assert msg in result
-        # middle messages should be dropped
-        for msg in middle:
-            assert msg not in result
+        assert result == [
+            {
+                "role": "system",
+                "content": "sys\n\n## Previous Work Summary\n\nEarlier work",
+            },
+            {"role": "user", "content": "current task"},
+        ]
 
 
 class TestFactory:

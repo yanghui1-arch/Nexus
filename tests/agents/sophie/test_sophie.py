@@ -204,53 +204,54 @@ class TestSophieAsyncContext:
 
 
 class TestSophieCompact:
-    """Test Sophie's context compaction functionality."""
+    """Test Sophie inherits the shared compact behavior."""
 
-    def test_compact_short_context_unchanged(self):
-        """Test that short contexts are not compacted."""
-        sophie = Sophie.create(
-            base_url="https://api.openai.com/v1",
-            api_key="test-key",
-            model="gpt-4",
-            max_context=8192,
-            github_repo="test/repo",
-        )
-        
-        # Create a context with 5 messages (under 12 threshold)
+    def test_compact_single_turn_is_unchanged(self):
+        with patch("src.agents.base.agent.OpenAI"):
+            sophie = Sophie.create(
+                base_url="https://api.openai.com/v1",
+                api_key="test-key",
+                model="gpt-4",
+                max_context=8192,
+                github_repo="test/repo",
+            )
+
         context = [
-            {"role": "system", "content": "System message"},
-            {"role": "user", "content": "User 1"},
-            {"role": "assistant", "content": "Assistant 1"},
-            {"role": "user", "content": "User 2"},
-            {"role": "assistant", "content": "Assistant 2"},
+            {"role": "system", "content": "System"},
+            {"role": "user", "content": "Current request"},
         ]
-        
-        result = sophie.compact(context)
-        assert len(result) == 5
-        assert result == context
 
-    def test_compact_long_context_reduced(self):
-        """Test that long contexts are compacted."""
-        sophie = Sophie.create(
-            base_url="https://api.openai.com/v1",
-            api_key="test-key",
-            model="gpt-4",
-            max_context=8192,
-            github_repo="test/repo",
-        )
-        
-        # Create a context with 15 messages (over 12 threshold)
-        context = [{"role": "system", "content": "System"}]
-        context.append({"role": "user", "content": "First user"})
-        for i in range(13):
-            context.append({"role": "assistant", "content": f"Assistant {i}"})
-            context.append({"role": "user", "content": f"User {i}"})
-        
+        assert sophie.compact(context) == context
+
+    def test_compact_summarizes_previous_work(self):
+        with patch("src.agents.base.agent.OpenAI"):
+            sophie = Sophie.create(
+                base_url="https://api.openai.com/v1",
+                api_key="test-key",
+                model="gpt-4",
+                max_context=8192,
+                github_repo="test/repo",
+            )
+
+        completion = MagicMock()
+        completion.choices = [MagicMock(message=MagicMock(content="Earlier work"))]
+        sophie.openai_client.chat.completions.create.return_value = completion
+        context = [
+            {"role": "system", "content": "System"},
+            {"role": "user", "content": "Old request"},
+            {"role": "assistant", "content": "Old answer"},
+            {"role": "user", "content": "Current request"},
+        ]
+
         result = sophie.compact(context)
-        
-        # Should have system + first user + last 10 messages
-        assert len(result) <= 12
-        assert result[0]["role"] == "system"
+
+        assert result == [
+            {
+                "role": "system",
+                "content": "System\n\n## Previous Work Summary\n\nEarlier work",
+            },
+            {"role": "user", "content": "Current request"},
+        ]
 
 
 class TestSophieLastReport:
