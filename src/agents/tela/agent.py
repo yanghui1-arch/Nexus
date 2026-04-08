@@ -1,6 +1,5 @@
-from typing import List, Any
+from typing import List, Any, ClassVar
 
-import httpx
 from pydantic import PrivateAttr, ConfigDict
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_message_param import (
@@ -9,7 +8,8 @@ from openai.types.chat.chat_completion_message_param import (
 )
 from mwin import track
 
-from src.agents.base.agent import Agent, BaseAgentStepResult, ModelConfig
+from src.agents.base.agent import BaseAgentStepResult, ModelConfig
+from src.agents.base.code_agent import CodeAgent
 from src.agents.tela.system_prompt import TELA_SYSTEM_PROMPT
 from src.sandbox import Sandbox, SandboxConfig, PYTHON_312, SandboxPoolManager, get_sandbox_pool_manager
 from src.tools.sandbox import SandboxToolKit, SANDBOX_TOOL_DEFINITIONS
@@ -29,7 +29,7 @@ _ALL_TOOL_DEFINITIONS = [
 ]
 
 
-class Tela(Agent):
+class Tela(CodeAgent):
     """Tela — a Python coding agent with a sandboxed Docker workspace.
     Always be a contributor to write python.
 
@@ -41,9 +41,7 @@ class Tela(Agent):
     """
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    TELA_GITHUB_NICKNAME: str = "Nexus-Tela"
-    github_token: str | None = None
-    github_repo: str | None = None   # owner/repo, e.g. "acme/nexus"
+    GITHUB_NICKNAME: ClassVar[str] = "Nexus-Tela"
     sandbox_config: SandboxConfig = PYTHON_312
 
     _sandbox: Sandbox | None = PrivateAttr(default=None)
@@ -99,33 +97,11 @@ class Tela(Agent):
         return self
 
     async def _ensure_fork(self, token: str, upstream_repo: str) -> str:
-        """Check if Tela's fork exists; create it if not. Returns the fork name."""
-        from src.logger import logger
-        repo_name = upstream_repo.split("/")[-1]
-        fork_repo = f"{self.TELA_GITHUB_NICKNAME}/{repo_name}"
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2026-03-10",
-        }
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"https://api.github.com/repos/{fork_repo}/folks",
-                headers=headers,
-            )
-            if response.status_code == 400:
-                logger.info(f"Fork {fork_repo} not found — creating from {upstream_repo}")
-                create_folk = await client.post(
-                    f"https://api.github.com/repos/{upstream_repo}/forks",
-                    headers=headers,
-                )
-                if create_folk.status_code != 202:
-                    logger.error(f"Failed to create folk {fork_repo}")
-                else:
-                    logger.info(f"Fork {fork_repo} created.")
-            else:
-                logger.info(f"Fork {fork_repo} already exists.")
-        return fork_repo
+        """Check if Tela's fork exists; create it if not. Returns the fork name.
+        
+        Extends CodeAgent._ensure_fork with Tela-specific configuration.
+        """
+        return await super()._ensure_fork(token, upstream_repo)
 
     async def __aexit__(self, *args) -> None:
         if self._sandbox:
@@ -172,10 +148,6 @@ class Tela(Agent):
         )
 
 
-    # def SOP(self, work_history: List[ChatCompletionMessageParam]) -> str:
-        
-    #     pass
-
     def last_report_current_process(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> str:
         for msg in reversed(current_turn_ctx):
             if isinstance(msg, dict) and msg.get("role") == "assistant":
@@ -183,8 +155,6 @@ class Tela(Agent):
                 if content:
                     return content
         return "Tela reached the maximum number of attempts without completing the task."
-
-
 
 
     @classmethod
@@ -212,4 +182,3 @@ class Tela(Agent):
             github_token=github_token,
             sandbox_config=sandbox_config,
         )
-

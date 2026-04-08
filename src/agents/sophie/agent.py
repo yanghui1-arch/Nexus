@@ -1,6 +1,5 @@
-from typing import List, Any
+from typing import List, Any, ClassVar
 
-import httpx
 from pydantic import PrivateAttr, ConfigDict
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_message_param import (
@@ -9,7 +8,8 @@ from openai.types.chat.chat_completion_message_param import (
 )
 from mwin import track
 
-from src.agents.base.agent import Agent, BaseAgentStepResult, ModelConfig
+from src.agents.base.agent import BaseAgentStepResult, ModelConfig
+from src.agents.base.code_agent import CodeAgent
 from src.agents.sophie.system_prompt import SOPHIE_SYSTEM_PROMPT
 from src.sandbox import Sandbox, SandboxConfig, VITE_REACT_TS, SandboxPoolManager, get_sandbox_pool_manager
 from src.tools.sandbox import SandboxToolKit, SANDBOX_TOOL_DEFINITIONS
@@ -29,7 +29,7 @@ _ALL_TOOL_DEFINITIONS = [
 ]
 
 
-class Sophie(Agent):
+class Sophie(CodeAgent):
     """Sophie — a React developer and web designer with Anthropic-style design expertise.
     Creates beautiful, accessible, and user-friendly interfaces.
 
@@ -41,9 +41,7 @@ class Sophie(Agent):
     """
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    SOPHIE_GITHUB_NICKNAME: str = "Nexus-Sophie"
-    github_token: str | None = None
-    github_repo: str | None = None   # owner/repo, e.g. "acme/nexus"
+    GITHUB_NICKNAME: ClassVar[str] = "Nexus-Sophie"
     sandbox_config: SandboxConfig = VITE_REACT_TS
 
     _sandbox: Sandbox | None = PrivateAttr(default=None)
@@ -99,30 +97,11 @@ class Sophie(Agent):
         return self
 
     async def _ensure_fork(self, token: str, upstream_repo: str) -> str:
-        """Check if Sophie's fork exists; create it if not. Returns the fork name."""
-        from src.logger import logger
-        repo_name = upstream_repo.split("/")[-1]
-        fork_repo = f"{self.SOPHIE_GITHUB_NICKNAME}/{repo_name}"
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        }
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"https://api.github.com/repos/{fork_repo}",
-                headers=headers,
-            )
-            if response.status_code == 404:
-                logger.info(f"Fork {fork_repo} not found — creating from {upstream_repo}")
-                await client.post(
-                    f"https://api.github.com/repos/{upstream_repo}/forks",
-                    headers=headers,
-                )
-                logger.info(f"Fork {fork_repo} created.")
-            else:
-                logger.info(f"Fork {fork_repo} already exists.")
-        return fork_repo
+        """Check if Sophie's fork exists; create it if not. Returns the fork name.
+        
+        Extends CodeAgent._ensure_fork with Sophie-specific configuration.
+        """
+        return await super()._ensure_fork(token, upstream_repo)
 
     async def __aexit__(self, *args) -> None:
         if self._sandbox:
@@ -178,8 +157,6 @@ class Sophie(Agent):
         return "Sophie reached the maximum number of attempts without completing the task."
 
 
-
-
     @classmethod
     def create(
         cls,
@@ -205,4 +182,3 @@ class Sophie(Agent):
             github_token=github_token,
             sandbox_config=sandbox_config,
         )
-
