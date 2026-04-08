@@ -150,6 +150,18 @@ class GetNotifications(BaseModel):
     per_page: int = Field(default=30, description="Number of notifications to fetch (default: 30)")
 
 
+class CreateSubIssue(BaseModel):
+    """Create a sub-issue relationship between two issues using the GitHub API.
+    This allows you to break down large tasks into smaller manageable pieces.
+    The sub-issue must belong to the same repository owner as the parent issue."""
+
+    token: str = Field(description="GitHub personal access token with repo scope")
+    repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
+    issue_number: int = Field(description="The parent issue number that will contain the sub-issue")
+    sub_issue_id: int = Field(description="The ID (not number) of the issue to add as a sub-issue. Note: This is the issue ID, not the issue number.")
+    replace_parent: bool = Field(default=False, description="If true, replace the sub-issue's current parent (default: false)")
+
+
 FETCH_FROM_GITHUB   = pydantic_function_tool(FetchFromGithub)
 CREATE_GITHUB_ISSUE = pydantic_function_tool(CreateGithubIssue)
 PR_TO_GITHUB        = pydantic_function_tool(PrToGithub)
@@ -165,6 +177,7 @@ REPLY_TO_PR = pydantic_function_tool(ReplyToPR)
 GET_MY_OPEN_PRS = pydantic_function_tool(GetMyOpenPRs)
 GET_MY_ISSUES = pydantic_function_tool(GetMyIssues)
 GET_NOTIFICATIONS = pydantic_function_tool(GetNotifications)
+CREATE_SUB_ISSUE = pydantic_function_tool(CreateSubIssue)
 
 GITHUB_TOOL_DEFINITIONS: list = [
     FETCH_FROM_GITHUB,
@@ -180,6 +193,7 @@ GITHUB_TOOL_DEFINITIONS: list = [
     GET_MY_OPEN_PRS,
     GET_MY_ISSUES,
     GET_NOTIFICATIONS,
+    CREATE_SUB_ISSUE,
 ]
 
 
@@ -816,6 +830,53 @@ class GithubToolKit:
                 return {
                     "success": False,
                     "notifications": [],
+                    "message": f"GitHub API error {e.response.status_code}: {error_detail}",
+                }
+
+    @track(step_type="tool")
+    async def create_sub_issue(
+        self,
+        token: str,
+        repo: str,
+        issue_number: int,
+        sub_issue_id: int,
+        replace_parent: bool = False,
+    ) -> dict:
+        """Create a sub-issue relationship between two issues.
+        
+        The sub_issue_id is the issue ID (not the issue number).
+        Both issues must belong to the same repository owner.
+        """
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(
+                    f"https://api.github.com/repos/{repo}/issues/{issue_number}/sub_issues",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Accept": "application/vnd.github+json",
+                        "X-GitHub-Api-Version": "2022-11-28",
+                    },
+                    json={
+                        "sub_issue_id": sub_issue_id,
+                        "replace_parent": replace_parent,
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()
+                return {
+                    "success": True,
+                    "sub_issue_number": data["number"],
+                    "sub_issue_url": data["html_url"],
+                    "parent_issue_number": issue_number,
+                    "message": f"Sub-issue #{data['number']} added to issue #{issue_number}: {data['html_url']}",
+                }
+            except httpx.HTTPStatusError as e:
+                error_detail = e.response.json().get("message", e.response.text)
+                return {
+                    "success": False,
+                    "sub_issue_number": None,
+                    "sub_issue_url": "",
+                    "parent_issue_number": issue_number,
                     "message": f"GitHub API error {e.response.status_code}: {error_detail}",
                 }
 
