@@ -119,9 +119,12 @@ class Agent(BaseModel):
         while not terminate and (True if self.max_attempts is None else tries <= self.max_attempts):
             if self.current_turn_ctx_len >= self.llm_config.max_length_context * 0.9:
                 logger.info(f"Agent `{self.name}` is compacting...")
-                current_turn_ctx = self.compact(current_turn_ctx=current_turn_ctx)
+                current_turn_ctx = await make_async(self.compact, current_turn_ctx)
             try:
-                step_response: BaseAgentStepResult = self.step(current_turn_ctx)
+                if inspect.iscoroutinefunction(self.step):
+                    step_response: BaseAgentStepResult = await self.step(current_turn_ctx)
+                else:
+                    step_response = await make_async(self.step, current_turn_ctx)
             except RateLimitError as rle:
                 logger.warning(f"Agent `{self.name}` requests {self.llm_config.model} to limit. Wait one minute")
                 await asyncio.sleep(60)
