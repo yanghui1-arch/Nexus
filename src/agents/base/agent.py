@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from textwrap import dedent
 from pydantic import BaseModel, ConfigDict, model_validator
 from openai import AsyncOpenAI, RateLimitError
-from openai.types.chat import ChatCompletion
+from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion_message_param import (
     ChatCompletionMessageParam, 
     ChatCompletionSystemMessageParam, 
@@ -30,7 +30,7 @@ class BaseAgentStepResult:
     reasoning: str | None
     completion_content: str | None
     tool_calls: List[ChatCompletionMessageToolCall] | None
-    message_param: ChatCompletionAssistantMessageParam
+    message_param: ChatCompletionMessage
     current_step_consume_tokens: int
 
 
@@ -59,7 +59,7 @@ class WorkTempStatus(TypedDict):
     current_use_tool: Required[List[str] | None]
     current_use_tool_args: Required[List[Dict[str, Any]] | None]
 
-    context: NotRequired[List[ChatCompletionMessageParam]]
+    context: NotRequired[List[ChatCompletionMessageParam | ChatCompletionMessage]]
     """Context is complete current turn context when process = SAVE_CHECKPOINT"""
 
 
@@ -107,7 +107,7 @@ class Agent(BaseModel):
 
         system_message: ChatCompletionSystemMessageParam = {"role": "system", "content": self.system_prompt}
         user_message: ChatCompletionUserMessageParam = {"role": "user", "content": question}
-        current_turn_ctx: List[ChatCompletionMessageParam] = self._init_current_turn_ctx(
+        current_turn_ctx: List[ChatCompletionMessageParam | ChatCompletionMessage] = self._init_current_turn_ctx(
             system_message=system_message,
             user_message=user_message,
             current_session_ctx=current_session_ctx,

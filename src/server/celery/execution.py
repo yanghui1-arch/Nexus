@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from openai.types.chat import ChatCompletionMessage
+
 from src.agents import Sophie, Tela
 from src.agents.base.agent import Agent, BaseAgentResponse, WorkTempStatus
 from src.logger import logger
@@ -98,10 +100,17 @@ async def execute_agent_task(
                             request.agent.value,
                             task_id
                         )
+                    current_turn_ctx_json = []
+                    for message in current_turn_ctx:
+                        if isinstance(message, ChatCompletionMessage):
+                            current_turn_ctx.append(message.model_dump_json(exclude_none=True))
+                        else:
+                            current_turn_ctx.append(message)
+
                     await TaskRepository.update_checkpoint(
                         session,
                         task_id,
-                        checkpoint={"version": 1, "turn_context": current_turn_ctx},
+                        checkpoint={"version": 1, "turn_context": current_turn_ctx_json},
                     )
                     logger.info(
                         "Agent %s saves checkpoints when executing task %s.", 
