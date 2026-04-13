@@ -1,4 +1,4 @@
-﻿"""Unit tests for Tela.
+"""Unit tests for Tela.
 
 All tests use mocked OpenAI client and a mocked Docker sandbox so they run
 without any real API keys or Docker daemon.
@@ -19,8 +19,8 @@ from openai.types.chat.chat_completion_message_tool_call import (
 
 def make_tela(**kwargs) -> Tela:
     """Create a Tela with a mocked OpenAI client."""
-    with patch("src.agents.base.agent.OpenAI"):
-        return Tela(
+    with patch("src.agents.base.agent.AsyncOpenAI"):
+        tela = Tela(
             name="Tela",
             tool_kits=None,
             base_url="http://localhost",
@@ -30,6 +30,8 @@ def make_tela(**kwargs) -> Tela:
             max_attempts=10,
             **kwargs,
         )
+    tela.openai_client.chat.completions.create = AsyncMock()
+    return tela
 
 
 def make_pool_manager(mock_sandbox):
@@ -110,7 +112,7 @@ class TestContextManager:
     async def test_step_raises_without_context_manager(self):
         tela = make_tela()
         with pytest.raises(RuntimeError, match="async context manager"):
-            tela.step([])
+            await tela.step([])
 
     async def test_enter_forks_when_not_exists(self):
         tela = make_tela(github_repo="owner/repo", github_token="ghp_test")
@@ -171,7 +173,7 @@ class TestStep:
         with patch("src.agents.tela.agent.get_sandbox_pool_manager", return_value=make_pool_manager(mock_sandbox)):
             async with tela:
                 tela.openai_client.chat.completions.create.return_value = make_stop_response("all done")
-                result = tela.step([{"role": "user", "content": "hello"}])
+                result = await tela.step([{"role": "user", "content": "hello"}])
 
         assert result.finish_reason == "stop"
         assert result.completion_content == "all done"
@@ -188,7 +190,7 @@ class TestStep:
                 tela.openai_client.chat.completions.create.return_value = make_tool_response(
                     "RunCode", '{"code": "print(1)"}'
                 )
-                result = tela.step([{"role": "user", "content": "run code"}])
+                result = await tela.step([{"role": "user", "content": "run code"}])
 
         assert result.finish_reason == "tool_calls"
         assert result.tool_calls is not None
@@ -205,7 +207,7 @@ class TestStep:
         with patch("src.agents.tela.agent.get_sandbox_pool_manager", return_value=make_pool_manager(mock_sandbox)):
             async with tela:
                 tela.openai_client.chat.completions.create.return_value = make_stop_response()
-                tela.step([])
+                await tela.step([])
 
         call_kwargs = tela.openai_client.chat.completions.create.call_args
         tools_passed = call_kwargs.kwargs["tools"]
@@ -419,17 +421,18 @@ class TestSopAndReport:
         assert "maximum" in result.lower()
 
 
+@pytest.mark.asyncio
 class TestCompact:
-    def test_single_turn_is_unchanged(self):
+    async def test_single_turn_is_unchanged(self):
         tela = make_tela()
         ctx = [
             {"role": "system", "content": "sys"},
             {"role": "user", "content": "current task"},
         ]
 
-        assert tela.compact(ctx) == ctx
+        assert await tela.compact(ctx) == ctx
 
-    def test_compact_uses_shared_base_behavior(self):
+    async def test_compact_uses_shared_base_behavior(self):
         tela = make_tela()
         completion = MagicMock()
         completion.choices = [MagicMock(message=MagicMock(content="Earlier work"))]
@@ -441,7 +444,7 @@ class TestCompact:
             {"role": "user", "content": "current task"},
         ]
 
-        result = tela.compact(ctx)
+        result = await tela.compact(ctx)
 
         assert result == [
             {
@@ -454,7 +457,7 @@ class TestCompact:
 
 class TestFactory:
     def test_create_sets_correct_defaults(self):
-        with patch("src.agents.base.agent.OpenAI"):
+        with patch("src.agents.base.agent.AsyncOpenAI"):
             tela = Tela.create(
                 base_url="http://x",
                 api_key="k",
@@ -470,7 +473,7 @@ class TestFactory:
 
 
     def test_create_accepts_overrides(self):
-        with patch("src.agents.base.agent.OpenAI"):
+        with patch("src.agents.base.agent.AsyncOpenAI"):
             tela = Tela.create(
                 base_url="http://x",
                 api_key="k",
@@ -481,6 +484,10 @@ class TestFactory:
             )
         assert tela.llm_config.model == "gpt-4o-mini"
         assert tela.github_token == "ghp_abc"
+
+
+
+
 
 
 

@@ -29,9 +29,13 @@ def _sandbox_config_fingerprint(config: SandboxConfig) -> str:
     return hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
 
 
-def _build_pool_key(config: SandboxConfig, repo_url: str | None) -> str:
-    repo_key = "__no_repo__" if repo_url is None else repo_url
-    return f"{repo_key}::{_sandbox_config_fingerprint(config)}"
+def _build_pool_key(
+    config: SandboxConfig,
+    repo_url: str | None,
+    workspace_key: str | None,
+) -> str:
+    base_key = workspace_key or ("__no_repo__" if repo_url is None else repo_url)
+    return f"{base_key}::{_sandbox_config_fingerprint(config)}"
 
 
 @dataclass
@@ -44,7 +48,7 @@ class _SandboxPoolEntry:
 
 
 class SandboxPoolManager:
-    """In-process pool that reuses warm sandboxes for same repo + config."""
+    """In-process pool that reuses warm sandboxes with explicit workspace affinity."""
 
     def __init__(self) -> None:
         self._entries_by_key: dict[str, list[_SandboxPoolEntry]] = {}
@@ -60,8 +64,13 @@ class SandboxPoolManager:
                     return key, entry, entries
         return None
 
-    async def acquire(self, config: SandboxConfig, repo_url: str | None = None) -> Sandbox:
-        key = _build_pool_key(config=config, repo_url=repo_url)
+    async def acquire(
+        self,
+        config: SandboxConfig,
+        repo_url: str | None = None,
+        workspace_key: str | None = None,
+    ) -> Sandbox:
+        key = _build_pool_key(config=config, repo_url=repo_url, workspace_key=workspace_key)
 
         async with self._lock:
             for entry in self._entries_by_key.get(key, []):

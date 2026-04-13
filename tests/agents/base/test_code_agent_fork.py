@@ -16,7 +16,7 @@ class DummyCodeAgent(CodeAgent):
 
 
 def make_agent() -> DummyCodeAgent:
-    with patch("src.agents.base.agent.OpenAI"):
+    with patch("src.agents.base.agent.AsyncOpenAI"):
         return DummyCodeAgent(
             name="dummy-code-agent",
             tool_kits=None,
@@ -79,3 +79,4 @@ def test_ensure_fork_skips_creation_when_exists():
         asyncio.run(agent._ensure_fork(token="ghp_test", upstream_repo="owner/repo"))
 
     mock_http.post.assert_not_awaited()
+

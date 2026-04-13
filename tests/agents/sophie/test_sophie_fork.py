@@ -6,7 +6,7 @@ from src.agents.sophie import Sophie
 
 
 def make_sophie() -> Sophie:
-    with patch("src.agents.base.agent.OpenAI"):
+    with patch("src.agents.base.agent.AsyncOpenAI"):
         return Sophie(
             name="Sophie",
             tool_kits=None,
@@ -66,3 +66,4 @@ def test_ensure_fork_skips_creation_when_sophie_fork_exists():
         asyncio.run(sophie._ensure_fork(token="ghp_test", upstream_repo="owner/repo"))
 
     mock_http.post.assert_not_awaited()
+

@@ -1,22 +1,22 @@
-from typing import List, Any, ClassVar
+from typing import List, ClassVar
 
 from pydantic import PrivateAttr, ConfigDict
 from openai.types.chat.chat_completion import ChatCompletion
-from openai.types.chat.chat_completion_message_param import (
-    ChatCompletionMessageParam,
-    ChatCompletionAssistantMessageParam,
-)
+from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 from mwin import track, LLMProvider
 
 from src.agents.base.agent import BaseAgentStepResult, ModelConfig
 from src.agents.base.code_agent import CodeAgent
 from src.agents.sophie.system_prompt import SOPHIE_SYSTEM_PROMPT
-from src.sandbox import Sandbox, SandboxConfig, VITE_REACT_TS, SandboxPoolManager, get_sandbox_pool_manager
-from src.tools.sandbox import SandboxToolKit, SANDBOX_TOOL_DEFINITIONS
-from src.tools.code import (
-    GITHUB_TOOL_DEFINITIONS,
-    GithubToolKit,
+from src.sandbox import (
+    Sandbox,
+    SandboxConfig,
+    VITE_REACT_TS,
+    SandboxPoolManager,
+    get_sandbox_pool_manager,
 )
+from src.tools.sandbox import SandboxToolKit, SANDBOX_TOOL_DEFINITIONS
+from src.tools.code import GITHUB_TOOL_DEFINITIONS, GithubToolKit
 from src.mcps import web_fetch, WEB_FETCH
 from src.tools.web_search import web_search, TOOL_DEFINITION as WEB_SEARCH
 
@@ -39,10 +39,12 @@ class Sophie(CodeAgent):
         async with Sophie(...) as sophie:
             result = await sophie.work(question=..., ...)
     """
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     GITHUB_NICKNAME: ClassVar[str] = "Nexus-Sophie"
     sandbox_config: SandboxConfig = VITE_REACT_TS
+    sandbox_workspace_key: str | None = None
 
     _sandbox: Sandbox | None = PrivateAttr(default=None)
     _sandbox_tools: SandboxToolKit | None = PrivateAttr(default=None)
@@ -54,6 +56,7 @@ class Sophie(CodeAgent):
         self._sandbox = await self._sandbox_pool_manager.acquire(
             config=self.sandbox_config,
             repo_url=repo_url,
+            workspace_key=self.sandbox_workspace_key,
         )
         self._sandbox_tools = SandboxToolKit(self._sandbox)
         github_kit = GithubToolKit(self._sandbox)
@@ -62,8 +65,7 @@ class Sophie(CodeAgent):
         kits["FetchFromGithub"] = github_kit.fetch_from_github
         kits["CreateGithubIssue"] = github_kit.create_github_issue
         kits["PrToGithub"] = github_kit.pr_to_github
-        
-        # Add GitHub review and comment interaction tools
+
         kits["GetIssueComments"] = github_kit.get_issue_comments
         kits["ReplyToIssue"] = github_kit.reply_to_issue
         kits["GetPRReviews"] = github_kit.get_pr_reviews
@@ -74,7 +76,7 @@ class Sophie(CodeAgent):
         kits["GetMyOpenPRs"] = github_kit.get_my_open_prs
         kits["GetMyIssues"] = github_kit.get_my_issues
         kits["GetNotifications"] = github_kit.get_notifications
-        
+
         kits["WebFetch"] = web_fetch
         kits["WebSearch"] = web_search
         self.tool_kits = kits
@@ -82,15 +84,21 @@ class Sophie(CodeAgent):
         if self.github_repo or self.github_token:
             repo_lines = ["\n## Your Repository"]
             if self.github_token:
-                repo_lines.append(f"- Token: {self.github_token}  (use for git auth and all GitHub API calls)")
+                repo_lines.append(
+                    f"- Token: {self.github_token}  (use for git auth and all GitHub API calls)"
+                )
             if self.github_repo:
                 upstream_url = f"https://github.com/{self.github_repo}"
-                repo_lines.append(f"- Upstream repo: {self.github_repo}  (create issues and open PRs here)")
+                repo_lines.append(
+                    f"- Upstream repo: {self.github_repo}  (create issues and open PRs here)"
+                )
                 repo_lines.append(f"- Upstream URL: {upstream_url}")
                 if self.github_token:
                     fork_repo = await self._ensure_fork(self.github_token, self.github_repo)
                     fork_clone_url = f"https://x-access-token:{self.github_token}@github.com/{fork_repo}"
-                    repo_lines.append(f"- Your fork: {fork_repo}  (clone this as `origin`, push here frequently)")
+                    repo_lines.append(
+                        f"- Your fork: {fork_repo}  (clone this as `origin`, push here frequently)"
+                    )
                     repo_lines.append(f"- Fork clone URL: {fork_clone_url}")
             self.system_prompt = self.system_prompt + "\n".join(repo_lines) + "\n"
 
@@ -98,7 +106,7 @@ class Sophie(CodeAgent):
 
     async def _ensure_fork(self, token: str, upstream_repo: str) -> str:
         """Check if Sophie's fork exists; create it if not. Returns the fork name.
-        
+
         Extends CodeAgent._ensure_fork with Sophie-specific configuration.
         """
         return await super()._ensure_fork(token, upstream_repo)
@@ -113,9 +121,8 @@ class Sophie(CodeAgent):
             self._sandbox_tools = None
             self._sandbox_pool_manager = None
 
-
     @track(tags=["exec", "sophie"], step_type="llm", llm_provider=LLMProvider.KIMI)
-    def step(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> BaseAgentStepResult:
+    async def step(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> BaseAgentStepResult:
         if self._sandbox is None:
             raise RuntimeError("Sophie must be used as an async context manager (async with Sophie(...) as sophie:)")
 
@@ -130,13 +137,12 @@ class Sophie(CodeAgent):
             if self.sample_config.extra_body:
                 kwargs["extra_body"] = self.sample_config.extra_body
 
-        completion: ChatCompletion = self.openai_client.chat.completions.create(**kwargs)
+        completion: ChatCompletion = await self.openai_client.chat.completions.create(**kwargs)
         choice = completion.choices[0]
         message = choice.message
         reasoning = None
         if hasattr(message, "reasoning_content"):
             reasoning = getattr(message, "reasoning_content")
-            
 
         return BaseAgentStepResult(
             finish_reason=choice.finish_reason,
@@ -147,7 +153,6 @@ class Sophie(CodeAgent):
             current_step_consume_tokens=completion.usage.total_tokens if completion.usage else 0,
         )
 
-
     def last_report_current_process(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> str:
         for msg in reversed(current_turn_ctx):
             if isinstance(msg, dict) and msg.get("role") == "assistant":
@@ -155,7 +160,6 @@ class Sophie(CodeAgent):
                 if content:
                     return content
         return "Sophie reached the maximum number of attempts without completing the task."
-
 
     @classmethod
     def create(
@@ -168,6 +172,7 @@ class Sophie(CodeAgent):
         max_attempts: int = 30,
         github_token: str | None = None,
         sandbox_config: SandboxConfig = VITE_REACT_TS,
+        sandbox_workspace_key: str | None = None,
     ) -> "Sophie":
         """Convenience factory with sensible defaults."""
         return cls(
@@ -181,4 +186,6 @@ class Sophie(CodeAgent):
             max_attempts=max_attempts,
             github_token=github_token,
             sandbox_config=sandbox_config,
+            sandbox_workspace_key=sandbox_workspace_key,
         )
+

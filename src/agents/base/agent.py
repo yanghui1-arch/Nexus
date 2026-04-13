@@ -1,11 +1,11 @@
 import asyncio
 import inspect
 import json
-from typing import Literal, Any, List, Dict, Callable, Coroutine, TypedDict, Required
+from typing import Literal, Any, List, Dict, Callable, Coroutine, TypedDict, Required, NotRequired
 from dataclasses import dataclass
 from textwrap import dedent
 from pydantic import BaseModel, ConfigDict, model_validator
-from openai import OpenAI, RateLimitError
+from openai import AsyncOpenAI, RateLimitError
 from openai.types.chat import ChatCompletion
 from openai.types.chat.chat_completion_message_param import (
     ChatCompletionMessageParam, 
@@ -54,10 +54,13 @@ class ModelConfig:
 
 
 class WorkTempStatus(TypedDict):
-    process: Required[Literal["START", "PROCESS", "COMPLETED", "FAILED", "EXCEED_ATTEMPTS"]]
+    process: Required[Literal["START", "PROCESS", "SAVE_CHECKPOINT", "COMPLETED", "FAILED", "EXCEED_ATTEMPTS"]]
     agent_content: Required[str | None]
     current_use_tool: Required[List[str] | None]
     current_use_tool_args: Required[List[Dict[str, Any]] | None]
+
+    context: NotRequired[List[ChatCompletionMessageParam]]
+    """Context is complete current turn context when process = SAVE_CHECKPOINT"""
 
 
 class Agent(BaseModel):
@@ -71,14 +74,14 @@ class Agent(BaseModel):
     llm_config: ModelConfig
     sample_config: SampleConfig | None = None
     max_attempts: int | None = None
-    openai_client: OpenAI | None = None
+    openai_client: AsyncOpenAI | None = None
     current_turn_ctx_len: int = 0
 
 
     @model_validator(mode="after")
     def init_openai_client(self):
         if self.base_url and self.api_key:
-            self.openai_client = OpenAI(base_url=self.base_url, api_key=self.api_key)
+            self.openai_client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
         return self
 
     @track(tags=["agent"])
@@ -112,22 +115,25 @@ class Agent(BaseModel):
         )
 
         self._process_callback(
-            update_process_callback, 
-            work_temp_status=WorkTempStatus(process="START", agent_content=None, current_use_tool=None, current_use_tool_args=None)
+            update_process_callback,
+            work_temp_status=WorkTempStatus(
+                process="START",
+                agent_content=None,
+                current_use_tool=None,
+                current_use_tool_args=None,
+            ),
         )
 
         while not terminate and (True if self.max_attempts is None else tries <= self.max_attempts):
             if self.current_turn_ctx_len >= self.llm_config.max_length_context * 0.9:
                 logger.info(f"Agent `{self.name}` is compacting...")
-                current_turn_ctx = await make_async(self.compact, current_turn_ctx)
+                current_turn_ctx = await self.compact(current_turn_ctx)
+
             try:
-                if inspect.iscoroutinefunction(self.step):
-                    step_response: BaseAgentStepResult = await self.step(current_turn_ctx)
-                else:
-                    step_response = await make_async(self.step, current_turn_ctx)
-            except RateLimitError as rle:
-                logger.warning(f"Agent `{self.name}` requests {self.llm_config.model} to limit. Wait one minute")
-                await asyncio.sleep(60)
+                step_response = await self.step(current_turn_ctx)
+            except RateLimitError:
+                logger.warning(f"Agent `{self.name}` requests {self.llm_config.model} to limit. Wait two minutes")
+                await asyncio.sleep(120)
                 continue
             
             tries += 1
@@ -139,13 +145,13 @@ class Agent(BaseModel):
             if step_response.finish_reason == "stop":
                 terminate = True
                 self._process_callback(
-                    update_process_callback, 
+                    update_process_callback,
                     work_temp_status=WorkTempStatus(
-                        process="COMPLETED", 
+                        process="COMPLETED",
                         agent_content=step_response.completion_content,
                         current_use_tool=None,
                         current_use_tool_args=None,
-                    )
+                    ),
                 )
                 try:
                     sop = self.SOP(work_history=current_turn_ctx)
@@ -166,7 +172,7 @@ class Agent(BaseModel):
                             agent_content=step_response.completion_content,
                             current_use_tool=tool_names,
                             current_use_tool_args=tool_args,
-                        )
+                        ),
                     )
 
                     tc_ids: List[str] = []
@@ -188,13 +194,13 @@ class Agent(BaseModel):
                             coroutines.append(task)
 
                         except json.decoder.JSONDecodeError:
-                            logger.error(
+                            logger.exception(
                                 f"Agent `{self.name}` fail to call tool `{tc_name}` "
                                 f"because arguments generated from him/her is not a json str"
                             )
 
                         except ToolNotFoundError as tfe:
-                            logger.error(str(tfe))
+                            logger.exception(str(tfe))
 
                     assert len(tc_ids) == len(coroutines), "The length of tool call ids is not the same as the length of tools to execute."
                     coroutines_results = await asyncio.gather(*coroutines, return_exceptions=True)
@@ -203,6 +209,16 @@ class Agent(BaseModel):
                         for tc_id, result in zip(tc_ids, coroutines_results)
                     ]
                     current_turn_ctx.extend(tool_messages)
+                    self._process_callback(
+                        update_process_callback,
+                        work_temp_status=WorkTempStatus(
+                            process="SAVE_CHECKPOINT",
+                            agent_content=step_response.completion_content,
+                            current_use_tool=None,
+                            current_use_tool_args=None,
+                            context=current_turn_ctx,
+                        ),
+                    )
 
         if not terminate:
             agent_content = self.last_report_current_process(current_turn_ctx=current_turn_ctx)
@@ -241,8 +257,7 @@ class Agent(BaseModel):
         context.extend(current_session_ctx)
         context.append(user_message)
         return context
-    
-    
+
     def _process_callback(
         self,
         callback: Callable[[WorkTempStatus], None] | None,
@@ -252,7 +267,7 @@ class Agent(BaseModel):
             callback(work_temp_status)
         
 
-    def step(self, question: str, **kwargs) -> BaseAgentStepResult:
+    async def step(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> BaseAgentStepResult:
         
         raise NotImplementedError(f"Agent `{self.name}` doesn't implement step function.")
 
@@ -265,9 +280,13 @@ class Agent(BaseModel):
 
         raise NotImplementedError(f"Agent `{self.name}` doesn't implement last_report_current_process function.")
 
+    @staticmethod
+    def create(cls, *args, **kwargs):
+        
+        raise NotImplemented(f"Agent `{cls.__name__}` doesn't implement create().")
     
     @track(tags=["compact"], step_type="llm")
-    def compact(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> List[ChatCompletionMessageParam]:
+    async def compact(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> List[ChatCompletionMessageParam]:
         """Keep system message + last user message + optional[last turn of assistant+optional[tool] messages].
         Spilt current_turn_ctx into four parts - system, ctx before last user message, last user message, ctx after last user message.
         The last three turn of assistant+optional(tool) messages is from ctx after last user message.
@@ -314,13 +333,13 @@ class Agent(BaseModel):
             ),
             None,
         )
-        return self._compact_in_the_same_session(
+        return await self._compact_in_the_same_session(
             ctx=current_turn_ctx,
             last_user_index=last_user_index,
             last_assistant_index=last_assistant_index,
         )
     
-    def _compact_in_the_same_session(
+    async def _compact_in_the_same_session(
         self,
         ctx: List[ChatCompletionMessageParam],
         last_user_index: int,
@@ -400,9 +419,9 @@ class Agent(BaseModel):
         summary = ""
         if self.openai_client is None:
             logger.warning(f"Agent `{self.name}` occur an unexpected error: doesn't init openai client. Now initializing client.")
-            self.openai_client = OpenAI(base_url=self.base_url, api_key=self.api_key)
+            self.openai_client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
 
-        completion: ChatCompletion = self.openai_client.chat.completions.create(**kwargs)
+        completion: ChatCompletion = await self.openai_client.chat.completions.create(**kwargs)
         summary = completion.choices[0].message.content or ""
 
         compacted_system = self._inject_work_summary_into_system_message(system_message, summary)
@@ -441,3 +460,4 @@ class Agent(BaseModel):
             "role": "system",
             "content": "\n\n".join(parts)
         }
+

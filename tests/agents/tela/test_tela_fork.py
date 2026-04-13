@@ -6,7 +6,7 @@ from src.agents.tela import Tela
 
 
 def make_tela() -> Tela:
-    with patch("src.agents.base.agent.OpenAI"):
+    with patch("src.agents.base.agent.AsyncOpenAI"):
         return Tela(
             name="Tela",
             tool_kits=None,
@@ -66,3 +66,4 @@ def test_ensure_fork_skips_creation_when_tela_fork_exists():
         asyncio.run(tela._ensure_fork(token="ghp_test", upstream_repo="owner/repo"))
 
     mock_http.post.assert_not_awaited()
+

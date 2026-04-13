@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from openai.types.chat.chat_completion_message_tool_call import (
@@ -57,7 +57,7 @@ def set_step(agent: "ConcreteAgent", mock) -> None:
 class ConcreteAgent(Agent):
     """Minimal concrete Agent for testing."""
 
-    def step(self, current_turn_ctx: list) -> BaseAgentStepResult:
+    async def step(self, current_turn_ctx: list) -> BaseAgentStepResult:
         raise NotImplementedError("patch me")
 
     def SOP(self, work_history: list) -> str:
@@ -68,8 +68,8 @@ class ConcreteAgent(Agent):
 
 
 def make_agent(tool_kits=None, max_attempts=None) -> ConcreteAgent:
-    with patch("src.agents.base.agent.OpenAI"):
-        return ConcreteAgent(
+    with patch("src.agents.base.agent.AsyncOpenAI"):
+        agent = ConcreteAgent(
             name="test-agent",
             tool_kits=tool_kits or {},
             base_url="http://localhost",
@@ -78,6 +78,8 @@ def make_agent(tool_kits=None, max_attempts=None) -> ConcreteAgent:
             llm_config=make_model_config(),
             max_attempts=max_attempts,
         )
+    agent.openai_client.chat.completions.create = AsyncMock()
+    return agent
 
 
 def set_compact_summary(agent: ConcreteAgent, summary: str) -> None:
@@ -364,23 +366,24 @@ class TestCompactHelpers:
         }
 
 
+@pytest.mark.asyncio
 class TestCompact:
-    def test_empty_context_returns_unchanged(self):
+    async def test_empty_context_returns_unchanged(self):
         agent = make_agent()
 
-        assert agent.compact([]) == []
+        assert await agent.compact([]) == []
 
-    def test_single_user_turn_without_assistant_is_unchanged(self):
+    async def test_single_user_turn_without_assistant_is_unchanged(self):
         agent = make_agent()
         ctx = [
             {"role": "system", "content": "Base prompt"},
             {"role": "user", "content": "Current task"},
         ]
 
-        assert agent.compact(ctx) == ctx
+        assert await agent.compact(ctx) == ctx
         agent.openai_client.chat.completions.create.assert_not_called()
 
-    def test_single_user_turn_with_one_assistant_is_unchanged(self):
+    async def test_single_user_turn_with_one_assistant_is_unchanged(self):
         agent = make_agent()
         ctx = [
             {"role": "system", "content": "Base prompt"},
@@ -388,10 +391,10 @@ class TestCompact:
             {"role": "assistant", "content": "In progress"},
         ]
 
-        assert agent.compact(ctx) == ctx
+        assert await agent.compact(ctx) == ctx
         agent.openai_client.chat.completions.create.assert_not_called()
 
-    def test_compact_keeps_last_user_when_new_request_starts(self):
+    async def test_compact_keeps_last_user_when_new_request_starts(self):
         agent = make_agent()
         set_compact_summary(agent, "Summarized previous work")
         ctx = [
@@ -401,7 +404,7 @@ class TestCompact:
             {"role": "user", "content": "New request"},
         ]
 
-        result = agent.compact(ctx)
+        result = await agent.compact(ctx)
 
         assert result == [
             {
@@ -417,7 +420,7 @@ class TestCompact:
         assert call_kwargs["messages"][-1]["role"] == "user"
         assert "Compact the current context" in call_kwargs["messages"][-1]["content"]
 
-    def test_compact_keeps_active_assistant_and_tool_messages(self):
+    async def test_compact_keeps_active_assistant_and_tool_messages(self):
         agent = make_agent()
         set_compact_summary(agent, "Finished earlier work")
         ctx = [
@@ -429,7 +432,7 @@ class TestCompact:
             {"role": "tool", "tool_call_id": "call-1", "content": "tool output"},
         ]
 
-        result = agent.compact(ctx)
+        result = await agent.compact(ctx)
 
         assert result == [
             {
@@ -444,8 +447,12 @@ class TestCompact:
         summary_messages = agent.openai_client.chat.completions.create.call_args.kwargs["messages"]
         assert summary_messages[:-1] == ctx[:4]
 
-    def test_compact_requires_user_message(self):
+    async def test_compact_requires_user_message(self):
         agent = make_agent()
 
         with pytest.raises(AssertionError, match="don't have any user message"):
-            agent.compact([{"role": "system", "content": "Base prompt"}])
+            await agent.compact([{"role": "system", "content": "Base prompt"}])
+
+
+
+

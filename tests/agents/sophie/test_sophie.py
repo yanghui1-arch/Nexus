@@ -1,4 +1,4 @@
-﻿"""
+"""
 Tests for the Sophie agent.
 
 Sophie is a React developer and web designer with Anthropic-style design expertise.
@@ -203,11 +203,12 @@ class TestSophieAsyncContext:
                     assert "PrToGithub" in s.tool_kits
 
 
+@pytest.mark.asyncio
 class TestSophieCompact:
     """Test Sophie inherits the shared compact behavior."""
 
-    def test_compact_single_turn_is_unchanged(self):
-        with patch("src.agents.base.agent.OpenAI"):
+    async def test_compact_single_turn_is_unchanged(self):
+        with patch("src.agents.base.agent.AsyncOpenAI"):
             sophie = Sophie.create(
                 base_url="https://api.openai.com/v1",
                 api_key="test-key",
@@ -215,16 +216,17 @@ class TestSophieCompact:
                 max_context=8192,
                 github_repo="test/repo",
             )
+        sophie.openai_client.chat.completions.create = AsyncMock()
 
         context = [
             {"role": "system", "content": "System"},
             {"role": "user", "content": "Current request"},
         ]
 
-        assert sophie.compact(context) == context
+        assert await sophie.compact(context) == context
 
-    def test_compact_summarizes_previous_work(self):
-        with patch("src.agents.base.agent.OpenAI"):
+    async def test_compact_summarizes_previous_work(self):
+        with patch("src.agents.base.agent.AsyncOpenAI"):
             sophie = Sophie.create(
                 base_url="https://api.openai.com/v1",
                 api_key="test-key",
@@ -232,6 +234,7 @@ class TestSophieCompact:
                 max_context=8192,
                 github_repo="test/repo",
             )
+        sophie.openai_client.chat.completions.create = AsyncMock()
 
         completion = MagicMock()
         completion.choices = [MagicMock(message=MagicMock(content="Earlier work"))]
@@ -243,7 +246,7 @@ class TestSophieCompact:
             {"role": "user", "content": "Current request"},
         ]
 
-        result = sophie.compact(context)
+        result = await sophie.compact(context)
 
         assert result == [
             {
@@ -394,6 +397,9 @@ class TestSophieToolAccess:
                 async with sophie as s:
                     assert "WebFetch" in s.tool_kits
                     assert "WebSearch" in s.tool_kits
+
+
+
 
 
 
