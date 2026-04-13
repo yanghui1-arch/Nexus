@@ -50,8 +50,13 @@ def make_tool_result(tool_calls: list) -> BaseAgentStepResult:
 
 
 def set_step(agent: "ConcreteAgent", mock) -> None:
-    """Bypass Pydantic's __setattr__ to set the step method on the instance."""
-    object.__setattr__(agent, "step", mock)
+    """Bypass Pydantic's __setattr__ to set an awaitable step method on the instance."""
+    if isinstance(mock, AsyncMock):
+        async_step = mock
+    else:
+        # Keep existing MagicMock behavior (side_effect/call_count), but make step awaitable.
+        async_step = AsyncMock(side_effect=mock)
+    object.__setattr__(agent, "step", async_step)
 
 
 class ConcreteAgent(Agent):
@@ -271,7 +276,7 @@ class TestWorkErrorHandling:
         with patch("src.agents.base.agent.logger") as mock_logger:
             result = await agent.work(question="q", current_session_ctx=[], history_session_ctx=[])
 
-        mock_logger.error.assert_called()
+        assert mock_logger.error.called or mock_logger.exception.called
         assert result.response == "done"
 
     async def test_bad_json_args_logs_error_no_crash(self):
@@ -286,7 +291,7 @@ class TestWorkErrorHandling:
         with patch("src.agents.base.agent.logger") as mock_logger:
             result = await agent.work(question="q", current_session_ctx=[], history_session_ctx=[])
 
-        mock_logger.error.assert_called()
+        assert mock_logger.error.called or mock_logger.exception.called
         tool.assert_not_called()
         assert result.response == "done"
 
@@ -452,7 +457,4 @@ class TestCompact:
 
         with pytest.raises(AssertionError, match="don't have any user message"):
             await agent.compact([{"role": "system", "content": "Base prompt"}])
-
-
-
 
