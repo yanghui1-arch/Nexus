@@ -265,7 +265,17 @@ class Agent(BaseModel):
     ):
         if callback:
             callback(work_temp_status)
-        
+
+    async def close(self) -> None:
+        if self.openai_client is None:
+            return
+
+        try:
+            await self.openai_client.close()
+        except Exception:
+            logger.exception("Failed to close OpenAI client for agent `%s`.", self.name)
+        finally:
+            self.openai_client = None
 
     async def step(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> BaseAgentStepResult:
         

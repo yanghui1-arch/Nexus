@@ -282,13 +282,18 @@ async def _run_agent(
         github_repo=github_repo,
     )
 
-    async with agent:
-        return await agent.work(
-            question=request.question,
-            current_session_ctx=list(request.current_session_ctx),
-            history_session_ctx=list(request.history_session_ctx),
-            update_process_callback=on_progress,
-        )
+    try:
+        async with agent:
+            return await agent.work(
+                question=request.question,
+                current_session_ctx=list(request.current_session_ctx),
+                history_session_ctx=list(request.history_session_ctx),
+                update_process_callback=on_progress,
+            )
+    finally:
+        # `run_agent_task` uses `asyncio.run(...)` per task; close agent-owned async resources
+        # before loop teardown.
+        await agent.close()
 
 
 def _build_agent(
