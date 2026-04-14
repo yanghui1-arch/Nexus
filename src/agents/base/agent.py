@@ -19,6 +19,7 @@ from mwin import track
 from src.logger import logger
 from src.exception import ToolNotFoundError
 from src.utils.asynchronous import make_async
+from src.agents.base.plan_executor import PlanExecutor, ToolExecutionStatus
 
 
 _COMPACT_SUMMARY_HEADER = "## Previous Work Summary"
@@ -76,7 +77,14 @@ class Agent(BaseModel):
     max_attempts: int | None = None
     openai_client: AsyncOpenAI | None = None
     current_turn_ctx_len: int = 0
-
+    
+    # Plan-Act-Observe-Reflect configuration
+    enable_retry: bool = True
+    """Enable automatic retry for failed tool calls"""
+    max_tool_retries: int = 2
+    """Maximum number of retries for failed tool calls"""
+    retry_delay_ms: float = 1000.0
+    """Delay between retries in milliseconds"""
 
     @model_validator(mode="after")
     def init_openai_client(self):
@@ -203,11 +211,44 @@ class Agent(BaseModel):
                             logger.exception(str(tfe))
 
                     assert len(tc_ids) == len(coroutines), "The length of tool call ids is not the same as the length of tools to execute."
-                    coroutines_results = await asyncio.gather(*coroutines, return_exceptions=True)
-                    tool_messages: List[ChatCompletionToolMessageParam] = [
-                        {"role": "tool", "tool_call_id": tc_id, "content": str(result)}
-                        for tc_id, result in zip(tc_ids, coroutines_results)
-                    ]
+                    
+                    # Use PlanExecutor for better error handling and retry logic
+                    if self.enable_retry and self.tool_kits:
+                        executor = PlanExecutor(
+                            tool_kits=self.tool_kits,
+                            max_retries=self.max_tool_retries,
+                            retry_delay_ms=self.retry_delay_ms,
+                        )
+                        
+                        # Prepare batch tool calls for parallel execution
+                        batch_calls = [
+                            {"tool_name": tc.function.name, "args": json.loads(tc.function.arguments)}
+                            for tc in step_response.tool_calls
+                        ]
+                        
+                        execution_results = await executor.execute_batch(
+                            batch_calls,
+                            return_exceptions=True,
+                        )
+                        
+                        # Convert execution results to tool messages
+                        tool_messages: List[ChatCompletionToolMessageParam] = [
+                            {"role": "tool", "tool_call_id": tc_id, "content": self._format_execution_result(result)}
+                            for tc_id, result in zip(tc_ids, execution_results)
+                        ]
+                        
+                        # Log any failures
+                        failed_results = [r for r in execution_results if r.status == ToolExecutionStatus.FAILED]
+                        if failed_results:
+                            for fr in failed_results:
+                                logger.error(f"Tool '{fr.tool_name}' failed after retries: {fr.error}")
+                    else:
+                        # Original behavior without retry
+                        coroutines_results = await asyncio.gather(*coroutines, return_exceptions=True)
+                        tool_messages: List[ChatCompletionToolMessageParam] = [
+                            {"role": "tool", "tool_call_id": tc_id, "content": str(result)}
+                            for tc_id, result in zip(tc_ids, coroutines_results)
+                        ]
                     current_turn_ctx.extend(tool_messages)
                     self._process_callback(
                         update_process_callback,
@@ -240,6 +281,15 @@ class Agent(BaseModel):
 
         return base_agent_response
     
+
+    def _format_execution_result(self, result) -> str:
+        """Format tool execution result for LLM consumption."""
+        if hasattr(result, 'status'):  # ToolExecutionResult
+            if result.status == ToolExecutionStatus.SUCCESS:
+                return str(result.result)
+            else:
+                return f"Error: {result.error}"
+        return str(result)
 
     def _init_current_turn_ctx(
         self,
