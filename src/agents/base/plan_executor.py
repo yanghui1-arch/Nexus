@@ -301,8 +301,17 @@ class PlanExecutor:
 
 
 def format_execution_results(results: List[ToolExecutionResult]) -> str:
-    """Format execution results for LLM consumption."""
+    """Format execution results for LLM consumption with structured feedback."""
     lines = []
+    success_count = sum(1 for r in results if r.status == ToolExecutionStatus.SUCCESS)
+    failed_count = len(results) - success_count
+    
+    # Summary header
+    lines.append(f"Execution Summary: {success_count}/{len(results)} successful")
+    if failed_count > 0:
+        lines.append(f"⚠️  {failed_count} tool(s) failed - see details below")
+    lines.append("")
+    
     for i, result in enumerate(results, 1):
         status_icon = "✓" if result.status == ToolExecutionStatus.SUCCESS else "✗"
         lines.append(f"{status_icon} Step {i}: {result.tool_name}")
@@ -318,8 +327,11 @@ def format_execution_results(results: List[ToolExecutionResult]) -> str:
             lines.append(f"  Result: {result_str}")
         else:
             lines.append(f"  Error: {result.error}")
+            lines.append(f"  Action needed: Review the error and decide whether to retry, modify the approach, or terminate.")
         
         if result.retry_count > 0:
-            lines.append(f"  Retries: {result.retry_count}")
+            lines.append(f"  (Retried {result.retry_count} time(s))")
+        
+        lines.append("")  # Empty line between steps
     
     return "\n".join(lines)
