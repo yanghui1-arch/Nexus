@@ -103,9 +103,9 @@ async def execute_agent_task(
                     current_turn_ctx_json = []
                     for message in current_turn_ctx:
                         if isinstance(message, ChatCompletionMessage):
-                            current_turn_ctx.append(message.model_dump_json(exclude_none=True))
+                            current_turn_ctx_json.append(message.model_dump_json(exclude_none=True))
                         else:
-                            current_turn_ctx.append(message)
+                            current_turn_ctx_json.append(message)
 
                     await TaskRepository.update_checkpoint(
                         session,
@@ -442,3 +442,4 @@ async def _mark_completed(database: Database, task_id: uuid.UUID, result: str | 
 async def _mark_failed(database: Database, task_id: uuid.UUID, error: str) -> None:
     async with database.session() as session:
         await TaskRepository.set_failed(session, task_id, error=error)
+
