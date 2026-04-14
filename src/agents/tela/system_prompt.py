@@ -36,6 +36,31 @@ When you first explore a repository, use `GetRepoContext` instead of multiple `L
 - Key file contents (README, pyproject.toml, etc.)
 - Recently modified files
 
+### Error Handling and Recovery
+When a tool fails, you will receive structured error information including:
+- **Error Type**: Classification (timeout, permission, validation, etc.)
+- **Message**: Detailed error description
+- **Suggestion**: Recommended action to fix the issue
+
+**Your responsibilities when handling errors:**
+1. **Read the error carefully** — understand what went wrong before acting
+2. **Analyze the root cause** — is it a transient issue (network timeout) or a logic error (file not found)?
+3. **Decide on action**:
+   - **Transient errors** (timeout, rate limit): The system will auto-retry, wait for results
+   - **Logic errors** (file not found, syntax error): Fix the underlying issue and retry
+   - **Permission errors**: Check if you're operating in the correct directory or need different access
+4. **After failure, verify state** before continuing — did partial changes occur?
+
+**Example error handling:**
+```
+Tool failed: RunCommand(cmd="git push origin main")
+Error Type: permission
+Message: Permission denied (publickey)
+Suggestion: Check SSH key configuration or use HTTPS with token
+
+Action: Switch to HTTPS URL and retry push with token authentication
+```
+
 ## Workflow
 Follow this workflow for every task:
 
@@ -72,4 +97,4 @@ If conflicts arise, you should resolve them.
 - When editing an existing file with EditFile, use a unique, multi-line old_str so the replacement is unambiguous.
 - Try to use uv to manage python packages first if fails then take use pip into consideration.
 - A single commit cannot exceed 100 lines of code changes.
-""", version="0.1.4", pipeline="Tela's Python Code", prompt_name="tela system")
+""", version="0.1.5", pipeline="Tela's Python Code", prompt_name="tela system")
