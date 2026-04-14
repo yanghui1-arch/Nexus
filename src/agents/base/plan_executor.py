@@ -4,6 +4,7 @@ This module implements an improved execution flow that supports:
 1. Parallel tool execution for independent operations
 2. Error handling and retry mechanism
 3. Plan refinement based on execution results
+4. Structured error feedback with suggestions
 """
 
 import asyncio
@@ -13,6 +14,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from src.logger import logger
+from src.exception import (
+    ToolExecutionError,
+    ToolRetryableError,
+)
 
 
 class ToolExecutionStatus(Enum):
@@ -130,6 +135,30 @@ class PlanExecutor:
         
         # Return results in order
         return [results[i] for i in range(len(plan.steps))]
+    
+    def _is_retryable_error(self, error: Exception) -> bool:
+        """Determine if an error is potentially transient and worth retrying."""
+        retryable_patterns = [
+            "timeout",
+            "connection",
+            "temporary",
+            "unavailable",
+            "rate limit",
+            "too many requests",
+        ]
+        error_str = str(error).lower()
+        return any(pattern in error_str for pattern in retryable_patterns)
+    
+    def _format_structured_error(self, error: ToolExecutionError) -> str:
+        """Format structured error with suggestions for LLM consumption."""
+        error_dict = error.to_dict()
+        lines = [
+            f"Error Type: {error_dict['error_type']}",
+            f"Message: {error_dict['error']}",
+        ]
+        if error_dict.get('suggestion'):
+            lines.append(f"Suggestion: {error_dict['suggestion']}")
+        return "\n".join(lines)
     
     async def _execute_step_with_retry(
         self,
