@@ -164,7 +164,7 @@ class PlanExecutor:
         self,
         step: Dict[str, Any],
     ) -> ToolExecutionResult:
-        """Execute a single step with retry logic."""
+        """Execute a single step with retry logic and structured error handling."""
         tool_name = step["tool_name"]
         args = step["args"]
         
@@ -194,10 +194,40 @@ class PlanExecutor:
                     retry_count=attempt,
                 )
                 
+            except ToolExecutionError as e:
+                # Structured error from tool layer
+                execution_time = (asyncio.get_event_loop().time() - start_time) * 1000
+                
+                # Check if this is a retryable error
+                should_retry = (
+                    attempt < self.max_retries and 
+                    (isinstance(e, ToolRetryableError) or self._is_retryable_error(e))
+                )
+                
+                if should_retry:
+                    logger.warning(
+                        f"Tool '{tool_name}' failed with {e.error_type} "
+                        f"(attempt {attempt + 1}/{self.max_retries + 1}): {e}. "
+                        f"Retrying in {self.retry_delay_ms}ms..."
+                    )
+                    await asyncio.sleep(self.retry_delay_ms / 1000.0)
+                else:
+                    logger.error(
+                        f"Tool '{tool_name}' failed after {self.max_retries + 1} attempts: {e}"
+                    )
+                    return ToolExecutionResult(
+                        tool_name=tool_name,
+                        tool_args=args,
+                        status=ToolExecutionStatus.FAILED,
+                        error=self._format_structured_error(e),
+                        execution_time_ms=execution_time,
+                        retry_count=attempt,
+                    )
+                    
             except Exception as e:
                 execution_time = (asyncio.get_event_loop().time() - start_time) * 1000
                 
-                if attempt < self.max_retries:
+                if attempt < self.max_retries and self._is_retryable_error(e):
                     logger.warning(
                         f"Tool '{tool_name}' failed (attempt {attempt + 1}/{self.max_retries + 1}): {e}. "
                         f"Retrying in {self.retry_delay_ms}ms..."
