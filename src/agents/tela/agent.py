@@ -16,6 +16,10 @@ from src.sandbox import (
     get_sandbox_pool_manager,
 )
 from src.tools.sandbox import SandboxToolKit, SANDBOX_TOOL_DEFINITIONS
+from src.tools.sandbox_aggregated import (
+    AggregatedSandboxToolKit,
+    AGGREGATED_SANDBOX_TOOL_DEFINITIONS,
+)
 from src.tools.code import GITHUB_TOOL_DEFINITIONS, GithubToolKit
 from src.mcps import web_fetch, WEB_FETCH
 from src.tools.web_search import web_search, TOOL_DEFINITION as WEB_SEARCH
@@ -23,6 +27,7 @@ from src.tools.web_search import web_search, TOOL_DEFINITION as WEB_SEARCH
 
 _ALL_TOOL_DEFINITIONS = [
     *SANDBOX_TOOL_DEFINITIONS,
+    *AGGREGATED_SANDBOX_TOOL_DEFINITIONS,
     *GITHUB_TOOL_DEFINITIONS,
     WEB_FETCH,
     WEB_SEARCH,
@@ -59,9 +64,15 @@ class Tela(CodeAgent):
             workspace_key=self.sandbox_workspace_key,
         )
         self._sandbox_tools = SandboxToolKit(self._sandbox)
+        aggregated_tools = AggregatedSandboxToolKit(self._sandbox)
         github_kit = GithubToolKit(self._sandbox)
 
         kits = self._sandbox_tools.as_tool_kits()
+        
+        # Add aggregated tools for efficient context gathering
+        kits.update(aggregated_tools.as_tool_kits())
+        
+        # Add GitHub tools
         kits["FetchFromGithub"] = github_kit.fetch_from_github
         kits["CreateGithubIssue"] = github_kit.create_github_issue
         kits["PrToGithub"] = github_kit.pr_to_github
