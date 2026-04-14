@@ -5,7 +5,7 @@ from typing import Literal, Any, List, Dict, Callable, Coroutine, TypedDict, Req
 from dataclasses import dataclass
 from textwrap import dedent
 from pydantic import BaseModel, ConfigDict, model_validator
-from openai import AsyncOpenAI, RateLimitError
+from openai import AsyncOpenAI, RateLimitError, APIConnectionError
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion_message_param import (
     ChatCompletionMessageParam, 
@@ -134,6 +134,14 @@ class Agent(BaseModel):
             except RateLimitError:
                 logger.warning(f"Agent `{self.name}` requests {self.llm_config.model} to limit. Wait two minutes")
                 await asyncio.sleep(120)
+                continue
+
+            except APIConnectionError as openai_conn_error:
+                logger.warning(
+                    f"Agent {self.name} fails to call llm because openai client is disconnect. " \
+                    "Try to reconnect it after one minute. "
+                )
+                await asyncio.sleep(60)
                 continue
             
             tries += 1
