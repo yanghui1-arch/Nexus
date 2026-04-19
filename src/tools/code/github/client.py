@@ -1,203 +1,12 @@
+from __future__ import annotations
+
 import httpx
-from pydantic import BaseModel, Field
-from openai import pydantic_function_tool
+
 from mwin import track
 
 from src.sandbox import Sandbox
 
-
-class FetchFromGithub(BaseModel):
-    """Clone a fork of a repository to a local directory,
-    or pull the latest changes if already cloned.
-    Pass upstream_url to set the `upstream` remote after a fresh clone.
-    """
-
-    repo_url: str = Field(description="Fork repository URL to clone (e.g. https://github.com/Nexus-Tela/repo)")
-    local_path: str = Field(description="Local filesystem path where the repository should be cloned or already exists")
-    branch: str = Field(default="main", description="Branch to checkout (default: main)")
-    token: str | None = Field(default=None, description="GitHub personal access token for private repositories")
-    upstream_url: str | None = Field(default=None, description="Original (upstream) repository URL to set as the `upstream` remote after a fresh clone (e.g. https://github.com/owner/repo)")
-
-
-class CreateGithubIssue(BaseModel):
-    """Create a GitHub issue. Must be called before opening a pull request —
-    every PR must reference at least one issue."""
-
-    token: str = Field(description="GitHub personal access token with repo scope")
-    repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
-    title: str = Field(description="Issue title")
-    body: str = Field(description="Issue description in markdown — explain the problem or feature clearly")
-    labels: list[str] = Field(default=[], description="Labels to apply (e.g. ['bug', 'enhancement'])")
-
-
-class PrToGithub(BaseModel):
-    """Push the current local branch to GitHub and open a pull request.
-    Requires a GitHub personal access token with repo scope.
-    Every PR must close at least one issue — provide the issue numbers in closes_issues."""
-
-    token: str = Field(description="GitHub personal access token with repo scope")
-    repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
-    title: str = Field(description="Pull request title")
-    body: str = Field(description="Pull request description (markdown supported)")
-    head: str = Field(description="Branch that contains the changes to be merged. For cross-repo PRs from your fork, use the format `your-github-nickname:<branch>` (e.g. `Nexus-Tela:feature/my-feature`)")
-    base: str = Field(default="main", description="Target branch for the PR (default: main)")
-    closes_issues: list[int] = Field(description="Issue numbers this PR resolves — at least one required (e.g. [42])")
-    local_path: str | None = Field(default=None, description="Local repository path to push from. Uses current working directory when omitted.")
-    draft: bool = Field(default=False, description="Open as a draft pull request (default: false)")
-
-
-# =============================================================================
-# GitHub Review and Comment Interaction Tools
-# =============================================================================
-
-
-class GetIssueComments(BaseModel):
-    """Fetch all comments on a specific GitHub issue. Useful for reading
-    feedback and discussions on issues you've created or are working on."""
-
-    token: str = Field(description="GitHub personal access token with repo scope")
-    repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
-    issue_number: int = Field(description="Issue number to fetch comments for")
-    per_page: int = Field(default=30, description="Number of comments per page (default: 30, max: 100)")
-
-
-class ReplyToIssue(BaseModel):
-    """Add a comment to a GitHub issue. Use this to respond to feedback,
-    provide updates, or participate in issue discussions."""
-
-    token: str = Field(description="GitHub personal access token with repo scope")
-    repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
-    issue_number: int = Field(description="Issue number to comment on")
-    body: str = Field(description="Comment body in markdown format")
-
-
-class GetPRReviews(BaseModel):
-    """Fetch all reviews on a specific pull request. Reviews include
-    approval status (APPROVED, CHANGES_REQUESTED, COMMENTED) and review body."""
-
-    token: str = Field(description="GitHub personal access token with repo scope")
-    repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
-    pull_number: int = Field(description="Pull request number to fetch reviews for")
-
-
-class GetPRReviewComments(BaseModel):
-    """Fetch inline review comments on a pull request. These are the
-    line-specific comments made during code review, separate from general PR comments."""
-
-    token: str = Field(description="GitHub personal access token with repo scope")
-    repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
-    pull_number: int = Field(description="Pull request number to fetch review comments for")
-
-
-class ReplyToPRReviewComment(BaseModel):
-    """Reply to a specific inline review comment on a pull request.
-    Use this to respond to line-specific feedback during code review."""
-
-    token: str = Field(description="GitHub personal access token with repo scope")
-    repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
-    pull_number: int = Field(description="Pull request number")
-    comment_id: int = Field(description="ID of the review comment to reply to")
-    body: str = Field(description="Reply body in markdown format")
-
-
-class GetPRComments(BaseModel):
-    """Fetch general (non-review) comments on a pull request.
-    These are the discussion comments, not inline code review comments."""
-
-    token: str = Field(description="GitHub personal access token with repo scope")
-    repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
-    pull_number: int = Field(description="Pull request number to fetch comments for")
-
-
-class ReplyToPR(BaseModel):
-    """Add a general comment to a pull request discussion.
-    Use this to respond to general PR feedback or provide updates."""
-
-    token: str = Field(description="GitHub personal access token with repo scope")
-    repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
-    pull_number: int = Field(description="Pull request number to comment on")
-    body: str = Field(description="Comment body in markdown format")
-
-
-class GetMyOpenPRs(BaseModel):
-    """List open pull requests created by you in a repository.
-    Useful for checking status of your PRs and finding new comments."""
-
-    token: str = Field(description="GitHub personal access token with repo scope")
-    repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
-    creator: str = Field(description="GitHub username to filter PRs by (your username)")
-    per_page: int = Field(default=10, description="Number of PRs to fetch (default: 10)")
-
-
-class GetMyIssues(BaseModel):
-    """List issues created by you in a repository.
-    Useful for tracking issues you've opened and checking for new comments."""
-
-    token: str = Field(description="GitHub personal access token with repo scope")
-    repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
-    creator: str = Field(description="GitHub username to filter issues by (your username)")
-    state: str = Field(default="open", description="Issue state: open, closed, or all (default: open)")
-    per_page: int = Field(default=10, description="Number of issues to fetch (default: 10)")
-
-
-class GetNotifications(BaseModel):
-    """Fetch GitHub notifications for repositories you participate in.
-    Useful for discovering new activity on your PRs, issues, and mentions."""
-
-    token: str = Field(description="GitHub personal access token with repo scope")
-    all: bool = Field(default=False, description="If true, show all notifications including read ones (default: false - only unread)")
-    participating: bool = Field(default=False, description="If true, only show notifications where you are directly participating (default: false)")
-    per_page: int = Field(default=30, description="Number of notifications to fetch (default: 30)")
-
-
-class CreateSubIssue(BaseModel):
-    """Create a sub-issue relationship between two issues using the GitHub API.
-    This allows you to break down large tasks into smaller manageable pieces.
-    The sub-issue must belong to the same repository owner as the parent issue."""
-
-    token: str = Field(description="GitHub personal access token with repo scope")
-    repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
-    issue_number: int = Field(description="The parent issue number that will contain the sub-issue")
-    sub_issue_id: int = Field(description="The ID (not number) of the issue to add as a sub-issue. Note: This is the issue ID, not the issue number.")
-    replace_parent: bool = Field(default=False, description="If true, replace the sub-issue's current parent (default: false)")
-
-
-FETCH_FROM_GITHUB   = pydantic_function_tool(FetchFromGithub)
-CREATE_GITHUB_ISSUE = pydantic_function_tool(CreateGithubIssue)
-PR_TO_GITHUB        = pydantic_function_tool(PrToGithub)
-
-# New review and comment tools
-GET_ISSUE_COMMENTS = pydantic_function_tool(GetIssueComments)
-REPLY_TO_ISSUE = pydantic_function_tool(ReplyToIssue)
-GET_PR_REVIEWS = pydantic_function_tool(GetPRReviews)
-GET_PR_REVIEW_COMMENTS = pydantic_function_tool(GetPRReviewComments)
-REPLY_TO_PR_REVIEW_COMMENT = pydantic_function_tool(ReplyToPRReviewComment)
-GET_PR_COMMENTS = pydantic_function_tool(GetPRComments)
-REPLY_TO_PR = pydantic_function_tool(ReplyToPR)
-GET_MY_OPEN_PRS = pydantic_function_tool(GetMyOpenPRs)
-GET_MY_ISSUES = pydantic_function_tool(GetMyIssues)
-GET_NOTIFICATIONS = pydantic_function_tool(GetNotifications)
-CREATE_SUB_ISSUE = pydantic_function_tool(CreateSubIssue)
-
-GITHUB_TOOL_DEFINITIONS: list = [
-    FETCH_FROM_GITHUB,
-    CREATE_GITHUB_ISSUE,
-    PR_TO_GITHUB,
-    GET_ISSUE_COMMENTS,
-    REPLY_TO_ISSUE,
-    GET_PR_REVIEWS,
-    GET_PR_REVIEW_COMMENTS,
-    REPLY_TO_PR_REVIEW_COMMENT,
-    GET_PR_COMMENTS,
-    REPLY_TO_PR,
-    GET_MY_OPEN_PRS,
-    GET_MY_ISSUES,
-    GET_NOTIFICATIONS,
-    CREATE_SUB_ISSUE,
-]
-
-
-class GithubToolKit:
+class GithubTools:
     """GitHub/git operations bound to a sandbox container."""
 
     def __init__(self, sandbox: Sandbox) -> None:
@@ -321,6 +130,7 @@ class GithubToolKit:
         self,
         token: str,
         repo: str,
+        branch: str,
         title: str,
         body: str,
         head: str,
@@ -879,8 +689,4 @@ class GithubToolKit:
                     "parent_issue_number": issue_number,
                     "message": f"GitHub API error {e.response.status_code}: {error_detail}",
                 }
-
-
-
-
-
+    

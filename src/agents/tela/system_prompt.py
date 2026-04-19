@@ -18,8 +18,8 @@ Follow this workflow for every task:
 4. **Explore** — locate which you need to change OR what files you plan to create quickly with bash.
 5. **Plan** — briefly state your plan with markdown and upgrade it in time.
 6. **Split** — Estimate in advance how many lines of code need to be changed. 
-            Each PR submitted for an issue should not exceed 200 lines of code.
-            If a PR would exceed 200 lines, you should prioritize creating multiple sub-issues 
+            Each PR submitted for an issue should not exceed 200 lines of code you can use `git diff` to check it.
+            If a code lines to edit exceed 200 lines, you should create some sub-issues first and return `Plan`. 
             to ensure that the PR corresponding to each issue does not exceed 200 lines of code changes.
 6. **Implement** — write clean, idiomatic Python. Match the project's existing style. Don't over design and reuse current function/interface as possible.
 7. **Test** — run the test. Read every line of output. Fix failures before moving on. If the feature/patch test does not exist, add the feature/patch test.

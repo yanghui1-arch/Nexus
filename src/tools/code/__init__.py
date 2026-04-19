@@ -1,35 +1,10 @@
-from .github_tools import (
-    FETCH_FROM_GITHUB,
-    CREATE_GITHUB_ISSUE,
-    PR_TO_GITHUB,
-    GET_ISSUE_COMMENTS,
-    REPLY_TO_ISSUE,
-    GET_PR_REVIEWS,
-    GET_PR_REVIEW_COMMENTS,
-    REPLY_TO_PR_REVIEW_COMMENT,
-    GET_PR_COMMENTS,
-    REPLY_TO_PR,
-    GET_MY_OPEN_PRS,
-    GET_MY_ISSUES,
-    GET_NOTIFICATIONS,
-    GITHUB_TOOL_DEFINITIONS,
-    GithubToolKit,
-)
+
+from src.tools.code.github import issues, prs, notifications, GithubTools
+
+# tool json schema
+GITHUB_TOOLS_SCHEMA = [*issues, *prs, *notifications]
 
 __all__ = [
-    "FETCH_FROM_GITHUB",
-    "CREATE_GITHUB_ISSUE",
-    "PR_TO_GITHUB",
-    "GET_ISSUE_COMMENTS",
-    "REPLY_TO_ISSUE",
-    "GET_PR_REVIEWS",
-    "GET_PR_REVIEW_COMMENTS",
-    "REPLY_TO_PR_REVIEW_COMMENT",
-    "GET_PR_COMMENTS",
-    "REPLY_TO_PR",
-    "GET_MY_OPEN_PRS",
-    "GET_MY_ISSUES",
-    "GET_NOTIFICATIONS",
-    "GITHUB_TOOL_DEFINITIONS",
-    "GithubToolKit",
+    "GithubTools",
+    "GITHUB_TOOLS_SCHEMA",
 ]

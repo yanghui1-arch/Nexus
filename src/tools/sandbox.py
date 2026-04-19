@@ -109,7 +109,8 @@ class SandboxToolKit:
         return await self._sandbox.list_files(path)
 
 
-    def as_tool_kits(self) -> dict[str, Callable]:
+    @property
+    def all_tools(self) -> dict[str, Callable]:
         """Return a name→callable mapping where names match pydantic_function_tool class names."""
         return {
             "RunCode":    self.run_code,
