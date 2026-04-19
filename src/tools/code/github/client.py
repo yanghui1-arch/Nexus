@@ -690,3 +690,43 @@ class GithubTools:
                     "message": f"GitHub API error {e.response.status_code}: {error_detail}",
                 }
     
+
+    @property
+    def issues(self):
+        return {
+            "get_issue_comments": self.get_issue_comments,
+            "reply_to_issue": self.reply_to_issue,
+            "get_my_issues": self.get_my_issues,
+            "create_sub_issue": self.create_sub_issue,
+        }
+    
+    @property
+    def prs(self):
+        return {
+            "pr_to_github": self.pr_to_github,
+            "get_pr_reviews": self.get_pr_reviews,
+            "get_pr_review_comments": self.get_pr_review_comments,
+            "reply_to_pr_review_comment": self.reply_to_pr_review_comment,
+            "get_pr_comments": self.get_pr_comments,
+            "reply_to_pr": self.reply_to_pr,
+            "get_my_open_prs": self.get_my_open_prs,
+        }
+
+
+    @property
+    def notifications(self):
+        return {
+            "get_notifications": self.get_notifications,
+        }
+
+    
+    @property
+    def all_tools(self):
+        issues = self.issues
+        prs = self.prs
+        notifications = self.notifications
+        return {
+            **issues,
+            **prs,
+            **notifications,
+        }
