@@ -16,14 +16,14 @@ from src.sandbox import (
     get_sandbox_pool_manager,
 )
 from src.tools.sandbox import SandboxToolKit, SANDBOX_TOOL_DEFINITIONS
-from src.tools.code import GITHUB_TOOL_DEFINITIONS, GithubToolKit
+from src.tools.code import GITHUB_TOOLS_SCHEMA, GithubTools
 from src.mcps import web_fetch, WEB_FETCH
 from src.tools.web_search import web_search, TOOL_DEFINITION as WEB_SEARCH
 
 
 _ALL_TOOL_DEFINITIONS = [
     *SANDBOX_TOOL_DEFINITIONS,
-    *GITHUB_TOOL_DEFINITIONS,
+    *GITHUB_TOOLS_SCHEMA,
     WEB_FETCH,
     WEB_SEARCH,
 ]
@@ -59,23 +59,10 @@ class Sophie(CodeAgent):
             workspace_key=self.sandbox_workspace_key,
         )
         self._sandbox_tools = SandboxToolKit(self._sandbox)
-        github_kit = GithubToolKit(self._sandbox)
+        github_kit = GithubTools(self._sandbox)
 
         kits = self._sandbox_tools.as_tool_kits()
-        kits["FetchFromGithub"] = github_kit.fetch_from_github
-        kits["CreateGithubIssue"] = github_kit.create_github_issue
-        kits["PrToGithub"] = github_kit.pr_to_github
-
-        kits["GetIssueComments"] = github_kit.get_issue_comments
-        kits["ReplyToIssue"] = github_kit.reply_to_issue
-        kits["GetPRReviews"] = github_kit.get_pr_reviews
-        kits["GetPRReviewComments"] = github_kit.get_pr_review_comments
-        kits["ReplyToPRReviewComment"] = github_kit.reply_to_pr_review_comment
-        kits["GetPRComments"] = github_kit.get_pr_comments
-        kits["ReplyToPR"] = github_kit.reply_to_pr
-        kits["GetMyOpenPRs"] = github_kit.get_my_open_prs
-        kits["GetMyIssues"] = github_kit.get_my_issues
-        kits["GetNotifications"] = github_kit.get_notifications
+        kits.update(github_kit.all_tools)
 
         kits["WebFetch"] = web_fetch
         kits["WebSearch"] = web_search
