@@ -47,7 +47,6 @@ class Sophie(CodeAgent):
     sandbox_workspace_key: str | None = None
 
     _sandbox: Sandbox | None = PrivateAttr(default=None)
-    _sandbox_tools: SandboxToolKit | None = PrivateAttr(default=None)
     _sandbox_pool_manager: SandboxPoolManager | None = PrivateAttr(default=None)
 
     async def __aenter__(self) -> "Sophie":
@@ -58,24 +57,11 @@ class Sophie(CodeAgent):
             repo_url=repo_url,
             workspace_key=self.sandbox_workspace_key,
         )
-        self._sandbox_tools = SandboxToolKit(self._sandbox)
+        sandbox_tools = SandboxToolKit(self._sandbox)
         github_kit = GithubToolKit(self._sandbox)
 
-        kits = self._sandbox_tools.as_tool_kits()
-        kits["FetchFromGithub"] = github_kit.fetch_from_github
-        kits["CreateGithubIssue"] = github_kit.create_github_issue
-        kits["PrToGithub"] = github_kit.pr_to_github
-
-        kits["GetIssueComments"] = github_kit.get_issue_comments
-        kits["ReplyToIssue"] = github_kit.reply_to_issue
-        kits["GetPRReviews"] = github_kit.get_pr_reviews
-        kits["GetPRReviewComments"] = github_kit.get_pr_review_comments
-        kits["ReplyToPRReviewComment"] = github_kit.reply_to_pr_review_comment
-        kits["GetPRComments"] = github_kit.get_pr_comments
-        kits["ReplyToPR"] = github_kit.reply_to_pr
-        kits["GetMyOpenPRs"] = github_kit.get_my_open_prs
-        kits["GetMyIssues"] = github_kit.get_my_issues
-        kits["GetNotifications"] = github_kit.get_notifications
+        kits = sandbox_tools.all_tools
+        kits.update(github_kit.all_tools)
 
         kits["WebFetch"] = web_fetch
         kits["WebSearch"] = web_search
@@ -118,7 +104,6 @@ class Sophie(CodeAgent):
             else:
                 await self._sandbox.__aexit__(*args)
             self._sandbox = None
-            self._sandbox_tools = None
             self._sandbox_pool_manager = None
 
     @track(tags=["exec", "sophie"], step_type="llm", llm_provider=LLMProvider.KIMI)
