@@ -7,7 +7,7 @@ from collections import deque
 NEXUS_CONFIGURE_LOGGING = int(os.getenv("NEXUS_CONFIGURE_LOGGING", "1"))
 NEXUS_LOGGING_LEVEL = os.getenv("NEXUS_LOGGING_LEVEL", "DEBUG")
 
-_FORMAT = "%(levelname)s %(asctime)s %(filename)s:%(lineno)d] %(message)s"
+_FORMAT = "[%(levelname)s %(asctime)s %(filename)s:%(lineno)d] %(message)s"
 _DATE_FORMAT = "%m-%d %H:%M:%S"
 
 _LEVEL_COLORS = {
