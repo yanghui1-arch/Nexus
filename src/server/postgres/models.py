@@ -34,6 +34,10 @@ class TaskStatus(str, enum.Enum):
     closed = "closed"
     failed = "failed"
 
+
+TASK_STATUS_VARCHAR_LENGTH = 32
+
+
 class AgentName(str, enum.Enum):
     tela = "tela"
     sophie = "sophie"
@@ -168,7 +172,7 @@ class TaskRecord(Base):
     # Lease expiry marks when a dispatched/running task is considered orphaned and recoverable.
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     status: Mapped[TaskStatus] = mapped_column(
-        Enum(TaskStatus, native_enum=False),
+        Enum(TaskStatus, native_enum=False, length=TASK_STATUS_VARCHAR_LENGTH),
         nullable=False,
         index=True,
         default=TaskStatus.queued,
@@ -226,6 +230,3 @@ class TaskActivityRecord(Base):
         default=utc_now,
         server_default=func.now(),
     )
-
-
-

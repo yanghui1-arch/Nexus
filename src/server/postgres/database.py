@@ -7,7 +7,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
-from src.server.postgres.models import Base
+from src.server.postgres.models import Base, TASK_STATUS_VARCHAR_LENGTH
 
 
 _REQUIRED_SCHEMA: dict[str, set[str]] = {
@@ -92,6 +92,18 @@ class Database:
                 )
             )
             await conn.execute(
+                text("ALTER TABLE task ALTER COLUMN status DROP DEFAULT")
+            )
+            await conn.execute(
+                text(
+                    f"ALTER TABLE task ALTER COLUMN status TYPE VARCHAR({TASK_STATUS_VARCHAR_LENGTH}) "
+                    "USING status::text"
+                )
+            )
+            await conn.execute(
+                text("ALTER TABLE task ALTER COLUMN status SET DEFAULT 'queued'")
+            )
+            await conn.execute(
                 text(
                     "UPDATE task SET status = 'waiting_for_merge' WHERE status = 'completed'"
                 )
@@ -139,5 +151,3 @@ class Database:
             await self._engine.dispose()
             self._engine = None
             self._session_factory = None
-
-
