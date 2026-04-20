@@ -1,4 +1,4 @@
-"""
+﻿"""
 Tests for the Sophie agent.
 
 Sophie is a React developer and web designer with Anthropic-style design expertise.
@@ -174,7 +174,7 @@ class TestSophieAsyncContext:
         mock_pool_manager = make_pool_manager(mock_sandbox)
 
         mock_sandbox_tools = MagicMock()
-        mock_sandbox_tools.as_tool_kits.return_value = {
+        mock_sandbox_tools.all_tools = {
             "RunCode": AsyncMock(),
             "RunCommand": AsyncMock(),
             "WriteFile": AsyncMock(),
@@ -182,6 +182,11 @@ class TestSophieAsyncContext:
             "AppendFile": AsyncMock(),
             "EditFile": AsyncMock(),
             "ListFiles": AsyncMock(),
+        }
+        mock_github_kit_class.return_value.all_tools = {
+            "get_issue_comments": AsyncMock(),
+            "pr_to_github": AsyncMock(),
+            "get_notifications": AsyncMock(),
         }
 
         with patch("src.agents.sophie.agent.get_sandbox_pool_manager", return_value=mock_pool_manager):
@@ -198,9 +203,9 @@ class TestSophieAsyncContext:
 
                 async with sophie as s:
                     assert s.tool_kits is not None
-                    assert "FetchFromGithub" in s.tool_kits
-                    assert "CreateGithubIssue" in s.tool_kits
-                    assert "PrToGithub" in s.tool_kits
+                    assert "get_issue_comments" in s.tool_kits
+                    assert "pr_to_github" in s.tool_kits
+                    assert "get_notifications" in s.tool_kits
 
 
 @pytest.mark.asyncio
@@ -312,7 +317,7 @@ class TestSophieToolAccess:
         with patch("src.agents.sophie.agent.get_sandbox_pool_manager", return_value=mock_pool_manager):
             with patch("src.agents.sophie.agent.SandboxToolKit") as mock_toolkit_class:
                 mock_sandbox_tools = MagicMock()
-                mock_sandbox_tools.as_tool_kits.return_value = {
+                mock_sandbox_tools.all_tools = {
                     "RunCode": AsyncMock(),
                     "RunCommand": AsyncMock(),
                     "WriteFile": AsyncMock(),
@@ -348,7 +353,7 @@ class TestSophieToolAccess:
         with patch("src.agents.sophie.agent.get_sandbox_pool_manager", return_value=mock_pool_manager):
             with patch("src.agents.sophie.agent.SandboxToolKit") as mock_toolkit_class:
                 mock_sandbox_tools = MagicMock()
-                mock_sandbox_tools.as_tool_kits.return_value = {}
+                mock_sandbox_tools.all_tools = {}
                 mock_toolkit_class.return_value = mock_sandbox_tools
 
                 sophie = Sophie.create(
@@ -360,19 +365,18 @@ class TestSophieToolAccess:
                 )
 
                 async with sophie as s:
-                    assert "FetchFromGithub" in s.tool_kits
-                    assert "CreateGithubIssue" in s.tool_kits
-                    assert "PrToGithub" in s.tool_kits
-                    assert "GetIssueComments" in s.tool_kits
-                    assert "ReplyToIssue" in s.tool_kits
-                    assert "GetPRReviews" in s.tool_kits
-                    assert "GetPRReviewComments" in s.tool_kits
-                    assert "ReplyToPRReviewComment" in s.tool_kits
-                    assert "GetPRComments" in s.tool_kits
-                    assert "ReplyToPR" in s.tool_kits
-                    assert "GetMyOpenPRs" in s.tool_kits
-                    assert "GetMyIssues" in s.tool_kits
-                    assert "GetNotifications" in s.tool_kits
+                    assert "get_issue_comments" in s.tool_kits
+                    assert "reply_to_issue" in s.tool_kits
+                    assert "get_pr_reviews" in s.tool_kits
+                    assert "get_pr_review_comments" in s.tool_kits
+                    assert "reply_to_pr_review_comment" in s.tool_kits
+                    assert "get_pr_comments" in s.tool_kits
+                    assert "reply_to_pr" in s.tool_kits
+                    assert "get_my_open_prs" in s.tool_kits
+                    assert "get_my_issues" in s.tool_kits
+                    assert "get_notifications" in s.tool_kits
+                    assert "create_sub_issue" in s.tool_kits
+                    assert "pr_to_github" in s.tool_kits
 
     @pytest.mark.asyncio
     async def test_sophie_has_web_tools(self):
@@ -383,7 +387,7 @@ class TestSophieToolAccess:
         with patch("src.agents.sophie.agent.get_sandbox_pool_manager", return_value=mock_pool_manager):
             with patch("src.agents.sophie.agent.SandboxToolKit") as mock_toolkit_class:
                 mock_sandbox_tools = MagicMock()
-                mock_sandbox_tools.as_tool_kits.return_value = {}
+                mock_sandbox_tools.all_tools = {}
                 mock_toolkit_class.return_value = mock_sandbox_tools
 
                 sophie = Sophie.create(
@@ -397,6 +401,11 @@ class TestSophieToolAccess:
                 async with sophie as s:
                     assert "WebFetch" in s.tool_kits
                     assert "WebSearch" in s.tool_kits
+
+
+
+
+
 
 
 
