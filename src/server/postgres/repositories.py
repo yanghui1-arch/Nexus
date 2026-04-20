@@ -217,7 +217,7 @@ class TaskRepository:
         limit: int = 1000,
     ) -> list[TaskRecord]:
         """Return queued/running tasks whose dispatch lease is missing or expired.
-        Recoverable task is three types - Queued tasks but not be submitted, Running task but not completed
+        Recoverable task is three types - Queued tasks but not be submitted, Running task but not finalized
         and Queued tasks submitted to worker but exceeds `celery_visibility_timeout_seconds`.
         """
         now = utc_now()
@@ -416,7 +416,7 @@ class TaskRepository:
         return task
 
     @staticmethod
-    async def set_completed(
+    async def set_waiting_for_merge(
         session: AsyncSession,
         task_id: uuid.UUID,
         *,
@@ -427,8 +427,48 @@ class TaskRepository:
             return None
 
         now = utc_now()
-        task.status = TaskStatus.completed
+        task.status = TaskStatus.waiting_for_merge
         task.result = result
+        task.error = None
+        task.finished_at = None
+        task.updated_at = now
+        task.dispatch_token = None
+        task.lease_expires_at = None
+        await session.commit()
+        await session.refresh(task)
+        return task
+
+    @staticmethod
+    async def set_merged(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+    ) -> TaskRecord | None:
+        task = await session.get(TaskRecord, task_id)
+        if task is None:
+            return None
+
+        now = utc_now()
+        task.status = TaskStatus.merged
+        task.error = None
+        task.finished_at = now
+        task.updated_at = now
+        task.dispatch_token = None
+        task.lease_expires_at = None
+        await session.commit()
+        await session.refresh(task)
+        return task
+
+    @staticmethod
+    async def set_closed(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+    ) -> TaskRecord | None:
+        task = await session.get(TaskRecord, task_id)
+        if task is None:
+            return None
+
+        now = utc_now()
+        task.status = TaskStatus.closed
         task.error = None
         task.finished_at = now
         task.updated_at = now

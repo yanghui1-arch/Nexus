@@ -91,6 +91,11 @@ class Database:
                     "ALTER TABLE agent_instance DROP COLUMN IF EXISTS project"
                 )
             )
+            await conn.execute(
+                text(
+                    "UPDATE task SET status = 'waiting_for_merge' WHERE status = 'completed'"
+                )
+            )
             await conn.run_sync(self._assert_schema_compatible)
 
     @staticmethod

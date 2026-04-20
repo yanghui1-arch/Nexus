@@ -137,7 +137,7 @@ class AgentTaskRunner:
 
     async def recover_unfinished_tasks(self) -> int:
         """Recover queued/running tasks whose dispatch lease is missing or expired.
-        Recover three types task - Queued tasks but not be submitted, Running task but not completed
+        Recover three types task - Queued tasks but not be submitted, Running task but not finalized
         and Queued tasks submitted to worker but exceeds `celery_visibility_timeout_seconds`.
 
         Returns:

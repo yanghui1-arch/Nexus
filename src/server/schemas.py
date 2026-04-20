@@ -72,6 +72,16 @@ class TaskSubmitResponse(BaseModel):
     agent_instance_id: uuid.UUID
     status: TaskStatus
 
+class TaskStatusUpdateRequest(BaseModel):
+    status: TaskStatus
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: TaskStatus) -> TaskStatus:
+        if value not in {TaskStatus.merged, TaskStatus.closed}:
+            raise ValueError("status must be merged or closed")
+        return value
+
 
 class TaskResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

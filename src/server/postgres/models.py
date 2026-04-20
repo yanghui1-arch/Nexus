@@ -29,9 +29,10 @@ def utc_now() -> datetime:
 class TaskStatus(str, enum.Enum):
     queued = "queued"
     running = "running"
-    completed = "completed"
+    waiting_for_merge = "waiting_for_merge"
+    merged = "merged"
+    closed = "closed"
     failed = "failed"
-
 
 class AgentName(str, enum.Enum):
     tela = "tela"

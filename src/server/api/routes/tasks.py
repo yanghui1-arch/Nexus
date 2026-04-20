@@ -22,6 +22,7 @@ from src.server.schemas import (
     TaskCreateRequest,
     TaskMessage,
     TaskResponse,
+    TaskStatusUpdateRequest,
     TaskSubmitResponse,
 )
 
@@ -57,6 +58,36 @@ async def get_task(
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return TaskResponse.from_record(task)
+
+@router.patch("/{task_id}/status", response_model=TaskResponse)
+async def update_task_status(
+    request: Request,
+    task_id: uuid.UUID,
+    payload: TaskStatusUpdateRequest,
+) -> TaskResponse:
+    database: Database = request.app.state.database
+
+    async with database.session() as session:
+        task = await TaskRepository.get(session, task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        if task.status == payload.status:
+            return TaskResponse.from_record(task)
+        if task.status != TaskStatus.waiting_for_merge:
+            raise HTTPException(
+                status_code=409,
+                detail="Only waiting_for_merge tasks can be updated to merged or closed",
+            )
+
+        if payload.status == TaskStatus.merged:
+            updated = await TaskRepository.set_merged(session, task_id)
+        else:
+            updated = await TaskRepository.set_closed(session, task_id)
+
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return TaskResponse.from_record(updated)
 
 
 @router.get("/{task_id}/messages", response_model=list[TaskMessage])

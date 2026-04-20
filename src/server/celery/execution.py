@@ -221,14 +221,14 @@ async def execute_agent_task(
             github_repo=binding.github_repo,
         )
 
-        await _mark_completed(database, task_id, result.response)
+        await _mark_waiting_for_merge(database, task_id, result.response)
         async with database.session() as session:
             await TaskRepository.update_checkpoint(session, task_id, checkpoint=None)
 
         await redis_client.append(
             _task_key(task_id),
             _task(
-                status="COMPLETED",
+                status="WAITING_FOR_MERGE",
                 description=result.response,
                 meta={
                     "has_sop": bool(result.sop),
@@ -261,10 +261,11 @@ async def execute_agent_task(
         if awaitables:
             await asyncio.gather(*awaitables, return_exceptions=True)
 
-        await redis_client.close()
-        await database.disconnect()
         if binding is not None:
             await _release_workspace(database, request.agent_instance_id)
+
+        await redis_client.close()
+        await database.disconnect()
 
 
 async def _run_agent(
@@ -309,7 +310,7 @@ def _build_agent(
 
     resolved_repo = request.repo or github_repo
     if not resolved_repo:
-        raise RuntimeError(f"Missing github repo for task `{request.question}`.")
+        raise RuntimeError("Missing task repo.")
 
     shared = {
         "base_url": settings.base_url,
@@ -354,7 +355,7 @@ async def _load_binding(database: Database, request: TaskCreateRequest) -> _Exec
 
         github_repo = request.repo
         if github_repo is None:
-            raise RuntimeError(f"Missing github_repo for task `{request.question[:50]}`")
+            raise RuntimeError("Missing task repo.")
 
         workspace = await WorkspaceRepository.ensure_for_agent_instance(
             session,
@@ -469,12 +470,6 @@ async def _release_workspace(database: Database, agent_instance_id: uuid.UUID) -
                 session,
                 agent_instance_id=agent_instance_id,
             )
-
-
-async def _mark_completed(database: Database, task_id: uuid.UUID, result: str | None) -> None:
-    async with database.session() as session:
-        await TaskRepository.set_completed(session, task_id, result=result)
-
 
 async def _mark_failed(database: Database, task_id: uuid.UUID, error: str) -> None:
     async with database.session() as session:
