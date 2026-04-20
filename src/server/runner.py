@@ -70,17 +70,11 @@ class AgentTaskRunner:
                     f"agent type mismatch: task asks for {request.agent.value} but instance is {instance.agent.value}"
                 )
 
-            repo = request.repo or instance.github_repo
+            repo = request.repo
             if repo is None:
-                raise ValueError(
-                    "Task repo is required. Set github_repo on agent instance or provide repo in request."
-                )
-            if request.repo and instance.github_repo and request.repo != instance.github_repo:
-                raise ValueError(
-                    f"repo mismatch: task repo {request.repo} differs from instance repo {instance.github_repo}"
-                )
+                raise ValueError("Task repo is required.")
 
-            project = request.project or instance.project
+            project = request.project
 
             task = await TaskRepository.create(
                 session,

@@ -27,7 +27,6 @@ class Settings:
     model: str
     max_context: int
     max_attempts: int
-    github_repo: str | None
     github_tokens: dict[str, str | None]
     database_url: str
     redis_url: str
@@ -55,7 +54,6 @@ def get_settings() -> Settings:
         model=os.getenv("NEXUS_MODEL", "gpt-4o"),
         max_context=_int_env("NEXUS_MAX_CONTEXT", 128000),
         max_attempts=_int_env("NEXUS_MAX_ATTEMPTS", 256),
-        github_repo=os.getenv("NEXUS_GITHUB_REPO"),
         github_tokens=github_tokens,
         database_url=os.getenv(
             "NEXUS_DATABASE_URL",

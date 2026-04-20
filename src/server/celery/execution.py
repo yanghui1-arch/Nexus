@@ -77,6 +77,7 @@ async def execute_agent_task(
     pending_message_tasks: set[asyncio.Task[Any]] = set()
     stop_lease_heartbeat = asyncio.Event()
     lease_heartbeat_task: asyncio.Task[Any] | None = None
+    binding: _ExecutionBinding | None = None
 
     def on_progress(status: WorkTempStatus) -> None:
         async def _publish_progress() -> None:
@@ -140,8 +141,6 @@ async def execute_agent_task(
         async_task.add_done_callback(_cleanup)
 
     try:
-        binding = await _load_binding(database, request)
-
         if not dispatch_token:
             logger.warning("Worker message missing dispatch token; skip execution and wait for redispatch.")
             await redis_client.append(
@@ -153,6 +152,9 @@ async def execute_agent_task(
                 ),
             )
             return
+        
+        binding = await _load_binding(database, request)
+        await _set_workspace_running(database, request.agent_instance_id, binding.github_repo)
 
         # Worker can start only if it proves it owns the latest dispatch lease token.
         started = await _claim_running(
@@ -173,7 +175,6 @@ async def execute_agent_task(
             )
             return
 
-        await _mark_workspace_status(database, request.agent_instance_id, WorkspaceStatus.running)
 
         # Heartbeat keeps lease fresh so recovery only picks truly orphaned running tasks.
         lease_heartbeat_task = asyncio.create_task(
@@ -236,12 +237,9 @@ async def execute_agent_task(
             ),
         )
 
-        await _mark_workspace_status(database, request.agent_instance_id, WorkspaceStatus.idle)
-
     except Exception as exc:
         logger.exception("Task %s failed in worker", task_id)
         await _mark_failed(database, task_id, str(exc))
-        await _mark_workspace_status(database, request.agent_instance_id, WorkspaceStatus.idle)
         await redis_client.append(
             _task_key(task_id),
             _task(
@@ -265,6 +263,8 @@ async def execute_agent_task(
 
         await redis_client.close()
         await database.disconnect()
+        if binding is not None:
+            await _release_workspace(database, request.agent_instance_id)
 
 
 async def _run_agent(
@@ -309,7 +309,7 @@ def _build_agent(
 
     resolved_repo = request.repo or github_repo
     if not resolved_repo:
-        raise RuntimeError("Missing GitHub repo. Configure on agent instance or request payload.")
+        raise RuntimeError(f"Missing github repo for task `{request.question}`.")
 
     shared = {
         "base_url": settings.base_url,
@@ -339,8 +339,8 @@ def _build_agent(
 
 
 async def _load_binding(database: Database, request: TaskCreateRequest) -> _ExecutionBinding:
-    """Activate workspace and allocate it to agent"""
-    
+    """Ensure the agent instance workspace exists and resolve the task binding."""
+
     async with database.session() as session:
         instance = await AgentInstanceRepository.get(session, request.agent_instance_id)
         if instance is None:
@@ -352,10 +352,17 @@ async def _load_binding(database: Database, request: TaskCreateRequest) -> _Exec
                 f"task agent {request.agent.value} does not match instance agent {instance.agent.value}"
             )
 
-        workspace = await WorkspaceRepository.ensure_for_agent_instance(session, instance)
+        github_repo = request.repo
+        if github_repo is None:
+            raise RuntimeError(f"Missing github_repo for task `{request.question[:50]}`")
+
+        workspace = await WorkspaceRepository.ensure_for_agent_instance(
+            session,
+            instance,
+        )
 
     return _ExecutionBinding(
-        github_repo=instance.github_repo,
+        github_repo=github_repo,
         workspace_key=workspace.workspace_key,
     )
 
@@ -426,17 +433,42 @@ async def _extend_lease(
         )
 
 
-async def _mark_workspace_status(
+async def _set_workspace_running(
     database: Database,
     agent_instance_id: uuid.UUID,
-    status: WorkspaceStatus,
+    github_repo: str | None,
 ) -> None:
+    if github_repo is None:
+        raise RuntimeError("Missing task repo.")
+
     async with database.session() as session:
-        await WorkspaceRepository.touch(
+        await WorkspaceRepository.set_running(
             session,
             agent_instance_id=agent_instance_id,
-            status=status,
+            github_repo=github_repo,
         )
+
+
+async def _release_workspace(database: Database, agent_instance_id: uuid.UUID) -> None:
+    """Release workspace not delete. 
+    Set workspace status as idle and reset repo as None if agent instance is active. Else set workspace as inactive and clear repo.
+    """
+
+    async with database.session() as session:
+        instance = await AgentInstanceRepository.get(session, agent_instance_id)
+        if instance is None:
+            return
+
+        if instance.is_active:
+            await WorkspaceRepository.set_idle(
+                session,
+                agent_instance_id=agent_instance_id,
+            )
+        else:
+            await WorkspaceRepository.set_inactive(
+                session,
+                agent_instance_id=agent_instance_id,
+            )
 
 
 async def _mark_completed(database: Database, task_id: uuid.UUID, result: str | None) -> None:

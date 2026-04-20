@@ -7,7 +7,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from src.server.postgres.database import Database
-from src.server.postgres.models import AgentName
+from src.server.postgres.models import AgentName, WorkspaceStatus
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
     WorkspaceRepository,
@@ -27,6 +27,7 @@ async def create_agent_instance(
     request: Request,
     payload: AgentInstanceCreateRequest,
 ) -> AgentInstanceResponse:
+    """Create an active agent instance and create a workspace for the agent instance."""
     database: Database = request.app.state.database
 
     async with database.session() as session:
@@ -34,10 +35,8 @@ async def create_agent_instance(
             session,
             agent=AgentName(payload.agent.value),
             client_id=payload.client_id,
-            github_repo=payload.github_repo,
-            project=payload.project,
             display_name=payload.display_name,
-            is_active=payload.is_active,
+            is_active=True,
         )
         workspace = await WorkspaceRepository.ensure_for_agent_instance(session, instance)
 
@@ -96,6 +95,18 @@ async def set_agent_instance_status(
         )
         if instance is None:
             raise HTTPException(status_code=404, detail="Agent instance not found")
+
         workspace = await WorkspaceRepository.get_by_agent_instance_id(session, instance.id)
+        if workspace is not None and workspace.status != WorkspaceStatus.running:
+            if payload.is_active:
+                workspace = await WorkspaceRepository.set_idle(
+                    session,
+                    agent_instance_id=instance.id,
+                )
+            else:
+                workspace = await WorkspaceRepository.set_inactive(
+                    session,
+                    agent_instance_id=instance.id,
+                )
 
     return AgentInstanceResponse.from_record(instance, workspace=workspace)

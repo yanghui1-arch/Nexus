@@ -55,6 +55,17 @@ class TaskCreateRequest(BaseModel):
             raise ValueError("question cannot be empty")
         return stripped
 
+    @field_validator("repo")
+    @classmethod
+    def validate_repo(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("repo cannot be empty when provided")
+        return stripped
+
 
 class TaskSubmitResponse(BaseModel):
     task_id: uuid.UUID
@@ -109,8 +120,6 @@ class TaskMessage(BaseModel):
 class AgentInstanceCreateRequest(BaseModel):
     agent: AgentKind
     client_id: str = Field(min_length=1)
-    github_repo: str | None = None
-    project: str | None = None
     display_name: str | None = None
     is_active: bool = True
 
@@ -151,8 +160,6 @@ class AgentInstanceResponse(BaseModel):
     id: uuid.UUID
     agent: str
     client_id: str
-    github_repo: str | None
-    project: str | None
     display_name: str | None
     is_active: bool
     created_at: datetime
@@ -169,8 +176,6 @@ class AgentInstanceResponse(BaseModel):
             id=instance.id,
             agent=instance.agent.value,
             client_id=instance.client_id,
-            github_repo=instance.github_repo,
-            project=instance.project,
             display_name=instance.display_name,
             is_active=instance.is_active,
             created_at=instance.created_at,

@@ -62,8 +62,6 @@ class AgentInstanceRecord(Base):
     )
     display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     client_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    github_repo: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
-    project: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

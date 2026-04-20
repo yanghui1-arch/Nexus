@@ -81,6 +81,16 @@ class Database:
                     "ON task (agent_instance_id) WHERE status = 'running'"
                 )
             )
+            await conn.execute(
+                text(
+                    "ALTER TABLE agent_instance DROP COLUMN IF EXISTS github_repo"
+                )
+            )
+            await conn.execute(
+                text(
+                    "ALTER TABLE agent_instance DROP COLUMN IF EXISTS project"
+                )
+            )
             await conn.run_sync(self._assert_schema_compatible)
 
     @staticmethod

@@ -24,6 +24,7 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+
 class AgentInstanceRepository:
     @staticmethod
     async def create(
@@ -31,16 +32,12 @@ class AgentInstanceRepository:
         *,
         agent: AgentName,
         client_id: str,
-        github_repo: str | None,
-        project: str | None,
         display_name: str | None,
         is_active: bool = True,
     ) -> AgentInstanceRecord:
         instance = AgentInstanceRecord(
             agent=agent,
             client_id=client_id,
-            github_repo=github_repo,
-            project=project,
             display_name=display_name,
             is_active=is_active,
         )
@@ -105,46 +102,77 @@ class WorkspaceRepository:
         session: AsyncSession,
         agent_instance: AgentInstanceRecord,
     ) -> WorkspaceRecord:
-        """Ensure agent instance has a seperate workspace and update its github repo.
-        If the agent doesn't have a workspace then create one for it.
-        
-        Args:
-            session: db connection
-            agent_instance: agent instance
-
-        Returns:
-            agent workspace
-        """
+        """Ensure agent instance has a separate workspace."""
         workspace = await WorkspaceRepository.get_by_agent_instance_id(session, agent_instance.id)
         if workspace is None:
             workspace = WorkspaceRecord(
                 agent_instance_id=agent_instance.id,
                 workspace_key=f"agent-instance:{agent_instance.id}",
-                github_repo=agent_instance.github_repo,
+                github_repo=None,
                 status=WorkspaceStatus.idle,
             )
             session.add(workspace)
-        else:
-            workspace.github_repo = agent_instance.github_repo
-            workspace.updated_at = utc_now()
-        await session.commit()
-        await session.refresh(workspace)
+            await session.commit()
+            await session.refresh(workspace)
         return workspace
 
     @staticmethod
-    async def touch(
+    async def set_running(
         session: AsyncSession,
         *,
         agent_instance_id: uuid.UUID,
-        status: WorkspaceStatus | None = None,
+        github_repo: str,
+    ) -> WorkspaceRecord | None:
+        return await WorkspaceRepository._set_state(
+            session,
+            agent_instance_id=agent_instance_id,
+            status=WorkspaceStatus.running,
+            github_repo=github_repo,
+        )
+
+    @staticmethod
+    async def set_idle(
+        session: AsyncSession,
+        *,
+        agent_instance_id: uuid.UUID,
+    ) -> WorkspaceRecord | None:
+        return await WorkspaceRepository._set_state(
+            session,
+            agent_instance_id=agent_instance_id,
+            status=WorkspaceStatus.idle,
+            github_repo=None,
+        )
+
+    @staticmethod
+    async def set_inactive(
+        session: AsyncSession,
+        *,
+        agent_instance_id: uuid.UUID,
+    ) -> WorkspaceRecord | None:
+        return await WorkspaceRepository._set_state(
+            session,
+            agent_instance_id=agent_instance_id,
+            status=WorkspaceStatus.inactive,
+            github_repo=None,
+        )
+    
+    @staticmethod
+    async def _set_state(
+        session: AsyncSession,
+        *,
+        agent_instance_id: uuid.UUID,
+        status: WorkspaceStatus,
+        github_repo: str | None,
     ) -> WorkspaceRecord | None:
         workspace = await WorkspaceRepository.get_by_agent_instance_id(session, agent_instance_id)
         if workspace is None:
             return None
-        workspace.last_used_at = utc_now()
-        workspace.updated_at = utc_now()
-        if status is not None:
-            workspace.status = status
+
+        now = utc_now()
+        workspace.status = status
+        workspace.github_repo = github_repo
+        workspace.last_used_at = now
+        workspace.updated_at = now
         await session.commit()
         await session.refresh(workspace)
         return workspace
