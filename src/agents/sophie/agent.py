@@ -1,4 +1,4 @@
-from typing import List, ClassVar
+﻿from typing import List, ClassVar
 
 from pydantic import PrivateAttr, ConfigDict
 from openai.types.chat.chat_completion import ChatCompletion
@@ -16,14 +16,14 @@ from src.sandbox import (
     get_sandbox_pool_manager,
 )
 from src.tools.sandbox import SandboxToolKit, SANDBOX_TOOL_DEFINITIONS
-from src.tools.code import GITHUB_TOOL_DEFINITIONS, GithubToolKit
+from src.tools.code import GITHUB_TOOLS_SCHEMA, GithubTools
 from src.mcps import web_fetch, WEB_FETCH
 from src.tools.web_search import web_search, TOOL_DEFINITION as WEB_SEARCH
 
 
 _ALL_TOOL_DEFINITIONS = [
     *SANDBOX_TOOL_DEFINITIONS,
-    *GITHUB_TOOL_DEFINITIONS,
+    *GITHUB_TOOLS_SCHEMA,
     WEB_FETCH,
     WEB_SEARCH,
 ]
@@ -58,7 +58,7 @@ class Sophie(CodeAgent):
             workspace_key=self.sandbox_workspace_key,
         )
         sandbox_tools = SandboxToolKit(self._sandbox)
-        github_kit = GithubToolKit(self._sandbox)
+        github_kit = GithubTools(self._sandbox)
 
         kits = sandbox_tools.all_tools
         kits.update(github_kit.all_tools)
@@ -173,4 +173,5 @@ class Sophie(CodeAgent):
             sandbox_config=sandbox_config,
             sandbox_workspace_key=sandbox_workspace_key,
         )
+
 

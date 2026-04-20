@@ -167,7 +167,7 @@ class TestSophieAsyncContext:
 
         mock_pool_manager.release.assert_awaited_once_with(mock_sandbox)
 
-    @patch("src.agents.sophie.agent.GithubToolKit")
+    @patch("src.agents.sophie.agent.GithubTools")
     async def test_tool_kits_initialized(self, mock_github_kit_class):
         """Test that tool kits are properly initialized."""
         mock_sandbox = AsyncMock()
@@ -401,6 +401,7 @@ class TestSophieToolAccess:
                 async with sophie as s:
                     assert "WebFetch" in s.tool_kits
                     assert "WebSearch" in s.tool_kits
+
 
 
 

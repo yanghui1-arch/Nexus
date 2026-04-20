@@ -1,24 +1,25 @@
-"""Tests for GitHub tools including review and comment interaction."""
+﻿"""Tests for GitHub tools including review and comment interaction."""
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 
-from src.tools.code.github_tools import (
-    GithubToolKit,
-    GITHUB_TOOL_DEFINITIONS,
+from src.tools.code import GITHUB_TOOLS_SCHEMA, GithubTools
+from src.tools.code.github.issue import (
     GET_ISSUE_COMMENTS,
     REPLY_TO_ISSUE,
+    GET_MY_ISSUES,
+    CREATE_SUB_ISSUE,
+)
+from src.tools.code.github.pr import (
     GET_PR_REVIEWS,
     GET_PR_REVIEW_COMMENTS,
     REPLY_TO_PR_REVIEW_COMMENT,
     GET_PR_COMMENTS,
     REPLY_TO_PR,
     GET_MY_OPEN_PRS,
-    GET_MY_ISSUES,
-    GET_NOTIFICATIONS,
-    CREATE_SUB_ISSUE,
 )
+from src.tools.code.github.notification import GET_NOTIFICATIONS
 
 
 @pytest.fixture
@@ -31,8 +32,8 @@ def mock_sandbox():
 
 @pytest.fixture
 def github_kit(mock_sandbox):
-    """Create a GithubToolKit instance with mock sandbox."""
-    return GithubToolKit(mock_sandbox)
+    """Create a GithubTools instance with mock sandbox."""
+    return GithubTools(mock_sandbox)
 
 
 class TestGetIssueComments:
@@ -483,7 +484,7 @@ class TestToolDefinitions:
     """Tests for tool definitions."""
 
     def test_all_new_tools_in_definitions(self):
-        """Verify all new tools are in GITHUB_TOOL_DEFINITIONS."""
+        """Verify all current GitHub tools are in GITHUB_TOOLS_SCHEMA."""
         expected_tools = [
             GET_ISSUE_COMMENTS,
             REPLY_TO_ISSUE,
@@ -498,14 +499,15 @@ class TestToolDefinitions:
             CREATE_SUB_ISSUE,
         ]
         for tool in expected_tools:
-            assert tool in GITHUB_TOOL_DEFINITIONS, f"{tool} not found in GITHUB_TOOL_DEFINITIONS"
+            assert tool in GITHUB_TOOLS_SCHEMA, f"{tool} not found in GITHUB_TOOLS_SCHEMA"
 
     def test_tool_definitions_have_required_fields(self):
         """Verify tool definitions have required structure."""
-        for tool_def in GITHUB_TOOL_DEFINITIONS:
+        for tool_def in GITHUB_TOOLS_SCHEMA:
             assert "type" in tool_def
             assert "function" in tool_def
             func = tool_def["function"]
             assert "name" in func
             assert "description" in func
             assert "parameters" in func
+
