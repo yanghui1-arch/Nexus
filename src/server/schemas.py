@@ -20,32 +20,12 @@ class AgentKind(str, Enum):
     sophie = "sophie"
 
 
-class TaskCheckpoint(BaseModel):
-    version: int = Field(default=1, ge=1)
-    turn_context: list[dict[str, Any]] = Field(default_factory=list)
-
-    @field_validator("turn_context")
-    @classmethod
-    def validate_turn_context(cls, value: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        for message in value:
-            if not isinstance(message, dict):
-                raise ValueError("Checkpoint turn_context must contain object messages")
-            role = message.get("role")
-            if not isinstance(role, str) or not role.strip():
-                raise ValueError("Checkpoint messages must include non-empty `role`")
-
-        return value
-
-
 class TaskCreateRequest(BaseModel):
     agent_instance_id: uuid.UUID
     agent: AgentKind
     question: str = Field(min_length=1)
-    repo: str | None = None
+    repo: str = Field(min_length=1)
     project: str | None = None
-    current_session_ctx: list[dict[str, Any]] = Field(default_factory=list)
-    history_session_ctx: list[dict[str, Any]] = Field(default_factory=list)
-    checkpoint: TaskCheckpoint | None = None
 
     @field_validator("question")
     @classmethod
@@ -57,13 +37,10 @@ class TaskCreateRequest(BaseModel):
 
     @field_validator("repo")
     @classmethod
-    def validate_repo(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-
+    def validate_repo(cls, value: str) -> str:
         stripped = value.strip()
         if not stripped:
-            raise ValueError("repo cannot be empty when provided")
+            raise ValueError("repo cannot be empty")
         return stripped
 
 
@@ -71,6 +48,7 @@ class TaskSubmitResponse(BaseModel):
     task_id: uuid.UUID
     agent_instance_id: uuid.UUID
     status: TaskStatus
+
 
 class TaskStatusUpdateRequest(BaseModel):
     status: TaskStatus
@@ -192,6 +170,3 @@ class AgentInstanceResponse(BaseModel):
             updated_at=instance.updated_at,
             workspace=WorkspaceResponse.from_record(workspace) if workspace else None,
         )
-
-
-

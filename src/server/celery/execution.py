@@ -13,7 +13,7 @@ from src.agents.base.agent import Agent, BaseAgentResponse, WorkTempStatus
 from src.logger import logger
 from src.server.config import Settings, get_settings
 from src.server.postgres.database import Database
-from src.server.postgres.models import AgentName, WorkspaceStatus
+from src.server.postgres.models import AgentName, TaskRecord
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
     TaskActivityRepository,
@@ -21,7 +21,6 @@ from src.server.postgres.repositories import (
     WorkspaceRepository,
 )
 from src.server.redis.client import RedisClient
-from src.server.schemas import TaskCreateRequest
 
 
 __all__ = ["execute_agent_task"]
@@ -59,7 +58,6 @@ def _task(
 async def execute_agent_task(
     *,
     task_id: uuid.UUID,
-    request: TaskCreateRequest,
     settings: Settings | None = None,
     recovered: bool = False,
     dispatch_token: str | None = None,
@@ -78,15 +76,19 @@ async def execute_agent_task(
     stop_lease_heartbeat = asyncio.Event()
     lease_heartbeat_task: asyncio.Task[Any] | None = None
     binding: _ExecutionBinding | None = None
+    task: TaskRecord | None = None
 
     def on_progress(status: WorkTempStatus) -> None:
         async def _publish_progress() -> None:
+            if task is None:
+                raise RuntimeError(f"task_id={task_id} does not exist")
+
             async with database.session() as session:
                 await TaskActivityRepository.create(
                     session,
                     task_id=task_id,
-                    agent=AgentName(request.agent.value),
-                    agent_instance_id=request.agent_instance_id,
+                    agent=task.agent,
+                    agent_instance_id=task.agent_instance_id,
                     event=status["process"],
                     content=status.get("agent_content"),
                     tools=status.get("current_use_tool"),
@@ -97,9 +99,9 @@ async def execute_agent_task(
                     current_turn_ctx = status.get("context", [])
                     if len(current_turn_ctx) == 0:
                         logger.warning(
-                            "Agent %s save checkpoints size: 0 for task %s", 
-                            request.agent.value,
-                            task_id
+                            "Agent %s save checkpoints size: 0 for task %s",
+                            task.agent.value,
+                            task_id,
                         )
                     current_turn_ctx_json = []
                     for message in current_turn_ctx:
@@ -114,9 +116,9 @@ async def execute_agent_task(
                         checkpoint={"version": 1, "turn_context": current_turn_ctx_json},
                     )
                     logger.info(
-                        "Agent %s saves checkpoints when executing task %s.", 
-                        request.agent.value, 
-                        task_id
+                        "Agent %s saves checkpoints when executing task %s.",
+                        task.agent.value,
+                        task_id,
                     )
 
             await redis_client.append(
@@ -141,6 +143,8 @@ async def execute_agent_task(
         async_task.add_done_callback(_cleanup)
 
     try:
+        task = await _load_task(database, task_id)
+
         if not dispatch_token:
             logger.warning("Worker message missing dispatch token; skip execution and wait for redispatch.")
             await redis_client.append(
@@ -148,13 +152,13 @@ async def execute_agent_task(
                 _task(
                     status="SKIPPED",
                     description="Worker message missing dispatch token; skip execution and wait for redispatch.",
-                    meta={"agent_instance_id": str(request.agent_instance_id)},
+                    meta={"agent_instance_id": str(task.agent_instance_id)},
                 ),
             )
             return
-        
-        binding = await _load_binding(database, request)
-        await _set_workspace_running(database, request.agent_instance_id, binding.github_repo)
+
+        binding = await _load_binding(database, task)
+        await _set_workspace_running(database, task.agent_instance_id, binding.github_repo)
 
         # Worker can start only if it proves it owns the latest dispatch lease token.
         started = await _claim_running(
@@ -162,7 +166,7 @@ async def execute_agent_task(
             task_id,
             dispatch_token=dispatch_token,
             lease_seconds=cfg.task_dispatch_lease_seconds,
-            expected_agent_instance_id=request.agent_instance_id,
+            expected_agent_instance_id=task.agent_instance_id,
         )
         if not started:
             await redis_client.append(
@@ -170,11 +174,10 @@ async def execute_agent_task(
                 _task(
                     status="SKIPPED",
                     description="Task lease claim failed (stale/duplicate broker delivery).",
-                    meta={"agent_instance_id": str(request.agent_instance_id)},
+                    meta={"agent_instance_id": str(task.agent_instance_id)},
                 ),
             )
             return
-
 
         # Heartbeat keeps lease fresh so recovery only picks truly orphaned running tasks.
         lease_heartbeat_task = asyncio.create_task(
@@ -193,7 +196,7 @@ async def execute_agent_task(
                 _task(
                     status="RECOVERED",
                     description="Task was recovered from PostgreSQL and dispatched to Celery worker.",
-                    meta={"agent_instance_id": str(request.agent_instance_id)},
+                    meta={"agent_instance_id": str(task.agent_instance_id)},
                 ),
             )
 
@@ -202,19 +205,19 @@ async def execute_agent_task(
             _task(
                 status="START",
                 description=(
-                    f"{request.agent.value} task resumed after restart."
+                    f"{task.agent.value} task resumed after restart."
                     if recovered
-                    else f"{request.agent.value} task accepted and started."
+                    else f"{task.agent.value} task accepted and started."
                 ),
                 meta={
-                    "agent_instance_id": str(request.agent_instance_id),
+                    "agent_instance_id": str(task.agent_instance_id),
                     "workspace_key": binding.workspace_key,
                 },
             ),
         )
 
         result = await _run_agent(
-            request=request,
+            task=task,
             on_progress=on_progress,
             settings=cfg,
             workspace_key=binding.workspace_key,
@@ -232,7 +235,7 @@ async def execute_agent_task(
                 description=result.response,
                 meta={
                     "has_sop": bool(result.sop),
-                    "agent_instance_id": str(request.agent_instance_id),
+                    "agent_instance_id": str(task.agent_instance_id),
                 },
             ),
         )
@@ -245,7 +248,11 @@ async def execute_agent_task(
             _task(
                 status="FAILED",
                 description=str(exc),
-                meta={"agent_instance_id": str(request.agent_instance_id)},
+                meta={
+                    "agent_instance_id": str(task.agent_instance_id)
+                    if task is not None
+                    else None,
+                },
             ),
         )
         raise
@@ -261,8 +268,8 @@ async def execute_agent_task(
         if awaitables:
             await asyncio.gather(*awaitables, return_exceptions=True)
 
-        if binding is not None:
-            await _release_workspace(database, request.agent_instance_id)
+        if binding is not None and task is not None:
+            await _release_workspace(database, task.agent_instance_id)
 
         await redis_client.close()
         await database.disconnect()
@@ -270,14 +277,14 @@ async def execute_agent_task(
 
 async def _run_agent(
     *,
-    request: TaskCreateRequest,
+    task: TaskRecord,
     on_progress,
     settings: Settings,
     workspace_key: str,
     github_repo: str | None,
 ) -> BaseAgentResponse:
     agent = _build_agent(
-        request=request,
+        task=task,
         settings=settings,
         workspace_key=workspace_key,
         github_repo=github_repo,
@@ -286,9 +293,9 @@ async def _run_agent(
     try:
         async with agent:
             return await agent.work(
-                question=request.question,
-                current_session_ctx=list(request.current_session_ctx),
-                history_session_ctx=list(request.history_session_ctx),
+                question=task.question,
+                current_session_ctx=list(task.requested_current_session_ctx or []),
+                history_session_ctx=list(task.requested_history_session_ctx or []),
                 update_process_callback=on_progress,
             )
     finally:
@@ -299,7 +306,7 @@ async def _run_agent(
 
 def _build_agent(
     *,
-    request: TaskCreateRequest,
+    task: TaskRecord,
     settings: Settings,
     workspace_key: str,
     github_repo: str | None,
@@ -308,7 +315,7 @@ def _build_agent(
     if not api_key:
         raise RuntimeError("NEXUS_API_KEY is required.")
 
-    resolved_repo = request.repo or github_repo
+    resolved_repo = task.repo or github_repo
     if not resolved_repo:
         raise RuntimeError("Missing task repo.")
 
@@ -322,38 +329,46 @@ def _build_agent(
         "sandbox_workspace_key": workspace_key,
     }
 
-    agent_name = request.agent.value
+    agent_name = task.agent.value
     agent_builder: Agent = _agents.get(agent_name)
     github_token = settings.github_tokens.get(agent_name)
     if not agent_builder:
         raise RuntimeError(
-            f"Request {request} failed to create agent `{agent_name}` due to invalid agent name."
-            f"Detailed request: repo({request.repo})"
+            f"Task {task.id} failed to create agent `{agent_name}` due to invalid agent name."
+            f" Detailed task repo({task.repo})"
         )
     if not github_token:
         raise RuntimeError(
-            f"Request {request} failed to create agent `{agent_name}` without github token."
-            "Currently Nexus only supports coding agent. Every coding agent should have a github token now."
+            f"Task {task.id} failed to create agent `{agent_name}` without github token."
+            " Currently Nexus only supports coding agent. Every coding agent should have a github token now."
         )
 
     return agent_builder.create(**shared, github_token=github_token)
 
 
-async def _load_binding(database: Database, request: TaskCreateRequest) -> _ExecutionBinding:
+async def _load_task(database: Database, task_id: uuid.UUID) -> TaskRecord:
+    async with database.session() as session:
+        task = await TaskRepository.get(session, task_id)
+    if task is None:
+        raise RuntimeError(f"task_id={task_id} does not exist")
+    return task
+
+
+async def _load_binding(database: Database, task: TaskRecord) -> _ExecutionBinding:
     """Ensure the agent instance workspace exists and resolve the task binding."""
 
     async with database.session() as session:
-        instance = await AgentInstanceRepository.get(session, request.agent_instance_id)
+        instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
         if instance is None:
-            raise RuntimeError(f"agent_instance_id={request.agent_instance_id} does not exist")
+            raise RuntimeError(f"agent_instance_id={task.agent_instance_id} does not exist")
         if not instance.is_active:
-            raise RuntimeError(f"agent_instance_id={request.agent_instance_id} is inactive")
-        if instance.agent.value != request.agent.value:
+            raise RuntimeError(f"agent_instance_id={task.agent_instance_id} is inactive")
+        if instance.agent.value != task.agent.value:
             raise RuntimeError(
-                f"task agent {request.agent.value} does not match instance agent {instance.agent.value}"
+                f"task agent {task.agent.value} does not match instance agent {instance.agent.value}"
             )
 
-        github_repo = request.repo
+        github_repo = task.repo
         if github_repo is None:
             raise RuntimeError("Missing task repo.")
 
@@ -451,7 +466,7 @@ async def _set_workspace_running(
 
 
 async def _release_workspace(database: Database, agent_instance_id: uuid.UUID) -> None:
-    """Release workspace not delete. 
+    """Release workspace not delete.
     Set workspace status as idle and reset repo as None if agent instance is active. Else set workspace as inactive and clear repo.
     """
 
@@ -471,7 +486,12 @@ async def _release_workspace(database: Database, agent_instance_id: uuid.UUID) -
                 agent_instance_id=agent_instance_id,
             )
 
+
+async def _mark_waiting_for_merge(database: Database, task_id: uuid.UUID, result: str | None) -> None:
+    async with database.session() as session:
+        await TaskRepository.set_waiting_for_merge(session, task_id, result=result)
+
+
 async def _mark_failed(database: Database, task_id: uuid.UUID, error: str) -> None:
     async with database.session() as session:
         await TaskRepository.set_failed(session, task_id, error=error)
-

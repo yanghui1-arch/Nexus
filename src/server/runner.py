@@ -9,8 +9,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from pydantic import ValidationError
-
 from src.logger import logger
 from src.server.celery.app import celery_app
 from src.server.config import Settings
@@ -22,7 +20,7 @@ from src.server.postgres.repositories import (
     WorkspaceRepository,
 )
 from src.server.redis.client import RedisClient
-from src.server.schemas import TaskCheckpoint, TaskCreateRequest
+from src.server.schemas import TaskCreateRequest
 
 
 def _task_key(task_id: uuid.UUID) -> str:
@@ -70,36 +68,20 @@ class AgentTaskRunner:
                     f"agent type mismatch: task asks for {request.agent.value} but instance is {instance.agent.value}"
                 )
 
-            repo = request.repo
-            if repo is None:
-                raise ValueError("Task repo is required.")
-
-            project = request.project
-
+            current_session_ctx, history_session_ctx = self._load_server_owned_context(request)
             task = await TaskRepository.create(
                 session,
                 agent=AgentName(request.agent.value),
                 agent_instance_id=request.agent_instance_id,
                 question=request.question,
-                repo=repo,
-                project=project,
-                current_session_ctx=request.current_session_ctx,
-                history_session_ctx=request.history_session_ctx,
+                repo=request.repo,
+                project=request.project,
+                current_session_ctx=current_session_ctx,
+                history_session_ctx=history_session_ctx,
             )
 
             workspace = await WorkspaceRepository.ensure_for_agent_instance(session, instance)
             logger.info(f"Agent `{instance.agent.name}` has workspace `{workspace.workspace_key}`")
-
-        task_request = TaskCreateRequest(
-            agent_instance_id=request.agent_instance_id,
-            agent=request.agent,
-            question=request.question,
-            repo=task.repo,
-            project=task.project,
-            current_session_ctx=request.current_session_ctx,
-            history_session_ctx=request.history_session_ctx,
-            checkpoint=request.checkpoint,
-        )
 
         await self._redis_client.append(
             _task_key(task.id),
@@ -115,7 +97,7 @@ class AgentTaskRunner:
         logger.info(f"Task `{task.id}` is queued.")
 
         try:
-            dispatched = await self._dispatch(task.id, task_request, recovered=False)
+            dispatched = await self._dispatch(task.id, recovered=False)
             if not dispatched:
                 raise RuntimeError(f"Task `{task.id}` is no longer dispatchable (status/lease changed).")
             logger.info(f"Task `{task.id}` has been dispatched for worker.")
@@ -166,18 +148,9 @@ class AgentTaskRunner:
                     ),
                 )
                 continue
-            
-            # recover from checkpoint for running tasks
-            checkpoint: TaskCheckpoint | None = None
-            if isinstance(task.checkpoint, dict):
-                try:
-                    checkpoint = TaskCheckpoint.model_validate(task.checkpoint)
-                except ValidationError:
-                    logger.warning(
-                        "Task `%s` has invalid checkpoint payload. Falling back to persisted request context.",
-                        task.id,
-                    )
 
+            # recover from checkpoint for running tasks
+            # The worker now reads checkpoint/context from PostgreSQL by task_id instead of a synthetic payload.
             previous_status = task.status
             if previous_status == TaskStatus.running:
                 # Running + expired lease means the previous worker is considered orphaned.
@@ -190,19 +163,26 @@ class AgentTaskRunner:
                 if reset is None:
                     continue
 
-            request = TaskCreateRequest(
-                agent_instance_id=task.agent_instance_id,
-                agent=task.agent.value,
-                question=task.question,
-                repo=task.repo,
-                project=task.project,
-                current_session_ctx=list(task.requested_current_session_ctx or []),
-                history_session_ctx=list(task.requested_history_session_ctx or []),
-                checkpoint=checkpoint,
-            )
+            if not task.repo:
+                async with self._database.session() as session:
+                    await TaskRepository.set_failed(
+                        session,
+                        task.id,
+                        error="Recovery failed: task repo is missing.",
+                    )
+                await self._redis_client.append(
+                    _task_key(task.id),
+                    _task(
+                        status="FAILED",
+                        description="Recovery failed: task repo is missing.",
+                        meta={"agent_instance_id": str(task.agent_instance_id)},
+                    ),
+                )
+                logger.warning("Failed to recover task %s because repo is missing.", task.id)
+                continue
 
             try:
-                dispatched = await self._dispatch(task.id, request, recovered=True)
+                dispatched = await self._dispatch(task.id, recovered=True)
             except Exception as exc:
                 async with self._database.session() as session:
                     await TaskRepository.set_queued(
@@ -225,7 +205,7 @@ class AgentTaskRunner:
                 # Another runner may have acquired the lease first.
                 logger.warning(
                     "Failed to re-dispatch task %s for worker: another runner may have acquired the lease first.",
-                    task.id
+                    task.id,
                 )
                 continue
 
@@ -244,7 +224,7 @@ class AgentTaskRunner:
                     meta={
                         "agent_instance_id": str(task.agent_instance_id),
                         "previous_status": previous_status.value,
-                        "has_checkpoint": bool(checkpoint),
+                        "has_checkpoint": bool(task.checkpoint),
                     },
                 ),
             )
@@ -259,7 +239,20 @@ class AgentTaskRunner:
     async def shutdown(self) -> None:
         return None
 
-    async def _dispatch(self, task_id: uuid.UUID, request: TaskCreateRequest, *, recovered: bool) -> bool:
+    def _load_server_owned_context(
+        self,
+        request: TaskCreateRequest,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Resolve server-owned execution context for a new task submission.
+
+        The public API does not accept session/history context from clients.
+        Until a dedicated server-side context source is wired in, new tasks start
+        with empty persisted context.
+        """
+        _ = request
+        return [], []
+
+    async def _dispatch(self, task_id: uuid.UUID, *, recovered: bool) -> bool:
         """Acquire a dispatch lease then emit a Celery message.
 
         PostgreSQL is the source of truth for lease ownership, so only one dispatcher can
@@ -280,7 +273,6 @@ class AgentTaskRunner:
             "nexus.execute_agent_task",
             kwargs={
                 "task_id": str(task_id),
-                "request_payload": request.model_dump(mode="json"),
                 "recovered": recovered,
                 # Worker must claim with the same token before it can flip queued -> running.
                 "dispatch_token": leased_task.dispatch_token,
