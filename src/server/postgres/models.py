@@ -165,8 +165,8 @@ class TaskRecord(Base):
         default=list,
         server_default=text("'[]'::json"),
     )
-    # Persisted replay checkpoint for task recovery.
-    checkpoint: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Persisted replay checkpoint messages for task recovery.
+    checkpoint: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
     # Lease token is regenerated on every dispatch attempt and must match when worker claims the task.
     dispatch_token: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     # Lease expiry marks when a dispatched/running task is considered orphaned and recoverable.

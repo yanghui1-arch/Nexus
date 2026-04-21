@@ -211,6 +211,31 @@ class TaskRepository:
         return await session.get(TaskRecord, task_id)
 
     @staticmethod
+    async def list(
+        session: AsyncSession,
+        *,
+        agent_instance_id: uuid.UUID | None = None,
+        status: TaskStatus | None = None,
+        repo: str | None = None,
+        project: str | None = None,
+        limit: int = 200,
+    ) -> list[TaskRecord]:
+        query = select(TaskRecord)
+
+        if agent_instance_id is not None:
+            query = query.where(TaskRecord.agent_instance_id == agent_instance_id)
+        if status is not None:
+            query = query.where(TaskRecord.status == status)
+        if repo is not None:
+            query = query.where(TaskRecord.repo == repo)
+        if project is not None:
+            query = query.where(TaskRecord.project == project)
+
+        query = query.order_by(TaskRecord.created_at.desc()).limit(limit)
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+    @staticmethod
     async def list_recoverable(
         session: AsyncSession,
         *,
@@ -377,7 +402,7 @@ class TaskRepository:
         session: AsyncSession,
         task_id: uuid.UUID,
         *,
-        checkpoint: dict[str, Any] | None,
+        checkpoint: list[Any] | None,
     ) -> TaskRecord | None:
         task = await session.get(TaskRecord, task_id)
         if task is None:
@@ -544,6 +569,7 @@ class TaskActivityRepository:
         rows = list(result.scalars().all())
         rows.reverse()
         return rows
+
 
 
 

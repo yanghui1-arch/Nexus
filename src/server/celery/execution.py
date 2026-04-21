@@ -113,7 +113,7 @@ async def execute_agent_task(
                     await TaskRepository.update_checkpoint(
                         session,
                         task_id,
-                        checkpoint={"version": 1, "turn_context": current_turn_ctx_json},
+                        checkpoint=current_turn_ctx_json,
                     )
                     logger.info(
                         "Agent %s saves checkpoints when executing task %s.",
