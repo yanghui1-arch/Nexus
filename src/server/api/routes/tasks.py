@@ -27,7 +27,7 @@ from src.server.schemas import (
 router = APIRouter(prefix="/v1/tasks", tags=["tasks"])
 available_agent_factory = {
     "tela": Tela,
-    "Sophie": Sophie,
+    "sophie": Sophie,
 }
 
 @router.post("", response_model=TaskSubmitResponse, status_code=202)
