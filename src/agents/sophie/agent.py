@@ -106,7 +106,7 @@ class Sophie(CodeAgent):
             self._sandbox = None
             self._sandbox_pool_manager = None
 
-    @track(tags=["exec", "sophie"], step_type="llm", llm_provider=LLMProvider.KIMI, system_prompt="Sophie@step/0.1")
+    @track(tags=["exec", "sophie"], step_type="llm", llm_provider=LLMProvider.KIMI, system_prompt="Sophie/step@0.1")
     async def step(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> BaseAgentStepResult:
         if self._sandbox is None:
             raise RuntimeError("Sophie must be used as an async context manager (async with Sophie(...) as sophie:)")
