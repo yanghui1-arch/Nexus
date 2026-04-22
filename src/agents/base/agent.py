@@ -249,6 +249,57 @@ class Agent(BaseModel):
         return base_agent_response
     
 
+    @track(tags=["report"], step_type="llm")
+    async def report_current_process(
+        self,
+        checkpoint: List[ChatCompletionMessageParam],
+        user_message: str,
+    ) -> str:
+        """Agent report its new process for convienence to know where agent is.
+        
+        Args:
+            checkpoint: agent checkpoint for this task
+            user_message: user quesiton
+        
+        Returns:
+            Report from agent
+        """
+        if self.openai_client is None:
+            raise RuntimeError(f"Agent `{self.name}` is missing an initialized OpenAI client.")
+
+        consult_turn_ctx = list(checkpoint)
+        consult_turn_ctx.append(
+            {
+                "role": "user",
+                "content": dedent(
+                    f"""
+                    You are answering a question about the current progress of an existing task.
+                    Base your answer only on the task context already provided in this conversation.
+                    Do not continue the task, do not invent new completed work, and do not call tools.
+                    If the checkpoint is incomplete or stale, say what is known and what is uncertain.
+                    Focus on the latest completed step, the current in-progress step, blockers, and the next likely step.
+
+                    User question:
+                    {user_message}
+                    """
+                ).strip(),
+            }
+        )
+
+        kwargs: dict[str, Any] = {
+            "model": self.llm_config.model,
+            "messages": consult_turn_ctx,
+        }
+        if self.sample_config:
+            if self.sample_config.top_p is not None:
+                kwargs["top_p"] = self.sample_config.top_p
+            if self.sample_config.extra_body:
+                kwargs["extra_body"] = self.sample_config.extra_body
+
+        completion: ChatCompletion = await self.openai_client.chat.completions.create(**kwargs)
+        content = completion.choices[0].message.content
+        return content
+
     def _init_current_turn_ctx(
         self,
         system_message: ChatCompletionSystemMessageParam,
@@ -478,4 +529,3 @@ class Agent(BaseModel):
             "role": "system",
             "content": "\n\n".join(parts)
         }
-

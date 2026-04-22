@@ -458,3 +458,40 @@ class TestCompact:
         with pytest.raises(AssertionError, match="don't have any user message"):
             await agent.compact([{"role": "system", "content": "Base prompt"}])
 
+
+class TestReportCurrentProcess:
+    async def test_appends_consult_message_and_returns_completion(self):
+        agent = make_agent()
+        completion = MagicMock()
+        completion.choices = [MagicMock(message=MagicMock(content="Current progress reply"))]
+        agent.openai_client.chat.completions.create.return_value = completion
+        checkpoint = [
+            {"role": "system", "content": "System"},
+            {"role": "user", "content": "Original task"},
+            {"role": "assistant", "content": "Checkpointed progress"},
+        ]
+
+        result = await agent.report_current_process(
+            checkpoint=checkpoint,
+            user_message="Where is the task now?",
+        )
+
+        assert result == "Current progress reply"
+        call_kwargs = agent.openai_client.chat.completions.create.call_args.kwargs
+        assert call_kwargs["model"] == "gpt-4o"
+        assert call_kwargs["messages"][:-1] == checkpoint
+        assert call_kwargs["messages"][-1]["role"] == "user"
+        assert "Where is the task now?" in call_kwargs["messages"][-1]["content"]
+
+    async def test_returns_raw_completion_content(self):
+        agent = make_agent()
+        completion = MagicMock()
+        completion.choices = [MagicMock(message=MagicMock(content="magic mock content"))]
+        agent.openai_client.chat.completions.create.return_value = completion
+
+        result = await agent.report_current_process(
+            checkpoint=[{"role": "system", "content": "System"}],
+            user_message="status?",
+        )
+
+        assert result == "magic mock content"
