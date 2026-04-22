@@ -44,10 +44,29 @@ class TaskCreateRequest(BaseModel):
         return stripped
 
 
+class TaskConsultRequest(BaseModel):
+    message: str = Field(min_length=1)
+
+    @field_validator("message")
+    @classmethod
+    def validate_message(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("message cannot be empty")
+        return stripped
+
+
 class TaskSubmitResponse(BaseModel):
     task_id: uuid.UUID
     agent_instance_id: uuid.UUID
     status: TaskStatus
+
+
+class TaskConsultResponse(BaseModel):
+    task_id: uuid.UUID
+    status: TaskStatus
+    reply: str
+    timestamp: datetime
 
 
 class TaskStatusUpdateRequest(BaseModel):

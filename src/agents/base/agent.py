@@ -350,7 +350,7 @@ class Agent(BaseModel):
         raise NotImplementedError(f"Agent `{self.name}` doesn't implement last_report_current_process function.")
 
     @staticmethod
-    def create(cls, *args, **kwargs):
+    def create(cls, *args, **kwargs) -> "Agent":
         
         raise NotImplemented(f"Agent `{cls.__name__}` doesn't implement create().")
     
