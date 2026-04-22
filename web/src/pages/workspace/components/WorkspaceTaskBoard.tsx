@@ -1,11 +1,7 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import type {
-  AgentProfile,
-  RepoProfile,
-  WorkspaceStatus,
-  WorkspaceTask,
-} from '@/data/workspaceMockData';
+import type { ApiTaskStatus } from '@/api/types';
+import type { WorkspaceTaskView } from '../utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,40 +12,43 @@ import {
 import {
   STATUS_META,
   STATUS_ORDER,
-  URGENCY_META,
   sortTasksForBoard,
   timeAgo,
-} from './workspace-utils';
+} from '../utils';
 
 type WorkspaceTaskBoardProps = {
-  tasks: WorkspaceTask[];
-  repos: RepoProfile[];
-  agents: AgentProfile[];
+  tasks: WorkspaceTaskView[];
+  repoFilters: string[];
   repoFilter: string;
+  isLoading: boolean;
+  error: string | null;
   onRepoFilterChange: (repoId: string) => void;
 };
 
 export function WorkspaceTaskBoard({
   tasks,
-  repos,
-  agents,
+  repoFilters,
   repoFilter,
+  isLoading,
+  error,
   onRepoFilterChange,
 }: WorkspaceTaskBoardProps) {
   const filteredTasks = useMemo(() => {
     const byRepo =
       repoFilter === 'all'
         ? tasks
-        : tasks.filter(task => task.repoId === repoFilter);
+        : tasks.filter(task => task.repo === repoFilter);
     return sortTasksForBoard(byRepo);
   }, [tasks, repoFilter]);
 
   const groupedTasks = useMemo(() => {
-    const groups: Record<WorkspaceStatus, WorkspaceTask[]> = {
+    const groups: Record<ApiTaskStatus, WorkspaceTaskView[]> = {
       queued: [],
-      in_progress: [],
-      blocked: [],
-      done: [],
+      running: [],
+      waiting_for_merge: [],
+      merged: [],
+      closed: [],
+      failed: [],
     };
 
     filteredTasks.forEach(task => {
@@ -59,17 +58,9 @@ export function WorkspaceTaskBoard({
     return groups;
   }, [filteredTasks]);
 
-  const repoNameById = (repoId: string) => {
-    return repos.find(repo => repo.id === repoId)?.name ?? repoId;
-  };
-
-  const agentNameById = (agentId: string) => {
-    return agents.find(agent => agent.id === agentId)?.name ?? agentId;
-  };
-
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="gap-4">
         <div className="flex flex-wrap gap-2 pt-2">
           <Button
             type="button"
@@ -79,22 +70,26 @@ export function WorkspaceTaskBoard({
           >
             All repos
           </Button>
-          {repos.map(repo => (
+          {repoFilters.map(repo => (
             <Button
-              key={repo.id}
+              key={repo}
               type="button"
-              variant={repoFilter === repo.id ? 'default' : 'outline'}
+              variant={repoFilter === repo ? 'default' : 'outline'}
               size="sm"
-              onClick={() => onRepoFilterChange(repo.id)}
+              onClick={() => onRepoFilterChange(repo)}
             >
-              {repo.name}
+              {repo}
             </Button>
           ))}
         </div>
+
+        {error ? (
+          <p className="text-sm text-destructive">{error}</p>
+        ) : null}
       </CardHeader>
 
       <CardContent className="overflow-x-auto">
-        <div className="grid gap-4 xl:grid-cols-4">
+        <div className="grid min-w-[900px] gap-4 grid-cols-6">
           {STATUS_ORDER.map(status => {
             const statusMeta = STATUS_META[status];
             const StatusIcon = statusMeta.icon;
@@ -107,7 +102,7 @@ export function WorkspaceTaskBoard({
                     <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
                       <StatusIcon
                         className={
-                          status === 'in_progress'
+                          status === 'running'
                             ? 'size-4 shrink-0 animate-spin'
                             : 'size-4 shrink-0'
                         }
@@ -123,7 +118,7 @@ export function WorkspaceTaskBoard({
                 <CardContent className="min-w-0 px-4">
                   {statusTasks.length === 0 ? (
                     <p className="rounded-md border bg-muted/30 px-3 py-4 text-sm text-muted-foreground">
-                      No tasks in this column.
+                      {isLoading ? 'Loading tasks...' : 'No tasks in this column.'}
                     </p>
                   ) : (
                     <div className="flex flex-col gap-3">
@@ -132,47 +127,35 @@ export function WorkspaceTaskBoard({
                           key={task.id}
                           className="min-w-0 rounded-lg border bg-background p-3"
                         >
-                          <div className="flex min-w-0 items-start justify-between gap-2">
-                            <p className="min-w-0 flex-1 break-words text-sm font-medium leading-snug">
-                              {task.title}
-                            </p>
-                            <Badge
-                              className="shrink-0"
-                              variant={URGENCY_META[task.urgency].badgeVariant}
-                            >
-                              {URGENCY_META[task.urgency].label}
-                            </Badge>
-                          </div>
+                          <p className="line-clamp-3 text-sm font-medium leading-snug">
+                            {task.question}
+                          </p>
 
-                          <div className="mt-2 flex min-w-0 flex-col gap-1 text-xs text-muted-foreground">
-                            <span className="truncate" title={repoNameById(task.repoId)}>
-                              {repoNameById(task.repoId)}
+                          <div className="mt-2 flex flex-col gap-0.5 text-xs text-muted-foreground">
+                            <span className="truncate" title={task.repo ?? '-'}>
+                              {task.repo ?? 'No repo'}
                             </span>
-                            <span className="truncate" title={agentNameById(task.agentId)}>
-                              {agentNameById(task.agentId)}
+                            <span className="truncate" title={task.agentLabel}>
+                              {task.agentLabel}
                             </span>
+                            {task.project ? (
+                              <span className="truncate" title={task.project}>
+                                {task.project}
+                              </span>
+                            ) : null}
                           </div>
 
-                          <div className="mt-3 flex flex-col gap-1.5">
-                            <div className="h-1.5 w-full rounded-full bg-muted">
-                              <div
-                                className="h-full rounded-full bg-primary"
-                                style={{
-                                  width: `${Math.max(0, Math.min(100, task.progress))}%`,
-                                }}
-                              />
-                            </div>
-                            <div className="flex items-center justify-between text-xs text-muted-foreground">
-                              <span>{timeAgo(task.createdAt)}</span>
-                              <span>{task.progress}%</span>
-                            </div>
+                          {task.error ? (
+                            <p className="mt-2 text-xs text-destructive line-clamp-2">{task.error}</p>
+                          ) : null}
+
+                          <div className="mt-2 flex flex-col gap-0.5 text-xs text-muted-foreground">
+                            <span>{timeAgo(task.createdAt)}</span>
+                            <span>Updated {timeAgo(task.updatedAt)}</span>
                           </div>
 
-                          <div className="mt-3 flex items-center justify-between gap-2">
-                            <Badge className="shrink-0" variant={statusMeta.badgeVariant}>
-                              {statusMeta.label}
-                            </Badge>
-                            <Button asChild size="sm" variant="ghost">
+                          <div className="mt-2 flex justify-end">
+                            <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
                               <Link to={`/task/${task.id}`}>Details</Link>
                             </Button>
                           </div>

@@ -113,7 +113,7 @@ export function DashboardShell({
             </div>
           </header>
 
-          <main className="mx-auto w-full max-w-[1600px] px-6 py-6 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
+          <main className="mx-auto flex w-full max-w-[1600px] min-h-0 flex-1 flex-col px-6 py-6">
             {children}
           </main>
         </div>

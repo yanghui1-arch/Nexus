@@ -2,7 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { DEFAULT_OVERVIEW_PATH, DEFAULT_WORKSPACE_PATH } from '@/lib/dashboard-nav';
 import LogPage from './pages/LogPage';
 import TaskDetailPage from './pages/TaskDetailPage';
-import WorkspacePage from './pages/WorkspacePage';
+import WorkspacePage from './pages/workspace';
 
 function App() {
   return (

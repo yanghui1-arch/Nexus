@@ -1,10 +1,10 @@
 import {
-  AlertTriangle,
+  AlertCircle,
   CheckCircle2,
   Clock3,
   Loader2,
 } from 'lucide-react';
-import type { WorkspaceTask } from '@/data/workspaceMockData';
+import type { WorkspaceTaskView } from '../utils';
 import {
   Card,
   CardContent,
@@ -14,16 +14,18 @@ import {
 } from '@/components/ui/card';
 
 type WorkspaceStatsCardsProps = {
-  tasks: WorkspaceTask[];
+  tasks: WorkspaceTaskView[];
 };
 
 export function WorkspaceStatsCards({ tasks }: WorkspaceStatsCardsProps) {
   const activeCount = tasks.filter(
-    task => task.status === 'in_progress' || task.status === 'blocked',
+    task => task.status === 'running' || task.status === 'waiting_for_merge',
   ).length;
-  const blockedCount = tasks.filter(task => task.status === 'blocked').length;
-  const doneCount = tasks.filter(task => task.status === 'done').length;
   const queuedCount = tasks.filter(task => task.status === 'queued').length;
+  const failedCount = tasks.filter(task => task.status === 'failed').length;
+  const completedCount = tasks.filter(
+    task => task.status === 'merged' || task.status === 'closed',
+  ).length;
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -34,18 +36,7 @@ export function WorkspaceStatsCards({ tasks }: WorkspaceStatsCardsProps) {
         </CardHeader>
         <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
-          Running or blocked now
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardDescription>Blocked</CardDescription>
-          <CardTitle className="text-2xl">{blockedCount}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
-          <AlertTriangle className="size-4" />
-          Need dependency or approval
+          Running or awaiting merge
         </CardContent>
       </Card>
 
@@ -63,11 +54,22 @@ export function WorkspaceStatsCards({ tasks }: WorkspaceStatsCardsProps) {
       <Card>
         <CardHeader>
           <CardDescription>Completed</CardDescription>
-          <CardTitle className="text-2xl">{doneCount}</CardTitle>
+          <CardTitle className="text-2xl">{completedCount}</CardTitle>
         </CardHeader>
         <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
           <CheckCircle2 className="size-4" />
-          Finished and validated
+          Merged or closed
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardDescription>Failed</CardDescription>
+          <CardTitle className="text-2xl">{failedCount}</CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
+          <AlertCircle className="size-4" />
+          Requires investigation
         </CardContent>
       </Card>
     </div>
