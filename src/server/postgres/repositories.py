@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.server.postgres.models import (
     AgentInstanceRecord,
     AgentName,
-    TaskActivityRecord,
     TaskRecord,
     TaskStatus,
     WorkspaceRecord,
@@ -524,52 +523,3 @@ class TaskRepository:
         await session.commit()
         await session.refresh(task)
         return task
-
-class TaskActivityRepository:
-    @staticmethod
-    async def create(
-        session: AsyncSession,
-        *,
-        task_id: uuid.UUID,
-        agent: AgentName,
-        agent_instance_id: uuid.UUID,
-        event: str,
-        content: str | None,
-        tools: list[str] | None,
-        tool_args: list[Any] | None,
-    ) -> TaskActivityRecord:
-        activity = TaskActivityRecord(
-            task_id=task_id,
-            agent=agent,
-            agent_instance_id=agent_instance_id,
-            event=event,
-            content=content,
-            tools=tools,
-            tool_args=tool_args,
-        )
-        session.add(activity)
-        await session.commit()
-        await session.refresh(activity)
-        return activity
-
-    @staticmethod
-    async def list_by_task(
-        session: AsyncSession,
-        *,
-        task_id: uuid.UUID,
-        limit: int = 200,
-    ) -> list[TaskActivityRecord]:
-        query = (
-            select(TaskActivityRecord)
-            .where(TaskActivityRecord.task_id == task_id)
-            .order_by(TaskActivityRecord.created_at.desc())
-            .limit(limit)
-        )
-        result = await session.execute(query)
-        rows = list(result.scalars().all())
-        rows.reverse()
-        return rows
-
-
-
-

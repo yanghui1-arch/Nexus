@@ -3,7 +3,6 @@ from src.server.postgres.models import (
     AgentInstanceRecord,
     AgentName,
     Base,
-    TaskActivityRecord,
     TaskRecord,
     TaskStatus,
     WorkspaceRecord,
@@ -11,7 +10,6 @@ from src.server.postgres.models import (
 )
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
-    TaskActivityRepository,
     TaskRepository,
     WorkspaceRepository,
 )
@@ -21,13 +19,11 @@ __all__ = [
     "AgentInstanceRecord",
     "AgentName",
     "Base",
-    "TaskActivityRecord",
     "TaskRecord",
     "TaskStatus",
     "WorkspaceRecord",
     "WorkspaceStatus",
     "AgentInstanceRepository",
-    "TaskActivityRepository",
     "TaskRepository",
     "WorkspaceRepository",
 ]

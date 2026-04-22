@@ -16,7 +16,6 @@ from src.server.postgres.database import Database
 from src.server.postgres.models import AgentName, TaskRecord
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
-    TaskActivityRepository,
     TaskRepository,
     WorkspaceRepository,
 )
@@ -83,43 +82,33 @@ async def execute_agent_task(
             if task is None:
                 raise RuntimeError(f"task_id={task_id} does not exist")
 
-            async with database.session() as session:
-                await TaskActivityRepository.create(
-                    session,
-                    task_id=task_id,
-                    agent=task.agent,
-                    agent_instance_id=task.agent_instance_id,
-                    event=status["process"],
-                    content=status.get("agent_content"),
-                    tools=status.get("current_use_tool"),
-                    tool_args=status.get("current_use_tool_args"),
-                )
-                if status["process"] == "SAVE_CHECKPOINT":
-                    # SAVE_CHECKPOINT marks a safe replay boundary for persistence.
-                    current_turn_ctx = status.get("context", [])
-                    if len(current_turn_ctx) == 0:
-                        logger.warning(
-                            "Agent %s save checkpoints size: 0 for task %s",
-                            task.agent.value,
-                            task_id,
-                        )
-                    current_turn_ctx_json = []
-                    for message in current_turn_ctx:
-                        if isinstance(message, ChatCompletionMessage):
-                            current_turn_ctx_json.append(message.model_dump_json(exclude_none=True))
-                        else:
-                            current_turn_ctx_json.append(message)
+            if status["process"] == "SAVE_CHECKPOINT":
+                # SAVE_CHECKPOINT marks a safe replay boundary for persistence.
+                current_turn_ctx = status.get("context", [])
+                if len(current_turn_ctx) == 0:
+                    logger.warning(
+                        "Agent %s save checkpoints size: 0 for task %s",
+                        task.agent.value,
+                        task_id,
+                    )
+                current_turn_ctx_json = []
+                for message in current_turn_ctx:
+                    if isinstance(message, ChatCompletionMessage):
+                        current_turn_ctx_json.append(message.model_dump_json(exclude_none=True))
+                    else:
+                        current_turn_ctx_json.append(message)
 
+                async with database.session() as session:
                     await TaskRepository.update_checkpoint(
                         session,
                         task_id,
                         checkpoint=current_turn_ctx_json,
                     )
-                    logger.info(
-                        "Agent %s saves checkpoints when executing task %s.",
-                        task.agent.value,
-                        task_id,
-                    )
+                logger.info(
+                    "Agent %s saves checkpoints when executing task %s.",
+                    task.agent.value,
+                    task_id,
+                )
 
             await redis_client.append(
                 _task_key(task_id),
@@ -225,8 +214,6 @@ async def execute_agent_task(
         )
 
         await _mark_waiting_for_merge(database, task_id, result.response)
-        async with database.session() as session:
-            await TaskRepository.update_checkpoint(session, task_id, checkpoint=None)
 
         await redis_client.append(
             _task_key(task_id),

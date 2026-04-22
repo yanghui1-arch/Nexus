@@ -195,38 +195,3 @@ class TaskRecord(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-
-class TaskActivityRecord(Base):
-    __tablename__ = "task_activity"
-    __table_args__ = (
-        Index("ix_task_activity_task_created_at", "task_id", "created_at"),
-        Index("ix_task_activity_agent_created_at", "agent", "created_at"),
-        Index("ix_task_activity_agent_instance_created_at", "agent_instance_id", "created_at"),
-    )
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    task_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("task.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    agent: Mapped[AgentName] = mapped_column(
-        Enum(AgentName, native_enum=False),
-        nullable=False,
-        index=True,
-    )
-    agent_instance_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("agent_instance.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    event: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    content: Mapped[str | None] = mapped_column(Text, nullable=True)
-    tools: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
-    tool_args: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=utc_now,
-        server_default=func.now(),
-    )
