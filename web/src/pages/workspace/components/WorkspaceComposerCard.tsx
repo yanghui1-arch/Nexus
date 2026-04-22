@@ -19,7 +19,6 @@ type WorkspaceComposerCardProps = {
   value: WorkspaceComposerValues;
   agents: WorkspaceAgentOption[];
   isSubmitting: boolean;
-  submitError: string | null;
   onValueChange: (next: WorkspaceComposerValues) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
@@ -28,7 +27,6 @@ export function WorkspaceComposerCard({
   value,
   agents,
   isSubmitting,
-  submitError,
   onValueChange,
   onSubmit,
 }: WorkspaceComposerCardProps) {
@@ -159,15 +157,9 @@ export function WorkspaceComposerCard({
       </CardContent>
 
       <CardFooter className="flex flex-col items-stretch gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-h-6 items-center">
-          {submitError ? (
-            <p className="text-xs text-destructive">{submitError}</p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Published tasks are submitted directly to the backend queue.
-            </p>
-          )}
-        </div>
+        <p className="text-xs text-muted-foreground">
+          Published tasks are submitted directly to the backend queue.
+        </p>
         <Button
           type="submit"
           form="workspace-publish-task-form"

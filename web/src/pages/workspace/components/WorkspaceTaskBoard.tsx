@@ -21,7 +21,6 @@ type WorkspaceTaskBoardProps = {
   repoFilters: string[];
   repoFilter: string;
   isLoading: boolean;
-  error: string | null;
   onRepoFilterChange: (repoId: string) => void;
 };
 
@@ -30,7 +29,6 @@ export function WorkspaceTaskBoard({
   repoFilters,
   repoFilter,
   isLoading,
-  error,
   onRepoFilterChange,
 }: WorkspaceTaskBoardProps) {
   const filteredTasks = useMemo(() => {
@@ -61,8 +59,7 @@ export function WorkspaceTaskBoard({
   return (
     <Card>
       <CardHeader className="gap-4">
-        <div className="flex flex-wrap gap-2 pt-2">
-          <Button
+        <div className="flex flex-wrap gap-2 pt-2"><Button
             type="button"
             variant={repoFilter === 'all' ? 'default' : 'outline'}
             size="sm"
@@ -82,10 +79,6 @@ export function WorkspaceTaskBoard({
             </Button>
           ))}
         </div>
-
-        {error ? (
-          <p className="text-sm text-destructive">{error}</p>
-        ) : null}
       </CardHeader>
 
       <CardContent className="overflow-x-auto">

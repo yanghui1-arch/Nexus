@@ -1,4 +1,5 @@
 import { startTransition, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { getErrorDetail } from '@/api/client';
 import { listAgentInstances } from '@/api/agentInstances';
 import { listTasks } from '@/api/tasks';
@@ -45,8 +46,6 @@ export type WorkspaceData = {
   setBoardRepoFilter: (filter: string) => void;
   isLoadingAgents: boolean;
   isLoading: boolean;
-  agentsError: string | null;
-  tasksError: string | null;
   reload: () => Promise<void>;
 };
 
@@ -55,8 +54,6 @@ export function useWorkspaceData(): WorkspaceData {
   const [tasks, setTasks] = useState<ApiTask[]>([]);
   const [isLoadingAgents, setIsLoadingAgents] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
-  const [agentsError, setAgentsError] = useState<string | null>(null);
-  const [tasksError, setTasksError] = useState<string | null>(null);
   const [boardRepoFilter, setBoardRepoFilter] = useState<string>('all');
 
   const agentOptions = useMemo(
@@ -77,12 +74,17 @@ export function useWorkspaceData(): WorkspaceData {
   const repoFilters = useMemo(() => deriveRepoFilters(taskViews), [taskViews]);
 
   const applyResult = (result: Awaited<ReturnType<typeof loadWorkspaceData>>) => {
+    if (result.agentsError) {
+      toast.error('Failed to load agents', { description: result.agentsError });
+    }
+    if (result.tasksError) {
+      toast.error('Failed to load tasks', { description: result.tasksError });
+    }
+
     startTransition(() => {
       setAgentInstances(result.agents);
-      setAgentsError(result.agentsError);
       setIsLoadingAgents(false);
       setTasks(result.tasks);
-      setTasksError(result.tasksError);
       setIsLoading(false);
     });
   };
@@ -114,8 +116,7 @@ export function useWorkspaceData(): WorkspaceData {
     setBoardRepoFilter,
     isLoadingAgents,
     isLoading,
-    agentsError,
-    tasksError,
     reload,
   };
 }
+

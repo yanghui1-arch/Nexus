@@ -53,7 +53,6 @@ export default function WorkspacePage() {
               value={publisher.composerValues}
               agents={data.agentOptions}
               isSubmitting={publisher.isSubmitting}
-              submitError={publisher.submitError ?? data.agentsError}
               onValueChange={publisher.setComposerValues}
               onSubmit={publisher.publishTask}
             />
@@ -72,8 +71,6 @@ export default function WorkspacePage() {
               input={tracking.trackingInput}
               isLoadingAgents={data.isLoadingAgents}
               isSending={tracking.isSendingTracking}
-              panelError={data.agentsError ?? data.tasksError}
-              submitError={tracking.trackingSubmitError}
               onSelectedAgentChange={tracking.setSelectedAgentId}
               onSelectedTaskChange={tracking.setSelectedTaskId}
               onInputChange={tracking.setTrackingInput}
@@ -89,7 +86,6 @@ export default function WorkspacePage() {
               repoFilters={data.repoFilters}
               repoFilter={data.boardRepoFilter}
               isLoading={data.isLoading}
-              error={data.tasksError}
               onRepoFilterChange={data.setBoardRepoFilter}
             />
           </section>

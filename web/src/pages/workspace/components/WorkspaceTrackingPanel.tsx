@@ -32,8 +32,6 @@ type WorkspaceTrackingPanelProps = {
   input: string;
   isLoadingAgents: boolean;
   isSending: boolean;
-  panelError: string | null;
-  submitError: string | null;
   onSelectedAgentChange: (agentId: string) => void;
   onSelectedTaskChange: (taskId: string) => void;
   onInputChange: (next: string) => void;
@@ -58,8 +56,6 @@ export function WorkspaceTrackingPanel({
   input,
   isLoadingAgents,
   isSending,
-  panelError,
-  submitError,
   onSelectedAgentChange,
   onSelectedTaskChange,
   onInputChange,
@@ -73,9 +69,9 @@ export function WorkspaceTrackingPanel({
   const canSubmit =
     Boolean(selectedTask) && input.trim().length > 0 && !isSending;
 
-  // Auto-scroll to latest message
+  // Auto-scroll to latest message (or the waiting bubble when isSending)
   useEffect(() => {
-    if (messages.length === 0) return;
+    if (messages.length === 0 && !isSending) return;
     const id = window.requestAnimationFrame(() => {
       bottomAnchorRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -83,7 +79,7 @@ export function WorkspaceTrackingPanel({
       });
     });
     return () => window.cancelAnimationFrame(id);
-  }, [messages.length, selectedTaskId]);
+  }, [messages.length, selectedTaskId, isSending]);
 
   return (
     // Use a plain flex-col div styled like a card — avoids CardHeader's built-in grid
@@ -250,9 +246,6 @@ export function WorkspaceTrackingPanel({
           </div>
         </div>
 
-        {panelError ? (
-          <p className="mt-3 text-sm text-destructive">{panelError}</p>
-        ) : null}
       </div>
 
       {/* ── Bottom section: chat ── */}
@@ -296,6 +289,35 @@ export function WorkspaceTrackingPanel({
                   </p>
                 </article>
               ))}
+
+              {/* Waiting animation — shown while agent is responding */}
+              {isSending && (
+                <article
+                  className={cn(
+                    "max-w-[88%] rounded-lg px-3 py-2 text-sm bg-muted",
+                    "motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2",
+                    "transition-all duration-300 ease-out"
+                  )}
+                  aria-label="Agent is typing"
+                >
+                  <p className="text-xs font-semibold opacity-70">Agent</p>
+                  <div className="mt-2 mb-1 flex items-center gap-1.5">
+                    <span
+                      className="size-2 rounded-full bg-current opacity-60 animate-bounce"
+                      style={{ animationDelay: "0ms", animationDuration: "1s" }}
+                    />
+                    <span
+                      className="size-2 rounded-full bg-current opacity-60 animate-bounce"
+                      style={{ animationDelay: "160ms", animationDuration: "1s" }}
+                    />
+                    <span
+                      className="size-2 rounded-full bg-current opacity-60 animate-bounce"
+                      style={{ animationDelay: "320ms", animationDuration: "1s" }}
+                    />
+                  </div>
+                </article>
+              )}
+
               <div ref={bottomAnchorRef} />
             </div>
           </ScrollArea>
@@ -323,9 +345,6 @@ export function WorkspaceTrackingPanel({
               <SendHorizontal />
             </Button>
           </div>
-          {submitError ? (
-            <p className="text-xs text-destructive">{submitError}</p>
-          ) : null}
         </form>
       </div>
     </div>

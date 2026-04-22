@@ -1,4 +1,5 @@
 import { startTransition, useEffect, useState, type FormEvent } from 'react';
+import { toast } from 'sonner';
 import { getErrorDetail } from '@/api/client';
 import { createTask } from '@/api/tasks';
 import type { WorkspaceComposerValues } from '../utils';
@@ -20,7 +21,6 @@ export type PublishTask = {
   composerValues: WorkspaceComposerValues;
   setComposerValues: (next: WorkspaceComposerValues) => void;
   isSubmitting: boolean;
-  submitError: string | null;
   publishTask: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 };
 
@@ -32,7 +32,6 @@ export function usePublishTask({
   const [composerValues, setComposerValues] =
     useState<WorkspaceComposerValues>(EMPTY_COMPOSER_VALUES);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Keep composerValues.agentInstanceId pointing at a valid agent.
   useEffect(() => {
@@ -67,7 +66,6 @@ export function usePublishTask({
 
     startTransition(() => {
       setIsSubmitting(true);
-      setSubmitError(null);
     });
 
     try {
@@ -87,9 +85,13 @@ export function usePublishTask({
       });
 
       await reload();
+
+      toast.success('Task published', {
+        description: 'The task has been submitted to the backend queue.',
+      });
     } catch (error) {
-      startTransition(() => {
-        setSubmitError(getErrorDetail(error, 'Failed to publish task.'));
+      toast.error('Failed to publish task', {
+        description: getErrorDetail(error, 'Failed to publish task.'),
       });
     } finally {
       startTransition(() => {
@@ -102,7 +104,6 @@ export function usePublishTask({
     composerValues,
     setComposerValues,
     isSubmitting,
-    submitError,
     publishTask,
   };
 }

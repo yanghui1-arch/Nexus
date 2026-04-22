@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { DEFAULT_OVERVIEW_PATH, DEFAULT_WORKSPACE_PATH } from '@/lib/dashboard-nav';
+import { Toaster } from '@/components/ui/toaster';
 import LogPage from './pages/LogPage';
 import TaskDetailPage from './pages/TaskDetailPage';
 import WorkspacePage from './pages/workspace';
@@ -7,6 +8,7 @@ import WorkspacePage from './pages/workspace';
 function App() {
   return (
     <BrowserRouter>
+      <Toaster />
       <Routes>
         <Route path="/" element={<Navigate to={DEFAULT_WORKSPACE_PATH} replace />} />
         <Route

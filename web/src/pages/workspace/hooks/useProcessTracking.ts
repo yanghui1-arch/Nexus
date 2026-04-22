@@ -1,4 +1,5 @@
 import { startTransition, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { toast } from 'sonner';
 import { getErrorDetail } from '@/api/client';
 import { consultTask } from '@/api/tasks';
 import {
@@ -21,7 +22,6 @@ export type ProcessTracking = {
   setTrackingInput: (value: string) => void;
   activeConsultMessages: WorkspaceConsultMessageView[];
   isSendingTracking: boolean;
-  trackingSubmitError: string | null;
   consultSelectedTask: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 };
 
@@ -36,7 +36,6 @@ export function useProcessTracking({
     Record<string, WorkspaceConsultMessageView[]>
   >({});
   const [isSendingTracking, setIsSendingTracking] = useState(false);
-  const [trackingSubmitError, setTrackingSubmitError] = useState<string | null>(null);
 
   const tasksForSelectedAgent = useMemo(
     () =>
@@ -82,11 +81,10 @@ export function useProcessTracking({
     }
   }, [selectedTaskId, tasksForSelectedAgent]);
 
-  // Clear input and errors when the selection changes.
+  // Clear input when the selection changes.
   useEffect(() => {
     startTransition(() => {
       setTrackingInput('');
-      setTrackingSubmitError(null);
     });
   }, [selectedAgentId, selectedTaskId]);
 
@@ -111,7 +109,6 @@ export function useProcessTracking({
 
     startTransition(() => {
       setIsSendingTracking(true);
-      setTrackingSubmitError(null);
       setTrackingInput('');
       setConsultMessagesByTask(previous => ({
         ...previous,
@@ -136,10 +133,8 @@ export function useProcessTracking({
         }));
       });
     } catch (error) {
-      startTransition(() => {
-        setTrackingSubmitError(
-          getErrorDetail(error, 'Failed to consult the selected task.'),
-        );
+      toast.error('Failed to consult agent', {
+        description: getErrorDetail(error, 'Failed to consult the selected task.'),
       });
     } finally {
       startTransition(() => {
@@ -159,7 +154,6 @@ export function useProcessTracking({
     setTrackingInput,
     activeConsultMessages,
     isSendingTracking,
-    trackingSubmitError,
     consultSelectedTask,
   };
 }
