@@ -249,7 +249,6 @@ class Agent(BaseModel):
         return base_agent_response
     
 
-    @track(tags=["report"], step_type="llm")
     async def report_current_process(
         self,
         checkpoint: List[ChatCompletionMessageParam],
