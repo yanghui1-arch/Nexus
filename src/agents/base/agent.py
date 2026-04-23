@@ -91,6 +91,8 @@ class Agent(BaseModel):
         current_session_ctx: List[ChatCompletionUserMessageParam | ChatCompletionAssistantMessageParam | ChatCompletionToolMessageParam],
         history_session_ctx: List[ChatCompletionUserMessageParam | ChatCompletionAssistantMessageParam | ChatCompletionToolMessageParam],
         update_process_callback: Callable[[WorkTempStatus], None] | None = None,
+        from_checkpoint: bool = False,
+        checkpoint: List[ChatCompletionMessageParam] | None = None,
     ) -> BaseAgentResponse:
         """ Agent start to work for question given current session and history session context
 
@@ -99,20 +101,27 @@ class Agent(BaseModel):
             current_session_ctx: current session context which will be added before question
             history_session_ctx: history session context generally it keeps five
             update_process_callback: callback to update agent work's state
+            from_checkpoint: start from checkpoint instead of building a fresh context
+            checkpoint: complete current turn context persisted at a safe replay boundary. 
+                        It includes complete system, user, assistant and tool messages.
         """
 
         terminate = False
         tries = 0
         base_agent_response = BaseAgentResponse(response="", sop=None)
 
-        system_message: ChatCompletionSystemMessageParam = {"role": "system", "content": self.system_prompt}
-        user_message: ChatCompletionUserMessageParam = {"role": "user", "content": question}
-        current_turn_ctx: List[ChatCompletionMessageParam | ChatCompletionMessage] = self._init_current_turn_ctx(
-            system_message=system_message,
-            user_message=user_message,
-            current_session_ctx=current_session_ctx,
-            history_session_ctx=history_session_ctx,
-        )
+        if from_checkpoint:
+            assert checkpoint is not None, "Checkpoint is required when from_checkpoint=True"
+            current_turn_ctx: List[ChatCompletionMessageParam] = checkpoint
+        else:
+            system_message: ChatCompletionSystemMessageParam = {"role": "system", "content": self.system_prompt}
+            user_message: ChatCompletionUserMessageParam = {"role": "user", "content": question}
+            current_turn_ctx = self._init_current_turn_ctx(
+                system_message=system_message,
+                user_message=user_message,
+                current_session_ctx=current_session_ctx,
+                history_session_ctx=history_session_ctx,
+            )
 
         self._process_callback(
             update_process_callback,
@@ -227,7 +236,7 @@ class Agent(BaseModel):
                             context=current_turn_ctx,
                         ),
                     )
-
+        # terminate is True only when agent finish reason is stop.
         if not terminate:
             agent_content = self.last_report_current_process(current_turn_ctx=current_turn_ctx)
             self._process_callback(
@@ -245,6 +254,18 @@ class Agent(BaseModel):
             except NotImplementedError:
                 pass
             base_agent_response.response = agent_content
+        # save the final assistant message into checkpoint
+        else:
+            self._process_callback(
+                update_process_callback,
+                work_temp_status=WorkTempStatus(
+                    process="SAVE_CHECKPOINT",
+                    agent_content=step_response.completion_content,
+                    current_use_tool=None,
+                    current_use_tool_args=None,
+                    context=current_turn_ctx,
+                ),
+            )
 
         return base_agent_response
     
