@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Any
 
 from openai.types.chat import ChatCompletionMessage
@@ -19,7 +18,6 @@ from src.server.postgres.repositories import (
     TaskRepository,
     WorkspaceRepository,
 )
-from src.server.redis.client import RedisClient
 
 
 __all__ = ["execute_agent_task"]
@@ -36,24 +34,6 @@ class _ExecutionBinding:
     workspace_key: str
 
 
-def _task_key(task_id: uuid.UUID) -> str:
-    return f"task:{task_id}:messages"
-
-
-def _task(
-    *,
-    status: str,
-    description: str | None = None,
-    meta: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    return {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "status": status,
-        "description": description,
-        "meta": meta,
-    }
-
-
 async def execute_agent_task(
     *,
     task_id: uuid.UUID,
@@ -65,69 +45,57 @@ async def execute_agent_task(
     database = Database(cfg.database_url)
     await database.connect()
 
-    redis_client = RedisClient(
-        cfg.redis_url,
-        ttl_seconds=cfg.redis_message_ttl_seconds,
-    )
-    await redis_client.connect()
-
-    pending_message_tasks: set[asyncio.Task[Any]] = set()
+    pending_checkpoint_tasks: set[asyncio.Task[Any]] = set()
     stop_lease_heartbeat = asyncio.Event()
     lease_heartbeat_task: asyncio.Task[Any] | None = None
     binding: _ExecutionBinding | None = None
     task: TaskRecord | None = None
 
     def on_progress(status: WorkTempStatus) -> None:
-        async def _publish_progress() -> None:
+        if status["process"] != "SAVE_CHECKPOINT":
+            return
+
+        async def _persist_checkpoint() -> None:
             if task is None:
                 raise RuntimeError(f"task_id={task_id} does not exist")
 
-            if status["process"] == "SAVE_CHECKPOINT":
-                # SAVE_CHECKPOINT marks a safe replay boundary for persistence.
-                current_turn_ctx = status.get("context", [])
-                if len(current_turn_ctx) == 0:
-                    logger.warning(
-                        "Agent %s save checkpoints size: 0 for task %s",
-                        task.agent.value,
-                        task_id,
-                    )
-                current_turn_ctx_json = []
-                for message in current_turn_ctx:
-                    if isinstance(message, ChatCompletionMessage):
-                        current_turn_ctx_json.append(message.model_dump_json(exclude_none=True))
-                    else:
-                        current_turn_ctx_json.append(message)
-
-                async with database.session() as session:
-                    await TaskRepository.update_checkpoint(
-                        session,
-                        task_id,
-                        checkpoint=current_turn_ctx_json,
-                    )
-                logger.info(
-                    "Agent %s saves checkpoints when executing task %s.",
+            # SAVE_CHECKPOINT marks a safe replay boundary for persistence.
+            current_turn_ctx = status.get("context", [])
+            if len(current_turn_ctx) == 0:
+                logger.warning(
+                    "Agent %s save checkpoints size: 0 for task %s",
                     task.agent.value,
                     task_id,
                 )
+            current_turn_ctx_json = []
+            for message in current_turn_ctx:
+                if isinstance(message, ChatCompletionMessage):
+                    current_turn_ctx_json.append(message.model_dump_json(exclude_none=True))
+                else:
+                    current_turn_ctx_json.append(message)
 
-            await redis_client.append(
-                _task_key(task_id),
-                _task(
-                    status=status["process"],
-                    description=status.get("agent_content"),
-                ),
+            async with database.session() as session:
+                await TaskRepository.update_checkpoint(
+                    session,
+                    task_id,
+                    checkpoint=current_turn_ctx_json,
+                )
+            logger.info(
+                "Agent %s saves checkpoints when executing task %s.",
+                task.agent.value,
+                task_id,
             )
 
-        async_task = asyncio.create_task(_publish_progress())
-        pending_message_tasks.add(async_task)
+        async_task = asyncio.create_task(_persist_checkpoint())
+        pending_checkpoint_tasks.add(async_task)
 
         def _cleanup(done_task: asyncio.Task[Any]) -> None:
-            pending_message_tasks.discard(done_task)
+            pending_checkpoint_tasks.discard(done_task)
             try:
-                # Surface background write exceptions into logs; the return value itself is irrelevant.
+                # Surface background persistence exceptions into logs; the return value itself is irrelevant.
                 done_task.result()
             except Exception:
-                logger.exception("Progress event write failed for task %s", task_id)
+                logger.exception("Checkpoint persistence failed for task %s", task_id)
 
         async_task.add_done_callback(_cleanup)
 
@@ -136,14 +104,6 @@ async def execute_agent_task(
 
         if not dispatch_token:
             logger.warning("Worker message missing dispatch token; skip execution and wait for redispatch.")
-            await redis_client.append(
-                _task_key(task_id),
-                _task(
-                    status="SKIPPED",
-                    description="Worker message missing dispatch token; skip execution and wait for redispatch.",
-                    meta={"agent_instance_id": str(task.agent_instance_id)},
-                ),
-            )
             return
 
         binding = await _load_binding(database, task)
@@ -158,13 +118,9 @@ async def execute_agent_task(
             expected_agent_instance_id=task.agent_instance_id,
         )
         if not started:
-            await redis_client.append(
-                _task_key(task_id),
-                _task(
-                    status="SKIPPED",
-                    description="Task lease claim failed (stale/duplicate broker delivery).",
-                    meta={"agent_instance_id": str(task.agent_instance_id)},
-                ),
+            logger.warning(
+                "Task %s lease claim failed; stale or duplicate broker delivery will be skipped.",
+                task_id,
             )
             return
 
@@ -179,30 +135,13 @@ async def execute_agent_task(
             )
         )
 
-        if recovered:
-            await redis_client.append(
-                _task_key(task_id),
-                _task(
-                    status="RECOVERED",
-                    description="Task was recovered from PostgreSQL and dispatched to Celery worker.",
-                    meta={"agent_instance_id": str(task.agent_instance_id)},
-                ),
-            )
-
-        await redis_client.append(
-            _task_key(task_id),
-            _task(
-                status="START",
-                description=(
-                    f"{task.agent.value} task resumed after restart."
-                    if recovered
-                    else f"{task.agent.value} task accepted and started."
-                ),
-                meta={
-                    "agent_instance_id": str(task.agent_instance_id),
-                    "workspace_key": binding.workspace_key,
-                },
-            ),
+        logger.info(
+            "%s task %s accepted for execution in workspace %s.",
+            "Recovered"
+            if recovered
+            else "Fresh",
+            task_id,
+            binding.workspace_key,
         )
 
         result = await _run_agent(
@@ -214,41 +153,22 @@ async def execute_agent_task(
         )
 
         await _mark_waiting_for_merge(database, task_id, result.response)
-
-        await redis_client.append(
-            _task_key(task_id),
-            _task(
-                status="WAITING_FOR_MERGE",
-                description=result.response,
-                meta={
-                    "has_sop": bool(result.sop),
-                    "agent_instance_id": str(task.agent_instance_id),
-                },
-            ),
+        logger.info(
+            "Task %s moved to waiting_for_merge. has_sop=%s",
+            task_id,
+            bool(result.sop),
         )
 
     except Exception as exc:
         logger.exception("Task %s failed in worker", task_id)
         await _mark_failed(database, task_id, str(exc))
-        await redis_client.append(
-            _task_key(task_id),
-            _task(
-                status="FAILED",
-                description=str(exc),
-                meta={
-                    "agent_instance_id": str(task.agent_instance_id)
-                    if task is not None
-                    else None,
-                },
-            ),
-        )
         raise
     finally:
         stop_lease_heartbeat.set()
 
         awaitables: list[asyncio.Task[Any]] = []
-        if pending_message_tasks:
-            awaitables.extend(pending_message_tasks)
+        if pending_checkpoint_tasks:
+            awaitables.extend(pending_checkpoint_tasks)
         if lease_heartbeat_task is not None:
             awaitables.append(lease_heartbeat_task)
 
@@ -258,7 +178,6 @@ async def execute_agent_task(
         if binding is not None and task is not None:
             await _release_workspace(database, task.agent_instance_id)
 
-        await redis_client.close()
         await database.disconnect()
 
 

@@ -1,12 +1,11 @@
 """Task dispatcher for executor worker.
-Task status is stored with a list in Redis and the last element is the latest projection.
-PostgreSQL remains the source of truth, and runner recovers undispatched/orphaned tasks on startup.
+
+PostgreSQL is the source of truth, and runner recovers undispatched/orphaned tasks on startup.
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
 from typing import Any
 
 from src.logger import logger
@@ -19,27 +18,7 @@ from src.server.postgres.repositories import (
     TaskRepository,
     WorkspaceRepository,
 )
-from src.server.redis.client import RedisClient
 from src.server.schemas import TaskCreateRequest
-
-
-def _task_key(task_id: uuid.UUID) -> str:
-    """Build a key for task."""
-    return f"task:{task_id}:messages"
-
-
-def _task(
-    *,
-    status: str,
-    description: str | None = None,
-    meta: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    return {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "status": status,
-        "description": description,
-        "meta": meta,
-    }
 
 
 class AgentTaskRunner:
@@ -50,11 +29,9 @@ class AgentTaskRunner:
         *,
         settings: Settings,
         database: Database,
-        redis_client: RedisClient,
     ) -> None:
         self._settings = settings
         self._database = database
-        self._redis_client = redis_client
 
     async def submit_task(self, request: TaskCreateRequest) -> uuid.UUID:
         async with self._database.session() as session:
@@ -82,18 +59,6 @@ class AgentTaskRunner:
 
             workspace = await WorkspaceRepository.ensure_for_agent_instance(session, instance)
             logger.info(f"Agent `{instance.agent.name}` has workspace `{workspace.workspace_key}`")
-
-        await self._redis_client.append(
-            _task_key(task.id),
-            _task(
-                status="QUEUED",
-                description=(
-                    f"{request.agent.value} task queued for Celery worker "
-                    f"(agent_instance_id={request.agent_instance_id})."
-                ),
-                meta={"agent_instance_id": str(request.agent_instance_id)},
-            ),
-        )
         logger.info(f"Task `{task.id}` is queued.")
 
         try:
@@ -104,14 +69,6 @@ class AgentTaskRunner:
         except Exception as exc:
             async with self._database.session() as session:
                 await TaskRepository.set_failed(session, task.id, error=f"Dispatch failed: {exc}")
-            await self._redis_client.append(
-                _task_key(task.id),
-                _task(
-                    status="FAILED",
-                    description=f"Celery dispatch failed: {exc}",
-                    meta={"agent_instance_id": str(request.agent_instance_id)},
-                ),
-            )
             logger.error(f"Fail to dispatch task `{task.id}`: {str(exc)}")
             raise
 
@@ -139,13 +96,10 @@ class AgentTaskRunner:
                 instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
 
             if instance is None or not instance.is_active:
-                await self._redis_client.append(
-                    _task_key(task.id),
-                    _task(
-                        status="SKIPPED",
-                        description="Recovery skipped because assigned agent instance is missing or inactive.",
-                        meta={"agent_instance_id": str(task.agent_instance_id)},
-                    ),
+                logger.warning(
+                    "Recovery skipped for task %s because assigned agent instance %s is missing or inactive.",
+                    task.id,
+                    task.agent_instance_id,
                 )
                 continue
 
@@ -170,14 +124,6 @@ class AgentTaskRunner:
                         task.id,
                         error="Recovery failed: task repo is missing.",
                     )
-                await self._redis_client.append(
-                    _task_key(task.id),
-                    _task(
-                        status="FAILED",
-                        description="Recovery failed: task repo is missing.",
-                        meta={"agent_instance_id": str(task.agent_instance_id)},
-                    ),
-                )
                 logger.warning("Failed to recover task %s because repo is missing.", task.id)
                 continue
 
@@ -190,14 +136,6 @@ class AgentTaskRunner:
                         task.id,
                         error=f"Recovery dispatch failed: {exc}",
                     )
-                await self._redis_client.append(
-                    _task_key(task.id),
-                    _task(
-                        status="FAILED",
-                        description=f"Recovery dispatch failed: {exc}",
-                        meta={"agent_instance_id": str(task.agent_instance_id)},
-                    ),
-                )
                 logger.exception("Failed to redispatch recovered task %s", task.id)
                 continue
 
@@ -211,22 +149,12 @@ class AgentTaskRunner:
 
             recovered_count += 1
 
-            description = (
-                "Stale running task recovered and re-dispatched to Celery worker."
+            logger.info(
+                "%s task %s recovered and re-dispatched to Celery worker.",
+                "Stale running"
                 if previous_status == TaskStatus.running
-                else "Queued task recovered and dispatched to Celery worker."
-            )
-            await self._redis_client.append(
-                _task_key(task.id),
-                _task(
-                    status="RECOVERED",
-                    description=description,
-                    meta={
-                        "agent_instance_id": str(task.agent_instance_id),
-                        "previous_status": previous_status.value,
-                        "has_checkpoint": bool(task.checkpoint),
-                    },
-                ),
+                else "Queued",
+                task.id,
             )
 
         if recovered_count:

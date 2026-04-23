@@ -29,7 +29,6 @@ async def lifespan(app: FastAPI):
     runner = AgentTaskRunner(
         settings=settings,
         database=database,
-        redis_client=redis_client,
     )
 
     app.state.database = database
@@ -74,7 +73,3 @@ async def health(request: Request) -> dict[str, Any]:
         "database": "ok" if db_ok else "down",
         "redis": "ok" if redis_ok else "down",
     }
-
-
-
-
