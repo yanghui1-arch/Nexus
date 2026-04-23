@@ -183,7 +183,7 @@ class TestWorkStop:
     async def test_from_checkpoint_requires_checkpoint(self):
         agent = make_agent()
 
-        with pytest.raises(ValueError, match="checkpoint is required"):
+        with pytest.raises(AssertionError, match="Checkpoint is required when from_checkpoint=True"):
             await agent.work(
                 question="q",
                 current_session_ctx=[],

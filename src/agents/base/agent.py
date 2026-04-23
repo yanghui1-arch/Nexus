@@ -112,7 +112,8 @@ class Agent(BaseModel):
 
         if from_checkpoint:
             assert checkpoint is not None, "Checkpoint is required when from_checkpoint=True"
-            current_turn_ctx: List[ChatCompletionMessageParam] = checkpoint
+            # copy a new checkpoint to prevent in-place edit checkpoint
+            current_turn_ctx: List[ChatCompletionMessageParam] = list(checkpoint)
         else:
             system_message: ChatCompletionSystemMessageParam = {"role": "system", "content": self.system_prompt}
             user_message: ChatCompletionUserMessageParam = {"role": "user", "content": question}

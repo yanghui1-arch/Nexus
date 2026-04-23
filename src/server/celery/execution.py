@@ -70,7 +70,7 @@ async def execute_agent_task(
             current_turn_ctx_json = []
             for message in current_turn_ctx:
                 if isinstance(message, ChatCompletionMessage):
-                    current_turn_ctx_json.append(message.model_dump_json(exclude_none=True))
+                    current_turn_ctx_json.append(message.model_dump(exclude_none=True))
                 else:
                     current_turn_ctx_json.append(message)
 
