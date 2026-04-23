@@ -1,4 +1,3 @@
-import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -35,9 +34,9 @@ def make_task(**overrides):
 
 
 @pytest.mark.asyncio
-async def test_run_agent_resumes_from_decoded_checkpoint_when_recovered(monkeypatch):
+async def test_run_agent_resumes_from_checkpoint_when_recovered(monkeypatch):
     checkpoint = [
-        json.dumps({"role": "system", "content": "checkpoint system"}),
+        {"role": "system", "content": "checkpoint system"},
         {"role": "user", "content": "original task"},
     ]
     task = make_task(checkpoint=checkpoint)
