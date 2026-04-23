@@ -154,6 +154,43 @@ class TestWorkStop:
 
         assert result.response == "final answer"
 
+    async def test_from_checkpoint_uses_checkpoint_as_current_turn_context(self):
+        agent = make_agent()
+        checkpoint = [
+            {"role": "system", "content": "checkpoint system"},
+            {"role": "user", "content": "original task"},
+            {"role": "assistant", "content": "checkpointed progress"},
+        ]
+        captured_contexts: list[list] = []
+
+        async def capture_step(current_turn_ctx: list) -> BaseAgentStepResult:
+            captured_contexts.append(list(current_turn_ctx))
+            return make_stop_result("resumed answer")
+
+        set_step(agent, AsyncMock(side_effect=capture_step))
+
+        result = await agent.work(
+            question="fresh question must not be appended",
+            current_session_ctx=[{"role": "assistant", "content": "fresh current"}],
+            history_session_ctx=[{"role": "user", "content": "fresh history"}],
+            from_checkpoint=True,
+            checkpoint=checkpoint,
+        )
+
+        assert result.response == "resumed answer"
+        assert captured_contexts == [checkpoint]
+
+    async def test_from_checkpoint_requires_checkpoint(self):
+        agent = make_agent()
+
+        with pytest.raises(ValueError, match="checkpoint is required"):
+            await agent.work(
+                question="q",
+                current_session_ctx=[],
+                history_session_ctx=[],
+                from_checkpoint=True,
+            )
+
     async def test_start_and_completed_callbacks_fired(self):
         agent = make_agent()
         set_step(agent, MagicMock(return_value=make_stop_result("done")))

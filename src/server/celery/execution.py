@@ -150,6 +150,7 @@ async def execute_agent_task(
             settings=cfg,
             workspace_key=binding.workspace_key,
             github_repo=binding.github_repo,
+            recovered=recovered,
         )
 
         await _mark_waiting_for_merge(database, task_id, result.response)
@@ -188,6 +189,7 @@ async def _run_agent(
     settings: Settings,
     workspace_key: str,
     github_repo: str | None,
+    recovered: bool,
 ) -> BaseAgentResponse:
     agent = _build_agent(
         task=task,
@@ -198,12 +200,17 @@ async def _run_agent(
 
     try:
         async with agent:
-            return await agent.work(
-                question=task.question,
-                current_session_ctx=list(task.requested_current_session_ctx or []),
-                history_session_ctx=list(task.requested_history_session_ctx or []),
-                update_process_callback=on_progress,
-            )
+            work_kwargs = {
+                "question": task.question,
+                "current_session_ctx": task.requested_current_session_ctx or [],
+                "history_session_ctx": task.requested_history_session_ctx or [],
+                "update_process_callback": on_progress,
+            }
+            checkpoint = task.checkpoint if recovered else None
+            if checkpoint:
+                work_kwargs["from_checkpoint"] = True
+                work_kwargs["checkpoint"] = checkpoint
+            return await agent.work(**work_kwargs)
     finally:
         # `run_agent_task` uses `asyncio.run(...)` per task; close agent-owned async resources
         # before loop teardown.
