@@ -130,11 +130,6 @@ async def consult_task(
     if task.agent.value not in available_agent_factory.keys():
         raise HTTPException(status_code=404, detail=f"Unsupported agent: {task.agent.value}")
 
-    checkpoint = [
-        json.loads(message) if isinstance(message, str) else message
-        for message in (task.checkpoint or [])
-    ]
-
     settings = get_settings()
     if not settings.api_key:
         raise HTTPException(status_code=503, detail="NEXUS_API_KEY is not configured")
@@ -155,7 +150,7 @@ async def consult_task(
 
     try:
         reply = await agent.report_current_process(
-            checkpoint=checkpoint,
+            checkpoint=task.checkpoint,
             user_message=payload.message,
         )
     finally:
