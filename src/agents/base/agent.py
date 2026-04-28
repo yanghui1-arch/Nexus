@@ -157,7 +157,8 @@ class Agent(BaseModel):
             tries += 1
         
             assistant_msg = step_response.message_param
-            current_turn_ctx.append(assistant_msg)
+            # elements of current_turn_ctx are all ChatCompletionMessageParam instead of ChatCompletionMessage
+            current_turn_ctx.append(assistant_msg.model_dump(mode="json", exclude_none=True))
             self.current_turn_ctx_len = step_response.current_step_consume_tokens
 
             if step_response.finish_reason == "stop":
