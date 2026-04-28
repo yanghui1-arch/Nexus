@@ -1,8 +1,9 @@
 import sys
 from pydantic import BaseModel, Field
 from openai import pydantic_function_tool
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from mcp import StdioServerParameters
+
+from .client import MCPClient
 
 
 class WebFetch(BaseModel):
@@ -34,16 +35,18 @@ async def web_fetch(
     consider managing a shared session at the agent level instead.
     """
     try:
-        async with stdio_client(_SERVER_PARAMS) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(
-                    "fetch",
-                    {"url": url, "max_length": max_length, "start_index": start_index, "raw": raw},
-                )
+        async with MCPClient(_SERVER_PARAMS) as client:
+            result = await client.call_tool(
+                "fetch",
+                {"url": url, "max_length": max_length, "start_index": start_index, "raw": raw},
+            )
 
-        if result.content:
-            return {"success": True, "url": url, "content": result.content[0].text}
+        if result.get("isError"):
+            return {"success": False, "url": url, "content": "", "message": result.get("content", "Unknown error")}
+
+        content = result.get("content", "")
+        if content:
+            return {"success": True, "url": url, "content": content}
         return {"success": False, "url": url, "content": "", "message": "No content returned"}
 
     except Exception as e:
