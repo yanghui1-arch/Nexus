@@ -218,7 +218,7 @@ def test_consult_task_returns_process_reply(monkeypatch: pytest.MonkeyPatch) -> 
         repo='owner/nexus',
         project='web',
         checkpoint=[
-            json.dumps({'role': 'system', 'content': 'System prompt'}),
+            {'role': 'system', 'content': 'System prompt'},
             {'role': 'user', 'content': 'Original task request'},
             {'role': 'assistant', 'content': 'Checkpointed progress'},
         ],
@@ -294,7 +294,7 @@ def test_consult_task_uses_tela_agent_factory(monkeypatch: pytest.MonkeyPatch) -
         project='web',
         agent=AgentName.tela,
         checkpoint=[
-            json.dumps({'role': 'system', 'content': 'System prompt'}),
+            {'role': 'system', 'content': 'System prompt'},
             {'role': 'user', 'content': 'Original task request'},
             {'role': 'assistant', 'content': 'Checkpointed progress'},
         ],

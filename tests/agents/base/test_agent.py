@@ -27,13 +27,20 @@ def make_tool_call(id: str, name: str, arguments: str) -> ChatCompletionMessageT
     )
 
 
+def _make_message_param_mock(role: str, content: str | None) -> MagicMock:
+    """Return a MagicMock whose model_dump() produces a ChatCompletionMessageParam dict."""
+    mock = MagicMock()
+    mock.model_dump.return_value = {"role": role, "content": content}
+    return mock
+
+
 def make_stop_result(content: str = "done") -> BaseAgentStepResult:
     return BaseAgentStepResult(
         finish_reason="stop",
         reasoning=None,
         completion_content=content,
         tool_calls=None,
-        message_param={"role": "assistant", "content": content},
+        message_param=_make_message_param_mock("assistant", content),
         current_step_consume_tokens=10,
     )
 
@@ -44,7 +51,7 @@ def make_tool_result(tool_calls: list) -> BaseAgentStepResult:
         reasoning=None,
         completion_content=None,
         tool_calls=tool_calls,
-        message_param={"role": "assistant", "content": None, "tool_calls": []},
+        message_param=_make_message_param_mock("assistant", None),
         current_step_consume_tokens=10,
     )
 
