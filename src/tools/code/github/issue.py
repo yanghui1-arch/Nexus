@@ -45,7 +45,7 @@ class CreateSubIssue(BaseModel):
     token: str = Field(description="GitHub personal access token with repo scope")
     repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
     issue_number: int = Field(description="The parent issue number that will contain the sub-issue")
-    sub_issue_id: int = Field(description="The ID (not number) of the issue to add as a sub-issue. Note: This is the issue ID, not the issue number.")
+    sub_issue_number: int = Field(description="The issue number of the issue to add as a sub-issue.")
     replace_parent: bool = Field(default=False, description="If true, replace the sub-issue's current parent (default: false)")
 
 GET_ISSUE_COMMENTS = pydantic_function_tool(GetIssueComments, name="get_issue_comments")
