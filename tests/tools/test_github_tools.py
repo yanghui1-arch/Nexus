@@ -416,13 +416,18 @@ class TestCreateSubIssue:
         }
         mock_response.raise_for_status = MagicMock()
 
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_get_response = MagicMock()
+        mock_get_response.json.return_value = {"id": 12345, "number": 5}
+        mock_get_response.raise_for_status = MagicMock()
+
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get, patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_get.return_value = mock_get_response
             mock_post.return_value = mock_response
             result = await github_kit.create_sub_issue(
                 token="test-token",
                 repo="test/repo",
                 issue_number=1,
-                sub_issue_id=12345,
+                sub_issue_number=5,
             )
 
         assert result["success"] is True
@@ -442,13 +447,18 @@ class TestCreateSubIssue:
         }
         mock_response.raise_for_status = MagicMock()
 
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_get_response = MagicMock()
+        mock_get_response.json.return_value = {"id": 12345, "number": 5}
+        mock_get_response.raise_for_status = MagicMock()
+
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get, patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_get.return_value = mock_get_response
             mock_post.return_value = mock_response
             result = await github_kit.create_sub_issue(
                 token="test-token",
                 repo="test/repo",
                 issue_number=1,
-                sub_issue_id=12345,
+                sub_issue_number=5,
                 replace_parent=True,
             )
 
@@ -456,6 +466,7 @@ class TestCreateSubIssue:
         assert result["sub_issue_number"] == 5
         # Verify the API was called with replace_parent=true
         call_args = mock_post.call_args
+        assert call_args.kwargs["json"]["sub_issue_id"] == 12345
         assert call_args.kwargs["json"]["replace_parent"] is True
 
     async def test_create_sub_issue_api_error(self, github_kit):
@@ -466,18 +477,81 @@ class TestCreateSubIssue:
             "Not Found", request=MagicMock(), response=mock_response
         )
 
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_get_response = MagicMock()
+        mock_get_response.json.return_value = {"id": 99999, "number": 99}
+        mock_get_response.raise_for_status = MagicMock()
+
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get, patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_get.return_value = mock_get_response
             mock_post.return_value = mock_response
             result = await github_kit.create_sub_issue(
                 token="test-token",
                 repo="test/repo",
                 issue_number=1,
-                sub_issue_id=99999,
+                sub_issue_number=99,
             )
 
         assert result["success"] is False
         assert result["sub_issue_number"] is None
         assert "Sub-issue not found" in result["message"]
+
+    async def test_create_sub_issue_get_fails(self, github_kit):
+        mock_get_response = MagicMock()
+        mock_get_response.json.return_value = {"message": "Not Found"}
+        mock_get_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "Not Found", request=MagicMock(), response=mock_get_response
+        )
+
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_get_response
+            result = await github_kit.create_sub_issue(
+                token="test-token",
+                repo="test/repo",
+                issue_number=1,
+                sub_issue_number=404,
+            )
+
+        assert result["success"] is False
+        assert "Not Found" in result["message"]
+
+    async def test_create_sub_issue_missing_internal_id(self, github_kit):
+        mock_get_response = MagicMock()
+        mock_get_response.json.return_value = {"number": 5}
+        mock_get_response.raise_for_status = MagicMock()
+
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_get_response
+            result = await github_kit.create_sub_issue(
+                token="test-token",
+                repo="test/repo",
+                issue_number=1,
+                sub_issue_number=5,
+            )
+
+        assert result["success"] is False
+        assert "Could not resolve internal issue id" in result["message"]
+
+    async def test_create_sub_issue_rejects_pull_request(self, github_kit):
+        mock_get_response = MagicMock()
+        mock_get_response.json.return_value = {
+            "id": 12345,
+            "number": 5,
+            "pull_request": {"url": "https://api.github.com/repos/test/repo/pulls/5"},
+        }
+        mock_get_response.raise_for_status = MagicMock()
+
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get, patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+            mock_get.return_value = mock_get_response
+            result = await github_kit.create_sub_issue(
+                token="test-token",
+                repo="test/repo",
+                issue_number=1,
+                sub_issue_number=5,
+            )
+
+        assert result["success"] is False
+        assert "not a real issue" in result["message"]
+        mock_post.assert_not_called()
 
 
 class TestToolDefinitions:
@@ -510,4 +584,3 @@ class TestToolDefinitions:
             assert "name" in func
             assert "description" in func
             assert "parameters" in func
-

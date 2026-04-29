@@ -649,16 +649,44 @@ class GithubTools:
         token: str,
         repo: str,
         issue_number: int,
-        sub_issue_id: int,
+        sub_issue_number: int,
         replace_parent: bool = False,
     ) -> dict:
         """Create a sub-issue relationship between two issues.
-        
-        The sub_issue_id is the issue ID (not the issue number).
-        Both issues must belong to the same repository owner.
+
+        Resolve sub_issue_number to GitHub's internal issue id first, then
+        create the sub-issue relationship.
         """
         async with httpx.AsyncClient() as client:
             try:
+                issue_response = await client.get(
+                    f"https://api.github.com/repos/{repo}/issues/{sub_issue_number}",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Accept": "application/vnd.github+json",
+                        "X-GitHub-Api-Version": "2022-11-28",
+                    },
+                )
+                issue_response.raise_for_status()
+                issue_data = issue_response.json()
+                sub_issue_id = issue_data.get("id")
+                if sub_issue_id is None:
+                    return {
+                        "success": False,
+                        "sub_issue_number": None,
+                        "sub_issue_url": "",
+                        "parent_issue_number": issue_number,
+                        "message": f"Could not resolve internal issue id for issue #{sub_issue_number}",
+                    }
+                if issue_data.get("pull_request"):
+                    return {
+                        "success": False,
+                        "sub_issue_number": None,
+                        "sub_issue_url": "",
+                        "parent_issue_number": issue_number,
+                        "message": f"Issue #{sub_issue_number} is a pull request, not a real issue.",
+                    }
+
                 response = await client.post(
                     f"https://api.github.com/repos/{repo}/issues/{issue_number}/sub_issues",
                     headers={
@@ -675,13 +703,16 @@ class GithubTools:
                 data = response.json()
                 return {
                     "success": True,
-                    "sub_issue_number": data["number"],
-                    "sub_issue_url": data["html_url"],
+                    "sub_issue_number": data.get("number"),
+                    "sub_issue_url": data.get("html_url", ""),
                     "parent_issue_number": issue_number,
-                    "message": f"Sub-issue #{data['number']} added to issue #{issue_number}: {data['html_url']}",
+                    "message": f"Sub-issue #{data.get('number')} added to issue #{issue_number}: {data.get('html_url', '')}",
                 }
             except httpx.HTTPStatusError as e:
-                error_detail = e.response.json().get("message", e.response.text)
+                try:
+                    error_detail = e.response.json().get("message", e.response.text)
+                except Exception:
+                    error_detail = e.response.text
                 return {
                     "success": False,
                     "sub_issue_number": None,
