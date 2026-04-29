@@ -40,14 +40,13 @@ export function WorkspaceTaskBoard({
   }, [tasks, repoFilter]);
 
   const groupedTasks = useMemo(() => {
-    const groups: Record<ApiTaskStatus, WorkspaceTaskView[]> = {
-      queued: [],
-      running: [],
-      waiting_for_merge: [],
-      merged: [],
-      closed: [],
-      failed: [],
-    };
+    const groups = STATUS_ORDER.reduce(
+      (acc, status) => {
+        acc[status] = [];
+        return acc;
+      },
+      {} as Record<ApiTaskStatus, WorkspaceTaskView[]>,
+    );
 
     filteredTasks.forEach(task => {
       groups[task.status].push(task);
@@ -82,7 +81,7 @@ export function WorkspaceTaskBoard({
       </CardHeader>
 
       <CardContent className="overflow-x-auto">
-        <div className="grid min-w-[900px] gap-4 grid-cols-6">
+        <div className="grid min-w-[1050px] gap-4 grid-cols-7">
           {STATUS_ORDER.map(status => {
             const statusMeta = STATUS_META[status];
             const StatusIcon = statusMeta.icon;
