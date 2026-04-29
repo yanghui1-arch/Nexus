@@ -29,8 +29,17 @@ sys.modules.setdefault('celery', fake_celery_module)
 
 import src.server.api.routes.tasks as tasks_routes
 from src.server.api.routes.tasks import router as tasks_router
-from src.server.postgres.models import AgentName, TaskStatus
-from src.server.postgres.repositories import TaskRepository
+from src.server.postgres.models import (
+    AgentName,
+    TaskStatus,
+    TaskWorkItemStatus,
+    VirtualPullRequestReviewDecision,
+)
+from src.server.postgres.repositories import (
+    TaskRepository,
+    TaskWorkItemRepository,
+    VirtualPullRequestRepository,
+)
 
 
 class FakeDatabase:
@@ -42,9 +51,11 @@ class FakeDatabase:
         yield self._session_obj
 
 
-def _build_app(session_obj: object | None = None) -> FastAPI:
+def _build_app(session_obj: object | None = None, runner_obj: object | None = None) -> FastAPI:
     app = FastAPI()
     app.state.database = FakeDatabase(session_obj)
+    if runner_obj is not None:
+        app.state.runner = runner_obj
     app.include_router(tasks_router)
     return app
 
@@ -63,7 +74,7 @@ def _make_task(
     started_at = created_at + timedelta(minutes=1)
     finished_at = (
         None
-        if status in {TaskStatus.queued, TaskStatus.running, TaskStatus.waiting_for_merge}
+        if status in {TaskStatus.queued, TaskStatus.running, TaskStatus.waiting, TaskStatus.waiting_for_merge}
         else created_at + timedelta(minutes=4)
     )
     return SimpleNamespace(
@@ -207,6 +218,152 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
         'project': 'web',
         'limit': 10,
     }
+
+
+def test_list_task_work_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = datetime.now(timezone.utc)
+    task = _make_task(question='large task', status=TaskStatus.waiting, created_at=now)
+    work_item = SimpleNamespace(
+        id=uuid.uuid4(),
+        task_id=task.id,
+        order_index=1,
+        title='Scoped change',
+        description='Implement a review-sized slice.',
+        status=TaskWorkItemStatus.ready_for_review,
+        summary='Implemented slice.',
+        base_commit='base',
+        head_commit='head',
+        local_path='/workspace/repo',
+        created_at=now,
+        updated_at=now,
+        started_at=now,
+        finished_at=None,
+    )
+
+    async def fake_get(session, task_id):
+        assert task_id == task.id
+        return task
+
+    async def fake_list_by_task(session, task_id):
+        assert task_id == task.id
+        return [work_item]
+
+    monkeypatch.setattr(TaskRepository, 'get', fake_get)
+    monkeypatch.setattr(TaskWorkItemRepository, 'list_by_task', fake_list_by_task)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app())
+        async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
+            return await client.get(f'/v1/tasks/{task.id}/work-items')
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload[0]['title'] == 'Scoped change'
+    assert payload[0]['status'] == 'ready_for_review'
+
+
+def test_get_virtual_pr_diff(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = datetime.now(timezone.utc)
+    task = _make_task(question='large task', status=TaskStatus.waiting, created_at=now)
+    virtual_pr = SimpleNamespace(
+        id=uuid.uuid4(),
+        task_id=task.id,
+        work_item_id=uuid.uuid4(),
+        base_commit='base',
+        head_commit='head',
+        diff='diff --git a/file.py b/file.py',
+    )
+
+    async def fake_get_task(session, task_id):
+        assert task_id == task.id
+        return task
+
+    async def fake_get_virtual_pr(session, virtual_pr_id):
+        assert virtual_pr_id == virtual_pr.id
+        return virtual_pr
+
+    monkeypatch.setattr(TaskRepository, 'get', fake_get_task)
+    monkeypatch.setattr(VirtualPullRequestRepository, 'get', fake_get_virtual_pr)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app())
+        async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
+            return await client.get(f'/v1/tasks/{task.id}/virtual-prs/{virtual_pr.id}/diff')
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 200
+    assert response.json()['diff'] == 'diff --git a/file.py b/file.py'
+
+
+def test_review_virtual_pr_dispatches_follow_up(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = datetime.now(timezone.utc)
+    task = _make_task(question='large task', status=TaskStatus.waiting, created_at=now)
+    virtual_pr = SimpleNamespace(
+        id=uuid.uuid4(),
+        task_id=task.id,
+        work_item_id=uuid.uuid4(),
+    )
+    review = SimpleNamespace(
+        id=uuid.uuid4(),
+        task_id=task.id,
+        virtual_pr_id=virtual_pr.id,
+        decision=VirtualPullRequestReviewDecision.approved,
+        reviewer='reviewer',
+        comment='looks good',
+        created_at=now,
+    )
+    captured: dict[str, Any] = {}
+
+    async def fake_get_task(session, task_id):
+        assert task_id == task.id
+        return task
+
+    async def fake_get_virtual_pr(session, virtual_pr_id):
+        assert virtual_pr_id == virtual_pr.id
+        return virtual_pr
+
+    async def fake_add_review(session, **kwargs):
+        captured['review'] = kwargs
+        return review
+
+    async def fake_mark_approved(session, work_item_id):
+        captured['approved_work_item_id'] = work_item_id
+        return None
+
+    async def fake_set_queued(session, task_id, **kwargs):
+        captured['queued_task_id'] = task_id
+        return task
+
+    class FakeRunner:
+        async def dispatch_existing_task(self, task_id, *, recovered=False):
+            captured['dispatched'] = {'task_id': task_id, 'recovered': recovered}
+            return True
+
+    monkeypatch.setattr(TaskRepository, 'get', fake_get_task)
+    monkeypatch.setattr(VirtualPullRequestRepository, 'get', fake_get_virtual_pr)
+    monkeypatch.setattr(VirtualPullRequestRepository, 'add_review', fake_add_review)
+    monkeypatch.setattr(TaskWorkItemRepository, 'mark_approved', fake_mark_approved)
+    monkeypatch.setattr(TaskRepository, 'set_queued', fake_set_queued)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(runner_obj=FakeRunner()))
+        async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
+            return await client.patch(
+                f'/v1/tasks/{task.id}/virtual-prs/{virtual_pr.id}/review',
+                json={'decision': 'approved', 'reviewer': 'reviewer', 'comment': 'looks good'},
+            )
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 200
+    assert response.json()['decision'] == 'approved'
+    assert captured['review']['decision'] == VirtualPullRequestReviewDecision.approved
+    assert captured['approved_work_item_id'] == virtual_pr.work_item_id
+    assert captured['queued_task_id'] == task.id
+    assert captured['dispatched'] == {'task_id': task.id, 'recovered': False}
 
 
 def test_consult_task_returns_process_reply(monkeypatch: pytest.MonkeyPatch) -> None:

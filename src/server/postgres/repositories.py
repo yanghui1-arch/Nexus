@@ -14,6 +14,12 @@ from src.server.postgres.models import (
     AgentName,
     TaskRecord,
     TaskStatus,
+    TaskWorkItemRecord,
+    TaskWorkItemStatus,
+    VirtualPullRequestRecord,
+    VirtualPullRequestReviewDecision,
+    VirtualPullRequestReviewRecord,
+    VirtualPullRequestStatus,
     WorkspaceRecord,
     WorkspaceStatus,
 )
@@ -440,6 +446,29 @@ class TaskRepository:
         return task
 
     @staticmethod
+    async def set_waiting(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+        *,
+        result: str | None,
+    ) -> TaskRecord | None:
+        task = await session.get(TaskRecord, task_id)
+        if task is None:
+            return None
+
+        now = utc_now()
+        task.status = TaskStatus.waiting
+        task.result = result
+        task.error = None
+        task.finished_at = None
+        task.updated_at = now
+        task.dispatch_token = None
+        task.lease_expires_at = None
+        await session.commit()
+        await session.refresh(task)
+        return task
+
+    @staticmethod
     async def set_waiting_for_merge(
         session: AsyncSession,
         task_id: uuid.UUID,
@@ -523,3 +552,309 @@ class TaskRepository:
         await session.commit()
         await session.refresh(task)
         return task
+
+
+class TaskWorkItemRepository:
+    @staticmethod
+    async def create_many(
+        session: AsyncSession,
+        *,
+        task_id: uuid.UUID,
+        items: list[dict[str, str]],
+    ) -> list[TaskWorkItemRecord]:
+        existing = await TaskWorkItemRepository.list_by_task(session, task_id)
+        if existing:
+            return existing
+
+        records = [
+            TaskWorkItemRecord(
+                task_id=task_id,
+                order_index=index,
+                title=item["title"].strip(),
+                description=item["description"].strip(),
+                status=TaskWorkItemStatus.pending,
+            )
+            for index, item in enumerate(items, start=1)
+        ]
+        session.add_all(records)
+        await session.commit()
+        for record in records:
+            await session.refresh(record)
+        return records
+
+    @staticmethod
+    async def list_by_task(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+    ) -> list[TaskWorkItemRecord]:
+        query = (
+            select(TaskWorkItemRecord)
+            .where(TaskWorkItemRecord.task_id == task_id)
+            .order_by(TaskWorkItemRecord.order_index.asc())
+        )
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def count_by_task(session: AsyncSession, task_id: uuid.UUID) -> int:
+        return len(await TaskWorkItemRepository.list_by_task(session, task_id))
+
+    @staticmethod
+    async def get(
+        session: AsyncSession,
+        work_item_id: uuid.UUID,
+    ) -> TaskWorkItemRecord | None:
+        return await session.get(TaskWorkItemRecord, work_item_id)
+
+    @staticmethod
+    async def get_running(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+    ) -> TaskWorkItemRecord | None:
+        query = select(TaskWorkItemRecord).where(
+            TaskWorkItemRecord.task_id == task_id,
+            TaskWorkItemRecord.status == TaskWorkItemStatus.running,
+        )
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_next_for_execution(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+    ) -> TaskWorkItemRecord | None:
+        for status in (TaskWorkItemStatus.changes_requested, TaskWorkItemStatus.pending):
+            query = (
+                select(TaskWorkItemRecord)
+                .where(
+                    TaskWorkItemRecord.task_id == task_id,
+                    TaskWorkItemRecord.status == status,
+                )
+                .order_by(TaskWorkItemRecord.order_index.asc())
+                .limit(1)
+            )
+            result = await session.execute(query)
+            work_item = result.scalar_one_or_none()
+            if work_item is not None:
+                return work_item
+        return None
+
+    @staticmethod
+    async def set_running(
+        session: AsyncSession,
+        work_item_id: uuid.UUID,
+    ) -> TaskWorkItemRecord | None:
+        work_item = await session.get(TaskWorkItemRecord, work_item_id)
+        if work_item is None:
+            return None
+
+        now = utc_now()
+        previous_status = work_item.status
+        work_item.status = TaskWorkItemStatus.running
+        work_item.summary = None
+        if previous_status == TaskWorkItemStatus.pending:
+            work_item.base_commit = None
+            work_item.local_path = None
+        work_item.head_commit = None
+        work_item.started_at = now
+        work_item.finished_at = None
+        work_item.updated_at = now
+        await session.commit()
+        await session.refresh(work_item)
+        return work_item
+
+    @staticmethod
+    async def capture_base_commit(
+        session: AsyncSession,
+        work_item_id: uuid.UUID,
+        *,
+        base_commit: str,
+        local_path: str,
+    ) -> TaskWorkItemRecord | None:
+        work_item = await session.get(TaskWorkItemRecord, work_item_id)
+        if work_item is None:
+            return None
+
+        if work_item.base_commit is None:
+            work_item.base_commit = base_commit
+        work_item.local_path = local_path
+        work_item.updated_at = utc_now()
+        await session.commit()
+        await session.refresh(work_item)
+        return work_item
+
+    @staticmethod
+    async def mark_ready_for_review(
+        session: AsyncSession,
+        work_item_id: uuid.UUID,
+        *,
+        summary: str,
+        head_commit: str,
+    ) -> TaskWorkItemRecord | None:
+        work_item = await session.get(TaskWorkItemRecord, work_item_id)
+        if work_item is None:
+            return None
+
+        now = utc_now()
+        work_item.status = TaskWorkItemStatus.ready_for_review
+        work_item.summary = summary
+        work_item.head_commit = head_commit
+        work_item.finished_at = now
+        work_item.updated_at = now
+        await session.commit()
+        await session.refresh(work_item)
+        return work_item
+
+    @staticmethod
+    async def mark_approved(
+        session: AsyncSession,
+        work_item_id: uuid.UUID,
+    ) -> TaskWorkItemRecord | None:
+        return await TaskWorkItemRepository._set_status(
+            session,
+            work_item_id,
+            status=TaskWorkItemStatus.approved,
+        )
+
+    @staticmethod
+    async def mark_changes_requested(
+        session: AsyncSession,
+        work_item_id: uuid.UUID,
+    ) -> TaskWorkItemRecord | None:
+        return await TaskWorkItemRepository._set_status(
+            session,
+            work_item_id,
+            status=TaskWorkItemStatus.changes_requested,
+        )
+
+    @staticmethod
+    async def all_approved(session: AsyncSession, task_id: uuid.UUID) -> bool:
+        work_items = await TaskWorkItemRepository.list_by_task(session, task_id)
+        return bool(work_items) and all(
+            work_item.status == TaskWorkItemStatus.approved for work_item in work_items
+        )
+
+    @staticmethod
+    async def _set_status(
+        session: AsyncSession,
+        work_item_id: uuid.UUID,
+        *,
+        status: TaskWorkItemStatus,
+    ) -> TaskWorkItemRecord | None:
+        work_item = await session.get(TaskWorkItemRecord, work_item_id)
+        if work_item is None:
+            return None
+
+        work_item.status = status
+        work_item.updated_at = utc_now()
+        await session.commit()
+        await session.refresh(work_item)
+        return work_item
+
+
+class VirtualPullRequestRepository:
+    @staticmethod
+    async def list_by_task(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+    ) -> list[VirtualPullRequestRecord]:
+        query = (
+            select(VirtualPullRequestRecord)
+            .where(VirtualPullRequestRecord.task_id == task_id)
+            .order_by(VirtualPullRequestRecord.created_at.asc())
+        )
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def get(
+        session: AsyncSession,
+        virtual_pr_id: uuid.UUID,
+    ) -> VirtualPullRequestRecord | None:
+        return await session.get(VirtualPullRequestRecord, virtual_pr_id)
+
+    @staticmethod
+    async def get_by_work_item(
+        session: AsyncSession,
+        work_item_id: uuid.UUID,
+    ) -> VirtualPullRequestRecord | None:
+        query = select(VirtualPullRequestRecord).where(
+            VirtualPullRequestRecord.work_item_id == work_item_id
+        )
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def upsert_for_work_item(
+        session: AsyncSession,
+        *,
+        task_id: uuid.UUID,
+        work_item_id: uuid.UUID,
+        base_commit: str,
+        head_commit: str,
+        summary: str,
+        changed_files: list[str],
+        additions: int,
+        deletions: int,
+        diff: str,
+    ) -> VirtualPullRequestRecord:
+        virtual_pr = await VirtualPullRequestRepository.get_by_work_item(session, work_item_id)
+        if virtual_pr is None:
+            virtual_pr = VirtualPullRequestRecord(
+                task_id=task_id,
+                work_item_id=work_item_id,
+                status=VirtualPullRequestStatus.ready_for_review,
+                base_commit=base_commit,
+                head_commit=head_commit,
+                summary=summary,
+                changed_files=changed_files,
+                additions=additions,
+                deletions=deletions,
+                diff=diff,
+            )
+            session.add(virtual_pr)
+        else:
+            virtual_pr.status = VirtualPullRequestStatus.ready_for_review
+            virtual_pr.base_commit = base_commit
+            virtual_pr.head_commit = head_commit
+            virtual_pr.summary = summary
+            virtual_pr.changed_files = changed_files
+            virtual_pr.additions = additions
+            virtual_pr.deletions = deletions
+            virtual_pr.diff = diff
+            virtual_pr.updated_at = utc_now()
+
+        await session.commit()
+        await session.refresh(virtual_pr)
+        return virtual_pr
+
+    @staticmethod
+    async def add_review(
+        session: AsyncSession,
+        *,
+        virtual_pr_id: uuid.UUID,
+        decision: VirtualPullRequestReviewDecision,
+        reviewer: str | None,
+        comment: str | None,
+    ) -> VirtualPullRequestReviewRecord | None:
+        virtual_pr = await session.get(VirtualPullRequestRecord, virtual_pr_id)
+        if virtual_pr is None:
+            return None
+
+        if decision == VirtualPullRequestReviewDecision.approved:
+            virtual_pr.status = VirtualPullRequestStatus.approved
+        else:
+            virtual_pr.status = VirtualPullRequestStatus.changes_requested
+        virtual_pr.updated_at = utc_now()
+
+        review = VirtualPullRequestReviewRecord(
+            task_id=virtual_pr.task_id,
+            virtual_pr_id=virtual_pr.id,
+            decision=decision,
+            reviewer=reviewer,
+            comment=comment,
+        )
+        session.add(review)
+        await session.commit()
+        await session.refresh(review)
+        return review

@@ -59,6 +59,7 @@ export type BadgeTone = 'default' | 'secondary' | 'destructive' | 'outline';
 export const STATUS_ORDER: ApiTaskStatus[] = [
   'queued',
   'running',
+  'waiting',
   'waiting_for_merge',
   'merged',
   'closed',
@@ -78,6 +79,11 @@ export const STATUS_META: Record<
     label: 'Running',
     icon: Loader2,
     badgeVariant: 'default',
+  },
+  waiting: {
+    label: 'Review',
+    icon: GitBranch,
+    badgeVariant: 'secondary',
   },
   waiting_for_merge: {
     label: 'Waiting for Merge',
@@ -128,11 +134,12 @@ export function sortTasksForBoard(tasks: WorkspaceTaskView[]): WorkspaceTaskView
 
 const TRACKING_PRIORITY: Record<ApiTaskStatus, number> = {
   running: 0,
-  waiting_for_merge: 1,
-  queued: 2,
-  merged: 3,
-  closed: 4,
-  failed: 5,
+  waiting: 1,
+  waiting_for_merge: 2,
+  queued: 3,
+  merged: 4,
+  closed: 5,
+  failed: 6,
 };
 
 function shortId(id: string): string {

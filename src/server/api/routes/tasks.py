@@ -12,13 +12,22 @@ from src.agents import Sophie, Tela
 from src.agents.base import Agent
 from src.server.config import get_settings
 from src.server.postgres.database import Database
-from src.server.postgres.models import TaskStatus
-from src.server.postgres.repositories import TaskRepository
+from src.server.postgres.models import TaskStatus, VirtualPullRequestReviewDecision
+from src.server.postgres.repositories import (
+    TaskRepository,
+    TaskWorkItemRepository,
+    VirtualPullRequestRepository,
+)
 from src.server.runner import AgentTaskRunner
 from src.server.schemas import (
     TaskConsultRequest,
     TaskConsultResponse,
     TaskCreateRequest,
+    TaskWorkItemResponse,
+    VirtualPullRequestDiffResponse,
+    VirtualPullRequestResponse,
+    VirtualPullRequestReviewRequest,
+    VirtualPullRequestReviewResponse,
     TaskResponse,
     TaskStatusUpdateRequest,
     TaskSubmitResponse,
@@ -82,6 +91,103 @@ async def get_task(
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return TaskResponse.from_record(task)
+
+
+@router.get("/{task_id}/work-items", response_model=list[TaskWorkItemResponse])
+async def list_task_work_items(
+    request: Request,
+    task_id: uuid.UUID,
+) -> list[TaskWorkItemResponse]:
+    database: Database = request.app.state.database
+    async with database.session() as session:
+        task = await TaskRepository.get(session, task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        work_items = await TaskWorkItemRepository.list_by_task(session, task_id)
+    return [TaskWorkItemResponse.from_record(work_item) for work_item in work_items]
+
+
+@router.get("/{task_id}/virtual-prs", response_model=list[VirtualPullRequestResponse])
+async def list_virtual_pull_requests(
+    request: Request,
+    task_id: uuid.UUID,
+) -> list[VirtualPullRequestResponse]:
+    database: Database = request.app.state.database
+    async with database.session() as session:
+        task = await TaskRepository.get(session, task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        virtual_prs = await VirtualPullRequestRepository.list_by_task(session, task_id)
+    return [VirtualPullRequestResponse.from_record(virtual_pr) for virtual_pr in virtual_prs]
+
+
+@router.get("/{task_id}/virtual-prs/{virtual_pr_id}/diff", response_model=VirtualPullRequestDiffResponse)
+async def get_virtual_pull_request_diff(
+    request: Request,
+    task_id: uuid.UUID,
+    virtual_pr_id: uuid.UUID,
+) -> VirtualPullRequestDiffResponse:
+    database: Database = request.app.state.database
+    async with database.session() as session:
+        task = await TaskRepository.get(session, task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        virtual_pr = await VirtualPullRequestRepository.get(session, virtual_pr_id)
+    if virtual_pr is None or virtual_pr.task_id != task_id:
+        raise HTTPException(status_code=404, detail="Virtual pull request not found")
+    return VirtualPullRequestDiffResponse(
+        id=virtual_pr.id,
+        task_id=virtual_pr.task_id,
+        work_item_id=virtual_pr.work_item_id,
+        base_commit=virtual_pr.base_commit,
+        head_commit=virtual_pr.head_commit,
+        diff=virtual_pr.diff or "",
+    )
+
+
+@router.patch(
+    "/{task_id}/virtual-prs/{virtual_pr_id}/review",
+    response_model=VirtualPullRequestReviewResponse,
+)
+async def review_virtual_pull_request(
+    request: Request,
+    task_id: uuid.UUID,
+    virtual_pr_id: uuid.UUID,
+    payload: VirtualPullRequestReviewRequest,
+) -> VirtualPullRequestReviewResponse:
+    database: Database = request.app.state.database
+
+    async with database.session() as session:
+        task = await TaskRepository.get(session, task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        virtual_pr = await VirtualPullRequestRepository.get(session, virtual_pr_id)
+        if virtual_pr is None or virtual_pr.task_id != task_id:
+            raise HTTPException(status_code=404, detail="Virtual pull request not found")
+
+        review = await VirtualPullRequestRepository.add_review(
+            session,
+            virtual_pr_id=virtual_pr_id,
+            decision=payload.decision,
+            reviewer=payload.reviewer,
+            comment=payload.comment,
+        )
+        if review is None:
+            raise HTTPException(status_code=404, detail="Virtual pull request not found")
+
+        if payload.decision == VirtualPullRequestReviewDecision.approved:
+            await TaskWorkItemRepository.mark_approved(session, virtual_pr.work_item_id)
+        else:
+            await TaskWorkItemRepository.mark_changes_requested(session, virtual_pr.work_item_id)
+
+        await TaskRepository.set_queued(session, task_id)
+
+    runner: AgentTaskRunner = request.app.state.runner
+    dispatched = await runner.dispatch_existing_task(task_id, recovered=False)
+    if not dispatched:
+        raise HTTPException(status_code=409, detail="Task could not be dispatched for follow-up work")
+
+    return VirtualPullRequestReviewResponse.from_record(review)
 
 
 @router.patch("/{task_id}/status", response_model=TaskResponse)

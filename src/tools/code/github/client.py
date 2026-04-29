@@ -4,13 +4,18 @@ import httpx
 
 from mwin import track
 
+from src.logger import logger
 from src.sandbox import Sandbox
+from src.server.postgres.repositories import TaskWorkItemRepository
+from src.tools.nexus.context import NexusTaskContext
+from src.tools.nexus.git import git_stdout
 
 class GithubTools:
     """GitHub/git operations bound to a sandbox container."""
 
-    def __init__(self, sandbox: Sandbox) -> None:
+    def __init__(self, sandbox: Sandbox, nexus_context: NexusTaskContext | None = None) -> None:
         self._sandbox = sandbox
+        self._nexus_context = nexus_context
 
     @track(step_type="tool")
     async def fetch_from_github(
@@ -84,7 +89,33 @@ class GithubTools:
                 "branch": branch,
                 "message": result.get("stderr", "git command failed"),
             }
+        await self._capture_nexus_base_commit(local_path)
         return {"success": True, "path": local_path, "branch": branch, "message": message}
+
+    async def _capture_nexus_base_commit(self, local_path: str) -> None:
+        if self._nexus_context is None or self._nexus_context.current_work_item_id is None:
+            return
+
+        try:
+            base_commit = await git_stdout(self._sandbox, local_path, "rev-parse", "HEAD")
+            async with self._nexus_context.database.session() as session:
+                await TaskWorkItemRepository.capture_base_commit(
+                    session,
+                    self._nexus_context.current_work_item_id,
+                    base_commit=base_commit,
+                    local_path=local_path,
+                )
+            logger.info(
+                "Captured Nexus base commit %s for task %s work item %s.",
+                base_commit,
+                self._nexus_context.task_id,
+                self._nexus_context.current_work_item_id,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to capture Nexus base commit for task %s.",
+                self._nexus_context.task_id,
+            )
 
 
     @track(step_type="tool")
@@ -643,61 +674,12 @@ class GithubTools:
                     "message": f"GitHub API error {e.response.status_code}: {error_detail}",
                 }
 
-    @track(step_type="tool")
-    async def create_sub_issue(
-        self,
-        token: str,
-        repo: str,
-        issue_number: int,
-        sub_issue_id: int,
-        replace_parent: bool = False,
-    ) -> dict:
-        """Create a sub-issue relationship between two issues.
-        
-        The sub_issue_id is the issue ID (not the issue number).
-        Both issues must belong to the same repository owner.
-        """
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(
-                    f"https://api.github.com/repos/{repo}/issues/{issue_number}/sub_issues",
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Accept": "application/vnd.github+json",
-                        "X-GitHub-Api-Version": "2022-11-28",
-                    },
-                    json={
-                        "sub_issue_id": sub_issue_id,
-                        "replace_parent": replace_parent,
-                    },
-                )
-                response.raise_for_status()
-                data = response.json()
-                return {
-                    "success": True,
-                    "sub_issue_number": data["number"],
-                    "sub_issue_url": data["html_url"],
-                    "parent_issue_number": issue_number,
-                    "message": f"Sub-issue #{data['number']} added to issue #{issue_number}: {data['html_url']}",
-                }
-            except httpx.HTTPStatusError as e:
-                error_detail = e.response.json().get("message", e.response.text)
-                return {
-                    "success": False,
-                    "sub_issue_number": None,
-                    "sub_issue_url": "",
-                    "parent_issue_number": issue_number,
-                    "message": f"GitHub API error {e.response.status_code}: {error_detail}",
-                }
-    
-
     @property
     def issues(self):
         return {
             "get_issue_comments": self.get_issue_comments,
             "reply_to_issue": self.reply_to_issue,
             "get_my_issues": self.get_my_issues,
-            "create_sub_issue": self.create_sub_issue,
         }
     
     @property

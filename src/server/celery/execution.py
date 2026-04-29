@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from openai.types.chat import ChatCompletionMessage
 
@@ -16,8 +16,11 @@ from src.server.postgres.models import AgentName, TaskRecord
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
     TaskRepository,
+    TaskWorkItemRepository,
+    VirtualPullRequestRepository,
     WorkspaceRepository,
 )
+from src.tools.nexus import NexusTaskContext
 
 
 __all__ = ["execute_agent_task"]
@@ -32,6 +35,12 @@ _agents: dict[str, Any] = {
 class _ExecutionBinding:
     github_repo: str | None
     workspace_key: str
+
+
+@dataclass(frozen=True)
+class _ExecutionOutcome:
+    status: Literal["waiting", "waiting_for_merge"]
+    response: str | None
 
 
 async def execute_agent_task(
@@ -144,7 +153,8 @@ async def execute_agent_task(
             binding.workspace_key,
         )
 
-        result = await _run_agent(
+        outcome = await _run_agent_workflow(
+            database=database,
             task=task,
             on_progress=on_progress,
             settings=cfg,
@@ -153,12 +163,12 @@ async def execute_agent_task(
             recovered=recovered,
         )
 
-        await _mark_waiting_for_merge(database, task_id, result.response)
-        logger.info(
-            "Task %s moved to waiting_for_merge. has_sop=%s",
-            task_id,
-            bool(result.sop),
-        )
+        if outcome.status == "waiting":
+            await _mark_waiting(database, task_id, outcome.response)
+            logger.info("Task %s moved to waiting for Nexus virtual PR review.", task_id)
+        else:
+            await _mark_waiting_for_merge(database, task_id, outcome.response)
+            logger.info("Task %s moved to waiting_for_merge after final PR run.", task_id)
 
     except Exception as exc:
         logger.exception("Task %s failed in worker", task_id)
@@ -182,6 +192,129 @@ async def execute_agent_task(
         await database.disconnect()
 
 
+async def _run_agent_workflow(
+    *,
+    database: Database,
+    task: TaskRecord,
+    on_progress,
+    settings: Settings,
+    workspace_key: str,
+    github_repo: str | None,
+    recovered: bool,
+) -> _ExecutionOutcome:
+    planning_recovered = recovered
+
+    while True:
+        async with database.session() as session:
+            work_items = await TaskWorkItemRepository.list_by_task(session, task.id)
+            all_approved = await TaskWorkItemRepository.all_approved(session, task.id)
+            running_work_item = await TaskWorkItemRepository.get_running(session, task.id)
+            next_work_item = await TaskWorkItemRepository.get_next_for_execution(session, task.id)
+
+        if not work_items:
+            logger.info("Task %s has no Nexus work items; starting planning/small-task run.", task.id)
+            result = await _run_agent(
+                task=task,
+                on_progress=on_progress,
+                settings=settings,
+                workspace_key=workspace_key,
+                github_repo=github_repo,
+                recovered=planning_recovered,
+                nexus_context=NexusTaskContext(
+                    task_id=task.id,
+                    database=database,
+                    repo=task.repo or github_repo or "",
+                ),
+                question_override=_build_planning_prompt(task.question),
+            )
+            planning_recovered = False
+
+            async with database.session() as session:
+                work_items = await TaskWorkItemRepository.list_by_task(session, task.id)
+            if not work_items:
+                logger.info(
+                    "Task %s completed without Nexus work items; treating as small-task external PR run.",
+                    task.id,
+                )
+                return _ExecutionOutcome(status="waiting_for_merge", response=result.response)
+
+            logger.info(
+                "Task %s was split into %s Nexus work items.",
+                task.id,
+                len(work_items),
+            )
+            continue
+
+        if all_approved:
+            logger.info("Task %s has all Nexus work items approved; starting final PR run.", task.id)
+            result = await _run_agent(
+                task=task,
+                on_progress=on_progress,
+                settings=settings,
+                workspace_key=workspace_key,
+                github_repo=github_repo,
+                recovered=False,
+                nexus_context=NexusTaskContext(
+                    task_id=task.id,
+                    database=database,
+                    repo=task.repo or github_repo or "",
+                ),
+                question_override=_build_final_pr_prompt(task.question, work_items),
+            )
+            return _ExecutionOutcome(status="waiting_for_merge", response=result.response)
+
+        work_item = running_work_item
+        if work_item is None and next_work_item is not None:
+            async with database.session() as session:
+                work_item = await TaskWorkItemRepository.set_running(session, next_work_item.id)
+            if work_item is None:
+                raise RuntimeError(f"Failed to start Nexus work item {next_work_item.id}.")
+
+        if work_item is None:
+            logger.info("Task %s has no executable work item; waiting for Nexus review.", task.id)
+            return _ExecutionOutcome(status="waiting", response="Waiting for Nexus virtual PR review.")
+
+        logger.info(
+            "Task %s starting Nexus work item %s: %s",
+            task.id,
+            work_item.order_index,
+            work_item.title,
+        )
+        result = await _run_agent(
+            task=task,
+            on_progress=on_progress,
+            settings=settings,
+            workspace_key=workspace_key,
+            github_repo=github_repo,
+            recovered=False,
+            nexus_context=NexusTaskContext(
+                task_id=task.id,
+                database=database,
+                repo=task.repo or github_repo or "",
+                current_work_item_id=work_item.id,
+            ),
+            question_override=_build_work_item_prompt(task.question, work_item),
+        )
+
+        async with database.session() as session:
+            refreshed = await TaskWorkItemRepository.get(session, work_item.id)
+            virtual_pr = await VirtualPullRequestRepository.get_by_work_item(session, work_item.id)
+
+        if refreshed is None:
+            raise RuntimeError(f"Nexus work item {work_item.id} disappeared during execution.")
+        if virtual_pr is None or refreshed.status.value != "ready_for_review":
+            raise RuntimeError(
+                "Agent finished a Nexus work item without calling finish_current_task_work_item."
+            )
+
+        logger.info(
+            "Task %s work item %s is ready for Nexus review.",
+            task.id,
+            refreshed.order_index,
+        )
+        return _ExecutionOutcome(status="waiting", response=result.response)
+
+
 async def _run_agent(
     *,
     task: TaskRecord,
@@ -190,18 +323,21 @@ async def _run_agent(
     workspace_key: str,
     github_repo: str | None,
     recovered: bool,
+    nexus_context: NexusTaskContext | None = None,
+    question_override: str | None = None,
 ) -> BaseAgentResponse:
     agent = _build_agent(
         task=task,
         settings=settings,
         workspace_key=workspace_key,
         github_repo=github_repo,
+        nexus_context=nexus_context,
     )
 
     try:
         async with agent:
             work_kwargs = {
-                "question": task.question,
+                "question": question_override or task.question,
                 "current_session_ctx": task.requested_current_session_ctx or [],
                 "history_session_ctx": task.requested_history_session_ctx or [],
                 "update_process_callback": on_progress,
@@ -223,6 +359,7 @@ def _build_agent(
     settings: Settings,
     workspace_key: str,
     github_repo: str | None,
+    nexus_context: NexusTaskContext | None = None,
 ) -> Agent:
     api_key = settings.api_key
     if not api_key:
@@ -240,6 +377,7 @@ def _build_agent(
         "max_attempts": settings.max_attempts,
         "github_repo": resolved_repo,
         "sandbox_workspace_key": workspace_key,
+        "nexus_task_context": nexus_context,
     }
 
     agent_name = task.agent.value
@@ -257,6 +395,51 @@ def _build_agent(
         )
 
     return agent_builder.create(**shared, github_token=github_token)
+
+
+def _build_planning_prompt(question: str) -> str:
+    return (
+        "Original task:\n"
+        f"{question}\n\n"
+        "Decide whether this task is small or needs Nexus internal review work items. "
+        "If the expected added, edited, or removed lines exceed about 200 lines, call "
+        "create_task_work_items with ordered review-sized work items and then stop. "
+        "Do not create GitHub issues or sub-issues. If the task is small, implement it normally "
+        "and create one real external pull request."
+    )
+
+
+def _build_work_item_prompt(question: str, work_item: Any) -> str:
+    return (
+        "Original task:\n"
+        f"{question}\n\n"
+        "Nexus assigned this internal review work item:\n"
+        f"Order: {work_item.order_index}\n"
+        f"Title: {work_item.title}\n"
+        f"Description: {work_item.description}\n\n"
+        "Implement only this work item. Fetch the repository before editing so Nexus can capture "
+        "the base commit. Commit this work item's scoped changes before finishing; the Nexus "
+        "virtual PR is built from base_commit..head_commit. Do not create GitHub issues, "
+        "sub-issues, or external pull requests for this work item. When the scoped implementation "
+        "is complete, call "
+        "finish_current_task_work_item with a concise reviewer-facing summary."
+    )
+
+
+def _build_final_pr_prompt(question: str, work_items: list[Any]) -> str:
+    item_summaries = "\n".join(
+        f"- {item.order_index}. {item.title}: {item.summary or item.description}"
+        for item in work_items
+    )
+    return (
+        "All Nexus virtual PR work items for this task are approved.\n\n"
+        "Original task:\n"
+        f"{question}\n\n"
+        "Approved work items:\n"
+        f"{item_summaries}\n\n"
+        "Create one real external GitHub pull request for the accumulated approved changes. "
+        "Do not create more Nexus work items, GitHub issues, sub-issues, or multiple external PRs."
+    )
 
 
 async def _load_task(database: Database, task_id: uuid.UUID) -> TaskRecord:
@@ -403,6 +586,11 @@ async def _release_workspace(database: Database, agent_instance_id: uuid.UUID) -
 async def _mark_waiting_for_merge(database: Database, task_id: uuid.UUID, result: str | None) -> None:
     async with database.session() as session:
         await TaskRepository.set_waiting_for_merge(session, task_id, result=result)
+
+
+async def _mark_waiting(database: Database, task_id: uuid.UUID, result: str | None) -> None:
+    async with database.session() as session:
+        await TaskRepository.set_waiting(session, task_id, result=result)
 
 
 async def _mark_failed(database: Database, task_id: uuid.UUID, error: str) -> None:

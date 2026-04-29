@@ -9,7 +9,6 @@ from src.tools.code.github.issue import (
     GET_ISSUE_COMMENTS,
     REPLY_TO_ISSUE,
     GET_MY_ISSUES,
-    CREATE_SUB_ISSUE,
 )
 from src.tools.code.github.pr import (
     GET_PR_REVIEWS,
@@ -401,85 +400,6 @@ class TestGetNotifications:
         assert call_args.kwargs["params"]["participating"] == "true"
 
 
-class TestCreateSubIssue:
-    """Tests for CreateSubIssue tool."""
-
-    async def test_create_sub_issue_success(self, github_kit):
-        """Test successful creation of sub-issue relationship."""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "id": 12345,
-            "number": 5,
-            "html_url": "https://github.com/test/repo/issues/5",
-            "title": "Sub-task",
-            "state": "open",
-        }
-        mock_response.raise_for_status = MagicMock()
-
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-            mock_post.return_value = mock_response
-            result = await github_kit.create_sub_issue(
-                token="test-token",
-                repo="test/repo",
-                issue_number=1,
-                sub_issue_id=12345,
-            )
-
-        assert result["success"] is True
-        assert result["sub_issue_number"] == 5
-        assert result["parent_issue_number"] == 1
-        assert "Sub-issue #5 added to issue #1" in result["message"]
-
-    async def test_create_sub_issue_with_replace_parent(self, github_kit):
-        """Test creating sub-issue with replace_parent option."""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "id": 12345,
-            "number": 5,
-            "html_url": "https://github.com/test/repo/issues/5",
-            "title": "Sub-task",
-            "state": "open",
-        }
-        mock_response.raise_for_status = MagicMock()
-
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-            mock_post.return_value = mock_response
-            result = await github_kit.create_sub_issue(
-                token="test-token",
-                repo="test/repo",
-                issue_number=1,
-                sub_issue_id=12345,
-                replace_parent=True,
-            )
-
-        assert result["success"] is True
-        assert result["sub_issue_number"] == 5
-        # Verify the API was called with replace_parent=true
-        call_args = mock_post.call_args
-        assert call_args.kwargs["json"]["replace_parent"] is True
-
-    async def test_create_sub_issue_api_error(self, github_kit):
-        """Test handling of API error when creating sub-issue."""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"message": "Sub-issue not found"}
-        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
-            "Not Found", request=MagicMock(), response=mock_response
-        )
-
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-            mock_post.return_value = mock_response
-            result = await github_kit.create_sub_issue(
-                token="test-token",
-                repo="test/repo",
-                issue_number=1,
-                sub_issue_id=99999,
-            )
-
-        assert result["success"] is False
-        assert result["sub_issue_number"] is None
-        assert "Sub-issue not found" in result["message"]
-
-
 class TestToolDefinitions:
     """Tests for tool definitions."""
 
@@ -496,7 +416,6 @@ class TestToolDefinitions:
             GET_MY_OPEN_PRS,
             GET_MY_ISSUES,
             GET_NOTIFICATIONS,
-            CREATE_SUB_ISSUE,
         ]
         for tool in expected_tools:
             assert tool in GITHUB_TOOLS_SCHEMA, f"{tool} not found in GITHUB_TOOLS_SCHEMA"
@@ -510,4 +429,3 @@ class TestToolDefinitions:
             assert "name" in func
             assert "description" in func
             assert "parameters" in func
-

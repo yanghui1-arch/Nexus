@@ -11,6 +11,12 @@ from src.server.postgres.models import (
     AgentInstanceRecord,
     TaskRecord,
     TaskStatus,
+    TaskWorkItemRecord,
+    TaskWorkItemStatus,
+    VirtualPullRequestRecord,
+    VirtualPullRequestReviewDecision,
+    VirtualPullRequestReviewRecord,
+    VirtualPullRequestStatus,
     WorkspaceRecord,
 )
 
@@ -122,6 +128,118 @@ class TaskMessage(BaseModel):
     description: str | None = Field(default=None, validation_alias=AliasChoices("description", "content"))
     data: dict[str, Any] | None = None
     meta: dict[str, Any] | None = None
+
+
+class TaskWorkItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    task_id: uuid.UUID
+    order_index: int
+    title: str
+    description: str
+    status: TaskWorkItemStatus
+    summary: str | None
+    base_commit: str | None
+    head_commit: str | None
+    local_path: str | None
+    created_at: datetime
+    updated_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+    @classmethod
+    def from_record(cls, work_item: TaskWorkItemRecord) -> "TaskWorkItemResponse":
+        return cls(
+            id=work_item.id,
+            task_id=work_item.task_id,
+            order_index=work_item.order_index,
+            title=work_item.title,
+            description=work_item.description,
+            status=work_item.status,
+            summary=work_item.summary,
+            base_commit=work_item.base_commit,
+            head_commit=work_item.head_commit,
+            local_path=work_item.local_path,
+            created_at=work_item.created_at,
+            updated_at=work_item.updated_at,
+            started_at=work_item.started_at,
+            finished_at=work_item.finished_at,
+        )
+
+
+class VirtualPullRequestResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    task_id: uuid.UUID
+    work_item_id: uuid.UUID
+    status: VirtualPullRequestStatus
+    base_commit: str
+    head_commit: str
+    summary: str
+    changed_files: list[str]
+    additions: int
+    deletions: int
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_record(cls, virtual_pr: VirtualPullRequestRecord) -> "VirtualPullRequestResponse":
+        return cls(
+            id=virtual_pr.id,
+            task_id=virtual_pr.task_id,
+            work_item_id=virtual_pr.work_item_id,
+            status=virtual_pr.status,
+            base_commit=virtual_pr.base_commit,
+            head_commit=virtual_pr.head_commit,
+            summary=virtual_pr.summary,
+            changed_files=virtual_pr.changed_files,
+            additions=virtual_pr.additions,
+            deletions=virtual_pr.deletions,
+            created_at=virtual_pr.created_at,
+            updated_at=virtual_pr.updated_at,
+        )
+
+
+class VirtualPullRequestDiffResponse(BaseModel):
+    id: uuid.UUID
+    task_id: uuid.UUID
+    work_item_id: uuid.UUID
+    base_commit: str
+    head_commit: str
+    diff: str
+
+
+class VirtualPullRequestReviewRequest(BaseModel):
+    decision: VirtualPullRequestReviewDecision
+    reviewer: str | None = Field(default=None, max_length=255)
+    comment: str | None = None
+
+
+class VirtualPullRequestReviewResponse(BaseModel):
+    id: uuid.UUID
+    task_id: uuid.UUID
+    virtual_pr_id: uuid.UUID
+    decision: VirtualPullRequestReviewDecision
+    reviewer: str | None
+    comment: str | None
+    created_at: datetime
+
+    @classmethod
+    def from_record(
+        cls,
+        review: VirtualPullRequestReviewRecord,
+    ) -> "VirtualPullRequestReviewResponse":
+        return cls(
+            id=review.id,
+            task_id=review.task_id,
+            virtual_pr_id=review.virtual_pr_id,
+            decision=review.decision,
+            reviewer=review.reviewer,
+            comment=review.comment,
+            created_at=review.created_at,
+        )
 
 
 class AgentInstanceCreateRequest(BaseModel):

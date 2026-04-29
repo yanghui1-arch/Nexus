@@ -3,6 +3,7 @@ export type ApiAgentKind = 'tela' | 'sophie';
 export type ApiTaskStatus =
   | 'queued'
   | 'running'
+  | 'waiting'
   | 'waiting_for_merge'
   | 'merged'
   | 'closed'
@@ -61,6 +62,75 @@ export interface ApiTaskMessage {
   description: string | null;
   data: Record<string, unknown> | null;
   meta: Record<string, unknown> | null;
+}
+
+export type ApiTaskWorkItemStatus =
+  | 'pending'
+  | 'running'
+  | 'ready_for_review'
+  | 'approved'
+  | 'changes_requested';
+
+export interface ApiTaskWorkItem {
+  id: string;
+  task_id: string;
+  order_index: number;
+  title: string;
+  description: string;
+  status: ApiTaskWorkItemStatus;
+  summary: string | null;
+  base_commit: string | null;
+  head_commit: string | null;
+  local_path: string | null;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export type ApiVirtualPullRequestStatus =
+  | 'ready_for_review'
+  | 'approved'
+  | 'changes_requested';
+
+export interface ApiVirtualPullRequest {
+  id: string;
+  task_id: string;
+  work_item_id: string;
+  status: ApiVirtualPullRequestStatus;
+  base_commit: string;
+  head_commit: string;
+  summary: string;
+  changed_files: string[];
+  additions: number;
+  deletions: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApiVirtualPullRequestDiff {
+  id: string;
+  task_id: string;
+  work_item_id: string;
+  base_commit: string;
+  head_commit: string;
+  diff: string;
+}
+
+export interface ApiVirtualPullRequestReviewRequest {
+  decision: 'approved' | 'changes_requested';
+  reviewer?: string | null;
+  comment?: string | null;
+}
+
+export interface ApiVirtualPullRequestReview {
+  id: string;
+  task_id: string;
+  virtual_pr_id: string;
+  decision: 'approved' | 'changes_requested';
+  reviewer: string | null;
+  comment: string | null;
+  created_at: string;
 }
 
 export interface ApiWorkspace {

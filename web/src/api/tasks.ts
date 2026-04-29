@@ -8,6 +8,11 @@ import type {
   ApiTaskStatus,
   ApiTaskStatusUpdateRequest,
   ApiTaskSubmitResponse,
+  ApiTaskWorkItem,
+  ApiVirtualPullRequest,
+  ApiVirtualPullRequestDiff,
+  ApiVirtualPullRequestReview,
+  ApiVirtualPullRequestReviewRequest,
 } from '@/api/types';
 
 export type ListTasksParams = {
@@ -61,5 +66,38 @@ export function getTaskMessages(
 ): Promise<ApiTaskMessage[]> {
   return apiRequest<ApiTaskMessage[]>(
     buildApiPath(`/v1/tasks/${taskId}/messages`, { limit }),
+  );
+}
+
+export function getTaskWorkItems(taskId: string): Promise<ApiTaskWorkItem[]> {
+  return apiRequest<ApiTaskWorkItem[]>(`/v1/tasks/${taskId}/work-items`);
+}
+
+export function getTaskVirtualPullRequests(
+  taskId: string,
+): Promise<ApiVirtualPullRequest[]> {
+  return apiRequest<ApiVirtualPullRequest[]>(`/v1/tasks/${taskId}/virtual-prs`);
+}
+
+export function getTaskVirtualPullRequestDiff(
+  taskId: string,
+  virtualPullRequestId: string,
+): Promise<ApiVirtualPullRequestDiff> {
+  return apiRequest<ApiVirtualPullRequestDiff>(
+    `/v1/tasks/${taskId}/virtual-prs/${virtualPullRequestId}/diff`,
+  );
+}
+
+export function reviewTaskVirtualPullRequest(
+  taskId: string,
+  virtualPullRequestId: string,
+  payload: ApiVirtualPullRequestReviewRequest,
+): Promise<ApiVirtualPullRequestReview> {
+  return apiRequest<ApiVirtualPullRequestReview>(
+    `/v1/tasks/${taskId}/virtual-prs/${virtualPullRequestId}/review`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
   );
 }

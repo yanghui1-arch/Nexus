@@ -17,6 +17,11 @@ from src.sandbox import (
 )
 from src.tools.sandbox import SandboxToolKit, SANDBOX_TOOL_DEFINITIONS
 from src.tools.code import GITHUB_TOOLS_SCHEMA, GithubTools
+from src.tools.nexus import (
+    NEXUS_WORK_ITEM_TOOL_DEFINITIONS,
+    NexusReviewTools,
+    NexusTaskContext,
+)
 from src.mcps import web_fetch, WEB_FETCH
 from src.tools.web_search import web_search, TOOL_DEFINITION as WEB_SEARCH
 
@@ -24,6 +29,7 @@ from src.tools.web_search import web_search, TOOL_DEFINITION as WEB_SEARCH
 _ALL_TOOL_DEFINITIONS = [
     *SANDBOX_TOOL_DEFINITIONS,
     *GITHUB_TOOLS_SCHEMA,
+    *NEXUS_WORK_ITEM_TOOL_DEFINITIONS,
     WEB_FETCH,
     WEB_SEARCH,
 ]
@@ -45,6 +51,7 @@ class Sophie(CodeAgent):
     GITHUB_NICKNAME: ClassVar[str] = "Nexus-Sophie"
     sandbox_config: SandboxConfig = VITE_REACT_TS
     sandbox_workspace_key: str | None = None
+    nexus_task_context: NexusTaskContext | None = None
 
     _sandbox: Sandbox | None = PrivateAttr(default=None)
     _sandbox_pool_manager: SandboxPoolManager | None = PrivateAttr(default=None)
@@ -58,10 +65,12 @@ class Sophie(CodeAgent):
             workspace_key=self.sandbox_workspace_key,
         )
         sandbox_tools = SandboxToolKit(self._sandbox)
-        github_kit = GithubTools(self._sandbox)
+        github_kit = GithubTools(self._sandbox, self.nexus_task_context)
+        nexus_kit = NexusReviewTools(self._sandbox, self.nexus_task_context)
 
         kits = sandbox_tools.all_tools
         kits.update(github_kit.all_tools)
+        kits.update(nexus_kit.all_tools)
 
         kits["WebFetch"] = web_fetch
         kits["WebSearch"] = web_search
@@ -158,6 +167,7 @@ class Sophie(CodeAgent):
         github_token: str | None = None,
         sandbox_config: SandboxConfig = VITE_REACT_TS,
         sandbox_workspace_key: str | None = None,
+        nexus_task_context: NexusTaskContext | None = None,
     ) -> "Sophie":
         """Convenience factory with sensible defaults."""
         return cls(
@@ -172,6 +182,6 @@ class Sophie(CodeAgent):
             github_token=github_token,
             sandbox_config=sandbox_config,
             sandbox_workspace_key=sandbox_workspace_key,
+            nexus_task_context=nexus_task_context,
         )
-
 

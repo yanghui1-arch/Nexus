@@ -25,6 +25,39 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
         "dispatch_token",
         "lease_expires_at",
     },
+    "task_work_item": {
+        "id",
+        "task_id",
+        "order_index",
+        "title",
+        "description",
+        "status",
+        "summary",
+        "base_commit",
+        "head_commit",
+        "local_path",
+    },
+    "virtual_pull_request": {
+        "id",
+        "task_id",
+        "work_item_id",
+        "status",
+        "base_commit",
+        "head_commit",
+        "summary",
+        "changed_files",
+        "additions",
+        "deletions",
+        "diff",
+    },
+    "virtual_pull_request_review": {
+        "id",
+        "task_id",
+        "virtual_pr_id",
+        "decision",
+        "reviewer",
+        "comment",
+    },
 }
 
 class Database:
@@ -106,6 +139,12 @@ class Database:
             await conn.execute(
                 text(
                     "UPDATE task SET status = 'waiting_for_merge' WHERE status = 'completed'"
+                )
+            )
+            await conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_task_work_item_one_running_per_task "
+                    "ON task_work_item (task_id) WHERE status = 'running'"
                 )
             )
             await conn.run_sync(self._assert_schema_compatible)

@@ -3,7 +3,6 @@ from src.tools.code.github.issue import (
     GET_ISSUE_COMMENTS,
     REPLY_TO_ISSUE,
     GET_MY_ISSUES,
-    CREATE_SUB_ISSUE,
 )
 from src.tools.code.github.pr import (
     PR_TO_GITHUB,
@@ -23,6 +22,6 @@ __all__ = [
     "GithubTools",
 ]
 
-issues = [GET_ISSUE_COMMENTS, REPLY_TO_ISSUE, GET_MY_ISSUES, CREATE_SUB_ISSUE]
+issues = [GET_ISSUE_COMMENTS, REPLY_TO_ISSUE, GET_MY_ISSUES]
 prs = [PR_TO_GITHUB, GET_PR_REVIEWS, GET_PR_REVIEW_COMMENTS, REPLY_TO_PR_REVIEW_COMMENT, GET_PR_COMMENTS, REPLY_TO_PR, GET_MY_OPEN_PRS]
 notifications = [GET_NOTIFICATIONS]

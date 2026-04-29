@@ -3,8 +3,7 @@ from openai import pydantic_function_tool
 
 class PrToGithub(BaseModel):
     """Push the current local branch to GitHub and open a pull request.
-    Requires a GitHub personal access token with repo scope.
-    Every PR must close at least one issue — provide the issue numbers in closes_issues."""
+    Requires a GitHub personal access token with repo scope."""
 
     token: str = Field(description="GitHub personal access token with repo scope")
     repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
@@ -13,7 +12,10 @@ class PrToGithub(BaseModel):
     body: str = Field(description="Pull request description (markdown supported)")
     head: str = Field(description="Branch that contains the changes to be merged. For cross-repo PRs from your fork, use the format `your-github-nickname:<branch>` (e.g. `Nexus-Tela:feature/my-feature`)")
     base: str = Field(default="main", description="Target branch for the PR (default: main)")
-    closes_issues: list[int] = Field(description="Issue numbers this PR resolves — at least one required (e.g. [42])")
+    closes_issues: list[int] = Field(
+        default_factory=list,
+        description="Optional GitHub issue numbers this PR resolves.",
+    )
     local_path: str | None = Field(default=None, description="Local repository path to push from. Uses current working directory when omitted.")
     draft: bool = Field(default=False, description="Open as a draft pull request (default: false)")
 

@@ -167,6 +167,9 @@ class AgentTaskRunner:
     async def shutdown(self) -> None:
         return None
 
+    async def dispatch_existing_task(self, task_id: uuid.UUID, *, recovered: bool = False) -> bool:
+        return await self._dispatch(task_id, recovered=recovered)
+
     def _load_server_owned_context(
         self,
         request: TaskCreateRequest,
