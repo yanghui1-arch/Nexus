@@ -1,0 +1,68 @@
+# ──────────────────────────────────────────────────────────────────────────────
+#  Nexus — Docker Compose deployment
+# ──────────────────────────────────────────────────────────────────────────────
+#
+#  Services:
+#    postgres      PostgreSQL 16 — persistent task / agent state
+#    redis         Redis 7 — Celery broker, result backend & cache
+#    nexus-api     FastAPI server (uvicorn)
+#    nexus-worker  Celery worker (executes agent coding tasks)
+#    nexus-web     React dashboard served via Nginx
+#
+#  Quick start:
+#    1. cp .env.example .env   # then fill in NEXUS_API_KEY, tokens, etc.
+#    2. docker compose up -d
+#    3. Open http://localhost:8080
+# ──────────────────────────────────────────────────────────────────────────────
+
+version: "3.9"
+
+services:
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nexus
+      POSTGRES_PASSWORD: nexus
+      POSTGRES_DB: nexus
+    ports:
+      - "${NEXUS_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - nexus-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexus -d nexus"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - nexus-net
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${NEXUS_REDIS_PORT:-6379}:6379"
+    volumes:
+      - nexus-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - nexus-net
+
+# ── Persistent volumes ────────────────────────────────────────────────────────
+
+volumes:
+  nexus-pgdata:
+  nexus-redisdata:
+
+# ── Network ───────────────────────────────────────────────────────────────────
+
+networks:
+  nexus-net:
+    driver: bridge
