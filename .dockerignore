@@ -1,0 +1,38 @@
+# Git
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+env/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Environment
+.env
+.envrc
+
+# IDE
+.vscode/
+.idea/
+.cursor/
+
+# Node
+web/node_modules/
+
+# Tests
+tests/
+.coverage
+htmlcov/
+
+# Docker
+docker-compose*.yml
+
+# Others
+*.md
+LICENSE
