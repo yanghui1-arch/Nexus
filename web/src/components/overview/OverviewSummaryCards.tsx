@@ -9,7 +9,7 @@ import {
 
 type TaskCounts = {
   running: number;
-  waiting: number;
+  waiting_for_review: number;
   merged: number;
   closed: number;
   fail: number;
@@ -55,8 +55,8 @@ export function OverviewSummaryCards({
         </Card>
         <Card>
           <CardHeader>
-            <CardDescription>Waiting</CardDescription>
-            <CardTitle className="text-2xl">{counts.waiting}</CardTitle>
+            <CardDescription>Waiting for Review</CardDescription>
+            <CardTitle className="text-2xl">{counts.waiting_for_review}</CardTitle>
           </CardHeader>
         </Card>
         <Card>

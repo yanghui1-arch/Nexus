@@ -25,6 +25,10 @@ const SECTION_META: Record<WorkspaceSection, { title: string; description: strin
     title: 'Task Board',
     description: 'Live task board grouped by backend task status.',
   },
+  'code-review': {
+    title: 'Code Review',
+    description: 'Open the Nexus review queue and inspect agent pull requests.',
+  },
 };
 
 export default function WorkspacePage() {
@@ -39,58 +43,64 @@ export default function WorkspacePage() {
     return <Navigate to={DEFAULT_WORKSPACE_PATH} replace />;
   }
 
-  const isTracking = section === 'process-tracking';
+  if (section === 'code-review') {
+    return <Navigate to="/workspace/code-review/nexus" replace />;
+  }
+
+  const mainClassName =
+    section === 'publish-task'
+      ? 'pt-3 pb-6'
+      : section === 'process-tracking'
+        ? 'overflow-hidden p-0'
+        : undefined;
 
   return (
     <DashboardShell
       title={SECTION_META[section].title}
       description={SECTION_META[section].description}
+      mainClassName={mainClassName}
     >
-      <div className={isTracking ? 'flex h-full min-h-0 flex-col' : 'overflow-y-auto'}>
-        {section === 'publish-task' && (
-          <section className="mx-auto w-full max-w-6xl">
-            <WorkspaceComposerCard
-              value={publisher.composerValues}
-              agents={data.agentOptions}
-              isSubmitting={publisher.isSubmitting}
-              onValueChange={publisher.setComposerValues}
-              onSubmit={publisher.publishTask}
-            />
-          </section>
-        )}
+      {section === 'publish-task' && (
+        <section className="w-full max-w-5xl">
+          <WorkspaceComposerCard
+            value={publisher.composerValues}
+            agents={data.agentOptions}
+            isSubmitting={publisher.isSubmitting}
+            onValueChange={publisher.setComposerValues}
+            onSubmit={publisher.publishTask}
+          />
+        </section>
+      )}
 
-        {section === 'process-tracking' && (
-          <section className="flex h-full min-h-0 flex-col">
-            <WorkspaceTrackingPanel
-              agents={data.agentOptions}
-              tasksForAgent={tracking.tasksForSelectedAgent}
-              messages={tracking.activeConsultMessages}
-              selectedAgentId={tracking.selectedAgentId}
-              selectedTaskId={tracking.selectedTaskId}
-              selectedTask={tracking.selectedTrackingTask}
-              input={tracking.trackingInput}
-              isLoadingAgents={data.isLoadingAgents}
-              isSending={tracking.isSendingTracking}
-              onSelectedAgentChange={tracking.setSelectedAgentId}
-              onSelectedTaskChange={tracking.setSelectedTaskId}
-              onInputChange={tracking.setTrackingInput}
-              onSubmit={tracking.consultSelectedTask}
-            />
-          </section>
-        )}
+      {section === 'process-tracking' && (
+        <section className="flex min-h-0 flex-1 flex-col px-6 py-6">
+          <WorkspaceTrackingPanel
+            agents={data.agentOptions}
+            tasksForAgent={tracking.tasksForSelectedAgent}
+            messages={tracking.activeConsultMessages}
+            selectedAgentId={tracking.selectedAgentId}
+            selectedTaskId={tracking.selectedTaskId}
+            selectedTask={tracking.selectedTrackingTask}
+            input={tracking.trackingInput}
+            isLoadingAgents={data.isLoadingAgents}
+            isSending={tracking.isSendingTracking}
+            onSelectedAgentChange={tracking.setSelectedAgentId}
+            onSelectedTaskChange={tracking.setSelectedTaskId}
+            onInputChange={tracking.setTrackingInput}
+            onSubmit={tracking.consultSelectedTask}
+          />
+        </section>
+      )}
 
-        {section === 'task-board' && (
-          <section className="h-full min-h-0 overflow-y-auto">
-            <WorkspaceTaskBoard
-              tasks={data.taskViews}
-              repoFilters={data.repoFilters}
-              repoFilter={data.boardRepoFilter}
-              isLoading={data.isLoading}
-              onRepoFilterChange={data.setBoardRepoFilter}
-            />
-          </section>
-        )}
-      </div>
+      {section === 'task-board' && (
+        <WorkspaceTaskBoard
+          tasks={data.taskViews}
+          repoFilters={data.repoFilters}
+          repoFilter={data.boardRepoFilter}
+          isLoading={data.isLoading}
+          onRepoFilterChange={data.setBoardRepoFilter}
+        />
+      )}
     </DashboardShell>
   );
 }

@@ -3,7 +3,7 @@ import { FILTERS, type FilterTab } from './overview-utils';
 
 type TaskCounts = {
   running: number;
-  waiting: number;
+  waiting_for_review: number;
   merged: number;
   closed: number;
   fail: number;

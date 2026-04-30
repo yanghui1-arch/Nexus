@@ -53,6 +53,7 @@ class AgentTaskRunner:
                 question=request.question,
                 repo=request.repo,
                 project=request.project,
+                external_issue_url=request.external_issue_url,
                 current_session_ctx=current_session_ctx,
                 history_session_ctx=history_session_ctx,
             )

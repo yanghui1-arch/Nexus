@@ -37,7 +37,7 @@ export function OverviewTaskList({ tasks }: OverviewTaskListProps) {
               const statusMeta = STATUS_META[task.status];
               const StatusIcon = statusMeta.icon;
               const timeRef =
-                task.status === 'running' || task.status === 'waiting'
+                task.status === 'running' || task.status === 'waiting_for_review'
                   ? task.startTime
                   : task.endTime;
 

@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -30,7 +31,7 @@ def utc_now() -> datetime:
 class TaskStatus(str, enum.Enum):
     queued = "queued"
     running = "running"
-    waiting = "waiting"
+    waiting_for_review = "waiting_for_review"
     waiting_for_merge = "waiting_for_merge"
     merged = "merged"
     closed = "closed"
@@ -56,18 +57,35 @@ class TaskWorkItemStatus(str, enum.Enum):
     running = "running"
     ready_for_review = "ready_for_review"
     approved = "approved"
-    changes_requested = "changes_requested"
+    closed = "closed"
 
 
 class VirtualPullRequestStatus(str, enum.Enum):
     ready_for_review = "ready_for_review"
     approved = "approved"
-    changes_requested = "changes_requested"
+    closed = "closed"
 
 
 class VirtualPullRequestReviewDecision(str, enum.Enum):
     approved = "approved"
-    changes_requested = "changes_requested"
+    closed = "closed"
+    reopened = "reopened"
+    commented = "commented"
+
+
+class VirtualPullRequestThreadKind(str, enum.Enum):
+    general = "general"
+    inline = "inline"
+
+
+class VirtualPullRequestThreadStatus(str, enum.Enum):
+    open = "open"
+    resolved = "resolved"
+
+
+class VirtualPullRequestLineSide(str, enum.Enum):
+    old = "old"
+    new = "new"
 
 
 class Base(DeclarativeBase):
@@ -160,7 +178,6 @@ class TaskRecord(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    # agent name
     agent: Mapped[AgentName] = mapped_column(
         Enum(AgentName, native_enum=False),
         nullable=False,
@@ -174,6 +191,7 @@ class TaskRecord(Base):
     question: Mapped[str] = mapped_column(Text, nullable=False)
     repo: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     project: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    external_issue_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     requested_current_session_ctx: Mapped[list[dict[str, Any]]] = mapped_column(
         JSON,
         nullable=False,
@@ -186,11 +204,8 @@ class TaskRecord(Base):
         default=list,
         server_default=text("'[]'::json"),
     )
-    # Persisted replay checkpoint messages for task recovery.
-    checkpoint: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
-    # Lease token is regenerated on every dispatch attempt and must match when worker claims the task.
+    checkpoint: Mapped[list[ChatCompletionMessageParam] | None] = mapped_column(JSON, nullable=True)
     dispatch_token: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
-    # Lease expiry marks when a dispatched/running task is considered orphaned and recoverable.
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     status: Mapped[TaskStatus] = mapped_column(
         Enum(TaskStatus, native_enum=False, length=TASK_STATUS_VARCHAR_LENGTH),
@@ -346,5 +361,90 @@ class VirtualPullRequestReviewRecord(Base):
         DateTime(timezone=True),
         nullable=False,
         default=utc_now,
+        server_default=func.now(),
+    )
+
+
+class VirtualPullRequestThreadRecord(Base):
+    __tablename__ = "virtual_pull_request_thread"
+    __table_args__ = (
+        Index("ix_virtual_pull_request_thread_virtual_pr", "virtual_pr_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("task.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    virtual_pr_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("virtual_pull_request.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    kind: Mapped[VirtualPullRequestThreadKind] = mapped_column(
+        Enum(VirtualPullRequestThreadKind, native_enum=False, length=32),
+        nullable=False,
+    )
+    status: Mapped[VirtualPullRequestThreadStatus] = mapped_column(
+        Enum(VirtualPullRequestThreadStatus, native_enum=False, length=32),
+        nullable=False,
+        default=VirtualPullRequestThreadStatus.open,
+    )
+    file_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    start_line: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    end_line: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    line_side: Mapped[VirtualPullRequestLineSide | None] = mapped_column(
+        Enum(VirtualPullRequestLineSide, native_enum=False, length=16),
+        nullable=True,
+    )
+    diff_hunk: Mapped[str | None] = mapped_column(Text, nullable=True)
+    code_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+        server_default=func.now(),
+    )
+
+
+class VirtualPullRequestCommentRecord(Base):
+    __tablename__ = "virtual_pull_request_comment"
+    __table_args__ = (
+        Index("ix_virtual_pull_request_comment_thread", "thread_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    thread_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("virtual_pull_request_thread.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    parent_comment_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("virtual_pull_request_comment.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    author: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
         server_default=func.now(),
     )

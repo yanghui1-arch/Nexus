@@ -4,18 +4,13 @@ import httpx
 
 from mwin import track
 
-from src.logger import logger
 from src.sandbox import Sandbox
-from src.server.postgres.repositories import TaskWorkItemRepository
-from src.tools.nexus.context import NexusTaskContext
-from src.tools.nexus.git import git_stdout
 
 class GithubTools:
     """GitHub/git operations bound to a sandbox container."""
 
-    def __init__(self, sandbox: Sandbox, nexus_context: NexusTaskContext | None = None) -> None:
+    def __init__(self, sandbox: Sandbox) -> None:
         self._sandbox = sandbox
-        self._nexus_context = nexus_context
 
     @track(step_type="tool")
     async def fetch_from_github(
@@ -89,33 +84,7 @@ class GithubTools:
                 "branch": branch,
                 "message": result.get("stderr", "git command failed"),
             }
-        await self._capture_nexus_base_commit(local_path)
         return {"success": True, "path": local_path, "branch": branch, "message": message}
-
-    async def _capture_nexus_base_commit(self, local_path: str) -> None:
-        if self._nexus_context is None or self._nexus_context.current_work_item_id is None:
-            return
-
-        try:
-            base_commit = await git_stdout(self._sandbox, local_path, "rev-parse", "HEAD")
-            async with self._nexus_context.database.session() as session:
-                await TaskWorkItemRepository.capture_base_commit(
-                    session,
-                    self._nexus_context.current_work_item_id,
-                    base_commit=base_commit,
-                    local_path=local_path,
-                )
-            logger.info(
-                "Captured Nexus base commit %s for task %s work item %s.",
-                base_commit,
-                self._nexus_context.task_id,
-                self._nexus_context.current_work_item_id,
-            )
-        except Exception:
-            logger.exception(
-                "Failed to capture Nexus base commit for task %s.",
-                self._nexus_context.task_id,
-            )
 
 
     @track(step_type="tool")

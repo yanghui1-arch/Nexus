@@ -1,4 +1,4 @@
-export type TaskStatus = 'running' | 'waiting' | 'merged' | 'closed' | 'failed' | 'error';
+export type TaskStatus = 'running' | 'waiting_for_review' | 'merged' | 'closed' | 'failed' | 'error';
 export type AgentType = 'Tela' | 'Sophie';
 
 export interface LogEntry {

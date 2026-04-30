@@ -14,9 +14,7 @@ from src.server.postgres.repositories import (
     TaskWorkItemRepository,
     VirtualPullRequestRepository,
 )
-from src.tools.nexus.context import NexusTaskContext
-from src.tools.nexus.git import parse_numstat
-from src.tools.nexus.work_items import NexusReviewTools
+from src.tools.nexus.client import NexusReviewTools, NexusTaskContext, parse_numstat
 
 
 class FakeDatabase:
@@ -73,9 +71,24 @@ def test_create_task_work_items_uses_hidden_task_context(monkeypatch: pytest.Mon
     }
 
 
-def test_finish_current_task_work_item_requires_base_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_finish_current_task_work_item_infers_base_commit(monkeypatch: pytest.MonkeyPatch) -> None:
     work_item_id = uuid.uuid4()
     context = make_context(current_work_item_id=work_item_id)
+    sandbox = AsyncMock()
+
+    async def fake_run_shell(cmd: str) -> dict[str, Any]:
+        if "status --porcelain" in cmd:
+            return {"success": True, "stdout": "", "stderr": ""}
+        if "rev-parse HEAD" in cmd:
+            return {"success": True, "stdout": "head123\n", "stderr": ""}
+        if "merge-base" in cmd:
+            return {"success": True, "stdout": "base123\n", "stderr": ""}
+        if "--numstat" in cmd:
+            return {"success": True, "stdout": "", "stderr": ""}
+        return {"success": True, "stdout": "", "stderr": ""}
+
+    sandbox.run_shell = fake_run_shell
+    captured: dict[str, Any] = {}
 
     async def fake_get(session, requested_id):
         assert requested_id == work_item_id
@@ -84,19 +97,38 @@ def test_finish_current_task_work_item_requires_base_commit(monkeypatch: pytest.
             task_id=context.task_id,
             status=TaskWorkItemStatus.running,
             base_commit=None,
+            order_index=1,
             local_path="/workspace/repo",
         )
 
+    async def fake_upsert(session, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(id=uuid.uuid4())
+
+    async def fake_mark_ready(session, requested_id, *, summary, base_commit, head_commit, local_path):
+        captured["ready"] = {
+            "work_item_id": requested_id,
+            "summary": summary,
+            "base_commit": base_commit,
+            "head_commit": head_commit,
+            "local_path": local_path,
+        }
+        return None
+
     monkeypatch.setattr(TaskWorkItemRepository, "get", fake_get)
+    monkeypatch.setattr(VirtualPullRequestRepository, "upsert_for_work_item", fake_upsert)
+    monkeypatch.setattr(TaskWorkItemRepository, "mark_ready_for_review", fake_mark_ready)
 
     result = asyncio.run(
-        NexusReviewTools(AsyncMock(), context).finish_current_task_work_item(
+        NexusReviewTools(sandbox, context).finish_current_task_work_item(
             summary="Finished scoped change.",
         )
     )
 
-    assert result["success"] is False
-    assert "Missing base_commit" in result["message"]
+    assert result["success"] is True
+    assert captured["base_commit"] == "base123"
+    assert captured["head_commit"] == "head123"
+    assert captured["ready"]["base_commit"] == "base123"
 
 
 def test_finish_current_task_work_item_captures_diff_stats(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -131,11 +163,13 @@ def test_finish_current_task_work_item_captures_diff_stats(monkeypatch: pytest.M
         captured.update(kwargs)
         return SimpleNamespace(id=uuid.uuid4())
 
-    async def fake_mark_ready(session, requested_id, *, summary, head_commit):
+    async def fake_mark_ready(session, requested_id, *, summary, base_commit, head_commit, local_path):
         captured["ready"] = {
             "work_item_id": requested_id,
             "summary": summary,
+            "base_commit": base_commit,
             "head_commit": head_commit,
+            "local_path": local_path,
         }
         return None
 

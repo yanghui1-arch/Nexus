@@ -12,7 +12,7 @@ export type BadgeTone = 'default' | 'secondary' | 'destructive' | 'outline';
 export type FilterTab =
   | 'all'
   | 'running'
-  | 'waiting'
+  | 'waiting_for_review'
   | 'merged'
   | 'closed'
   | 'fail';
@@ -20,7 +20,7 @@ export type FilterTab =
 export const FILTERS: Array<{ key: FilterTab; label: string }> = [
   { key: 'all', label: 'All' },
   { key: 'running', label: 'Running' },
-  { key: 'waiting', label: 'Waiting' },
+  { key: 'waiting_for_review', label: 'Review' },
   { key: 'merged', label: 'Merged' },
   { key: 'closed', label: 'Closed' },
   { key: 'fail', label: 'Failed' },
@@ -35,8 +35,8 @@ export const STATUS_META: Record<
     icon: Loader2,
     badgeVariant: 'default',
   },
-  waiting: {
-    label: 'Waiting',
+  waiting_for_review: {
+    label: 'Waiting for Review',
     icon: Clock3,
     badgeVariant: 'secondary',
   },
@@ -65,7 +65,7 @@ export const STATUS_META: Record<
 export function countTasks(tasks: AgentTask[]) {
   return {
     running: tasks.filter(task => task.status === 'running').length,
-    waiting: tasks.filter(task => task.status === 'waiting').length,
+    waiting_for_review: tasks.filter(task => task.status === 'waiting_for_review').length,
     merged: tasks.filter(task => task.status === 'merged').length,
     closed: tasks.filter(task => task.status === 'closed').length,
     fail: tasks.filter(

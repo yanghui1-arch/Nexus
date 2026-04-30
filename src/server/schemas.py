@@ -13,10 +13,15 @@ from src.server.postgres.models import (
     TaskStatus,
     TaskWorkItemRecord,
     TaskWorkItemStatus,
+    VirtualPullRequestCommentRecord,
+    VirtualPullRequestLineSide,
     VirtualPullRequestRecord,
     VirtualPullRequestReviewDecision,
     VirtualPullRequestReviewRecord,
     VirtualPullRequestStatus,
+    VirtualPullRequestThreadKind,
+    VirtualPullRequestThreadRecord,
+    VirtualPullRequestThreadStatus,
     WorkspaceRecord,
 )
 
@@ -32,6 +37,7 @@ class TaskCreateRequest(BaseModel):
     question: str = Field(min_length=1)
     repo: str = Field(min_length=1)
     project: str | None = None
+    external_issue_url: str | None = Field(default=None, max_length=1024)
 
     @field_validator("question")
     @classmethod
@@ -48,6 +54,22 @@ class TaskCreateRequest(BaseModel):
         if not stripped:
             raise ValueError("repo cannot be empty")
         return stripped
+
+    @field_validator("project")
+    @classmethod
+    def validate_project(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+    @field_validator("external_issue_url")
+    @classmethod
+    def validate_external_issue_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
 
 
 class TaskConsultRequest(BaseModel):
@@ -81,8 +103,8 @@ class TaskStatusUpdateRequest(BaseModel):
     @field_validator("status")
     @classmethod
     def validate_status(cls, value: TaskStatus) -> TaskStatus:
-        if value not in {TaskStatus.merged, TaskStatus.closed}:
-            raise ValueError("status must be merged or closed")
+        if value not in {TaskStatus.waiting_for_review, TaskStatus.merged, TaskStatus.closed}:
+            raise ValueError("status must be waiting_for_review, merged, or closed")
         return value
 
 
@@ -95,6 +117,7 @@ class TaskResponse(BaseModel):
     question: str
     repo: str | None
     project: str | None
+    external_issue_url: str | None
     status: TaskStatus
     result: str | None
     error: str | None
@@ -112,6 +135,7 @@ class TaskResponse(BaseModel):
             question=task.question,
             repo=task.repo,
             project=task.project,
+            external_issue_url=task.external_issue_url,
             status=task.status,
             result=task.result,
             error=task.error,
@@ -216,6 +240,14 @@ class VirtualPullRequestReviewRequest(BaseModel):
     reviewer: str | None = Field(default=None, max_length=255)
     comment: str | None = None
 
+    @field_validator("comment")
+    @classmethod
+    def validate_comment(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
 
 class VirtualPullRequestReviewResponse(BaseModel):
     id: uuid.UUID
@@ -240,6 +272,138 @@ class VirtualPullRequestReviewResponse(BaseModel):
             comment=review.comment,
             created_at=review.created_at,
         )
+
+
+class ReviewQueueItemResponse(BaseModel):
+    task: TaskResponse
+    virtual_pr_count: int
+
+
+class TaskReviewSummaryResponse(BaseModel):
+    task: TaskResponse
+    work_items: list[TaskWorkItemResponse]
+    virtual_prs: list[VirtualPullRequestResponse]
+
+
+class VirtualPullRequestCommentCreateRequest(BaseModel):
+    author: str | None = Field(default=None, max_length=255)
+    parent_comment_id: uuid.UUID | None = None
+    body: str = Field(min_length=1)
+
+    @field_validator("body")
+    @classmethod
+    def validate_body(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("body cannot be empty")
+        return stripped
+
+
+class VirtualPullRequestCommentResponse(BaseModel):
+    id: uuid.UUID
+    thread_id: uuid.UUID
+    parent_comment_id: uuid.UUID | None
+    author: str | None
+    body: str
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_record(
+        cls,
+        comment: VirtualPullRequestCommentRecord,
+    ) -> "VirtualPullRequestCommentResponse":
+        return cls(
+            id=comment.id,
+            thread_id=comment.thread_id,
+            parent_comment_id=comment.parent_comment_id,
+            author=comment.author,
+            body=comment.body,
+            created_at=comment.created_at,
+            updated_at=comment.updated_at,
+        )
+
+
+class VirtualPullRequestThreadCreateRequest(BaseModel):
+    kind: VirtualPullRequestThreadKind
+    created_by: str | None = Field(default=None, max_length=255)
+    body: str = Field(min_length=1)
+    file_path: str | None = Field(default=None, max_length=1024)
+    start_line: int | None = Field(default=None, ge=1)
+    end_line: int | None = Field(default=None, ge=1)
+    line_side: VirtualPullRequestLineSide | None = None
+    diff_hunk: str | None = None
+
+    @field_validator("body")
+    @classmethod
+    def validate_body(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("body cannot be empty")
+        return stripped
+
+    @field_validator("file_path")
+    @classmethod
+    def validate_file_path(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+
+class VirtualPullRequestThreadUpdateRequest(BaseModel):
+    status: VirtualPullRequestThreadStatus
+
+
+class VirtualPullRequestThreadResponse(BaseModel):
+    id: uuid.UUID
+    task_id: uuid.UUID
+    virtual_pr_id: uuid.UUID
+    kind: VirtualPullRequestThreadKind
+    status: VirtualPullRequestThreadStatus
+    file_path: str | None
+    start_line: int | None
+    end_line: int | None
+    line_side: VirtualPullRequestLineSide | None
+    diff_hunk: str | None
+    code_snapshot: str | None
+    created_by: str | None
+    created_at: datetime
+    updated_at: datetime
+    comments: list[VirtualPullRequestCommentResponse]
+
+    @classmethod
+    def from_record(
+        cls,
+        thread: VirtualPullRequestThreadRecord,
+        comments: list[VirtualPullRequestCommentRecord],
+    ) -> "VirtualPullRequestThreadResponse":
+        return cls(
+            id=thread.id,
+            task_id=thread.task_id,
+            virtual_pr_id=thread.virtual_pr_id,
+            kind=thread.kind,
+            status=thread.status,
+            file_path=thread.file_path,
+            start_line=thread.start_line,
+            end_line=thread.end_line,
+            line_side=thread.line_side,
+            diff_hunk=thread.diff_hunk,
+            code_snapshot=thread.code_snapshot,
+            created_by=thread.created_by,
+            created_at=thread.created_at,
+            updated_at=thread.updated_at,
+            comments=[VirtualPullRequestCommentResponse.from_record(comment) for comment in comments],
+        )
+
+
+class VirtualPullRequestDetailResponse(BaseModel):
+    task: TaskResponse
+    work_item: TaskWorkItemResponse
+    virtual_pr: VirtualPullRequestResponse
+    diff: str
+    reviews: list[VirtualPullRequestReviewResponse]
+    threads: list[VirtualPullRequestThreadResponse]
 
 
 class AgentInstanceCreateRequest(BaseModel):

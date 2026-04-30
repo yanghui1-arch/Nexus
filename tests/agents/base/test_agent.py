@@ -124,40 +124,12 @@ class TestProcessCallback:
         agent._process_callback(None, status)
 
 
-class TestInitCurrentTurnCtx:
-    def test_order_system_history_current_user(self):
-        agent = make_agent()
-        system = {"role": "system", "content": "sys"}
-        history: list = [{"role": "user", "content": "hist"}]
-        current: list = [{"role": "assistant", "content": "curr"}]
-        user = {"role": "user", "content": "q"}
-
-        ctx = agent._init_current_turn_ctx(
-            system_message=system,
-            user_message=user,
-            current_session_ctx=current,
-            history_session_ctx=history,
-        )
-
-        assert ctx[0] == system
-        assert ctx[1] == history[0]
-        assert ctx[2] == current[0]
-        assert ctx[3] == user
-
-    def test_empty_history_and_current(self):
-        agent = make_agent()
-        system = {"role": "system", "content": "sys"}
-        user = {"role": "user", "content": "q"}
-        ctx = agent._init_current_turn_ctx(system, user, [], [])
-        assert ctx == [system, user]
-
-
 class TestWorkStop:
     async def test_returns_response_on_stop(self):
         agent = make_agent()
         set_step(agent, MagicMock(return_value=make_stop_result("final answer")))
 
-        result = await agent.work(question="q", current_session_ctx=[], history_session_ctx=[])
+        result = await agent.work(question="q", from_checkpoint=False)
 
         assert result.response == "final answer"
 
@@ -177,15 +149,15 @@ class TestWorkStop:
         set_step(agent, AsyncMock(side_effect=capture_step))
 
         result = await agent.work(
-            question="fresh question must not be appended",
-            current_session_ctx=[{"role": "assistant", "content": "fresh current"}],
-            history_session_ctx=[{"role": "user", "content": "fresh history"}],
+            question="continue from checkpoint",
             from_checkpoint=True,
             checkpoint=checkpoint,
         )
 
         assert result.response == "resumed answer"
-        assert captured_contexts == [checkpoint]
+        assert captured_contexts == [
+            [*checkpoint, {"role": "user", "content": "continue from checkpoint"}]
+        ]
 
     async def test_from_checkpoint_requires_checkpoint(self):
         agent = make_agent()
@@ -193,8 +165,6 @@ class TestWorkStop:
         with pytest.raises(AssertionError, match="Checkpoint is required when from_checkpoint=True"):
             await agent.work(
                 question="q",
-                current_session_ctx=[],
-                history_session_ctx=[],
                 from_checkpoint=True,
             )
 
@@ -205,8 +175,7 @@ class TestWorkStop:
 
         await agent.work(
             question="q",
-            current_session_ctx=[],
-            history_session_ctx=[],
+            from_checkpoint=False,
             update_process_callback=events.append,
         )
 
@@ -218,7 +187,7 @@ class TestWorkStop:
         agent = make_agent()
         set_step(agent, MagicMock(return_value=make_stop_result("done")))
 
-        result = await agent.work(question="q", current_session_ctx=[], history_session_ctx=[])
+        result = await agent.work(question="q", from_checkpoint=False)
 
         assert result.sop == "SOP string"
 
@@ -226,7 +195,7 @@ class TestWorkStop:
         agent = make_agent()
         set_step(agent, MagicMock(return_value=make_stop_result("done")))
 
-        result = await agent.work(question="q", current_session_ctx=[], history_session_ctx=[])
+        result = await agent.work(question="q", from_checkpoint=False)
         assert result.response == "done"
 
 
@@ -241,7 +210,7 @@ class TestWorkToolCalls:
             make_stop_result("done"),
         ]))
 
-        result = await agent.work(question="q", current_session_ctx=[], history_session_ctx=[])
+        result = await agent.work(question="q", from_checkpoint=False)
 
         sync_tool.assert_called_once_with(x=1)
         assert result.response == "done"
@@ -256,7 +225,7 @@ class TestWorkToolCalls:
             make_stop_result("done"),
         ]))
 
-        await agent.work(question="q", current_session_ctx=[], history_session_ctx=[])
+        await agent.work(question="q", from_checkpoint=False)
         async_tool.assert_awaited_once_with(y=2)
 
     async def test_process_callback_fired_on_tool_call(self):
@@ -271,8 +240,7 @@ class TestWorkToolCalls:
 
         await agent.work(
             question="q",
-            current_session_ctx=[],
-            history_session_ctx=[],
+            from_checkpoint=False,
             update_process_callback=events.append,
         )
 
@@ -304,7 +272,7 @@ class TestWorkToolCalls:
             make_stop_result("done"),
         ]))
 
-        await agent.work(question="q", current_session_ctx=[], history_session_ctx=[])
+        await agent.work(question="q", from_checkpoint=False)
         assert order.index("fast") < order.index("slow")
 
 
@@ -318,7 +286,7 @@ class TestWorkErrorHandling:
         ]))
 
         with patch("src.agents.base.agent.logger") as mock_logger:
-            result = await agent.work(question="q", current_session_ctx=[], history_session_ctx=[])
+            result = await agent.work(question="q", from_checkpoint=False)
 
         assert mock_logger.error.called or mock_logger.exception.called
         assert result.response == "done"
@@ -333,7 +301,7 @@ class TestWorkErrorHandling:
         ]))
 
         with patch("src.agents.base.agent.logger") as mock_logger:
-            result = await agent.work(question="q", current_session_ctx=[], history_session_ctx=[])
+            result = await agent.work(question="q", from_checkpoint=False)
 
         assert mock_logger.error.called or mock_logger.exception.called
         tool.assert_not_called()
@@ -350,8 +318,7 @@ class TestWorkMaxAttempts:
         events: list[WorkTempStatus] = []
         await agent.work(
             question="q",
-            current_session_ctx=[],
-            history_session_ctx=[],
+            from_checkpoint=False,
             update_process_callback=events.append,
         )
 
@@ -364,7 +331,7 @@ class TestWorkMaxAttempts:
         tc = make_tool_call("id1", "t", "{}")
         set_step(agent, MagicMock(return_value=make_tool_result([tc])))
 
-        result = await agent.work(question="q", current_session_ctx=[], history_session_ctx=[])
+        result = await agent.work(question="q", from_checkpoint=False)
 
         assert result.response == "partial progress"
 
@@ -380,7 +347,7 @@ class TestWorkMaxAttempts:
         ])
         set_step(agent, step_mock)
 
-        result = await agent.work(question="q", current_session_ctx=[], history_session_ctx=[])
+        result = await agent.work(question="q", from_checkpoint=False)
 
         assert result.response == "finally done"
         assert step_mock.call_count == 4

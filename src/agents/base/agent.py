@@ -88,22 +88,21 @@ class Agent(BaseModel):
     async def work(
         self,
         question: str,
-        current_session_ctx: List[ChatCompletionUserMessageParam | ChatCompletionAssistantMessageParam | ChatCompletionToolMessageParam],
-        history_session_ctx: List[ChatCompletionUserMessageParam | ChatCompletionAssistantMessageParam | ChatCompletionToolMessageParam],
-        update_process_callback: Callable[[WorkTempStatus], None] | None = None,
-        from_checkpoint: bool = False,
+        *,
+        from_checkpoint: bool,
         checkpoint: List[ChatCompletionMessageParam] | None = None,
+        update_process_callback: Callable[[WorkTempStatus], None] | None = None,
     ) -> BaseAgentResponse:
-        """ Agent start to work for question given current session and history session context
+        """Agent start to work for question.
+        If agent resumes from a checkpoint from_checkpoint=True and pass a list of ChatCompletionMessageParam - checkpoint which persists
+        system message, user message, assistant message and optional tool messages. The question is following by the checkpoint.
 
         Args:
             question: user question
-            current_session_ctx: current session context which will be added before question
-            history_session_ctx: history session context generally it keeps five
-            update_process_callback: callback to update agent work's state
             from_checkpoint: start from checkpoint instead of building a fresh context
             checkpoint: complete current turn context persisted at a safe replay boundary. 
                         It includes complete system, user, assistant and tool messages.
+            update_process_callback: callback to update agent work's state
         """
 
         terminate = False
@@ -113,16 +112,14 @@ class Agent(BaseModel):
         if from_checkpoint:
             assert checkpoint is not None, "Checkpoint is required when from_checkpoint=True"
             # copy a new checkpoint to prevent in-place edit checkpoint
-            current_turn_ctx: List[ChatCompletionMessageParam] = list(checkpoint)
+            user_message: ChatCompletionUserMessageParam = {"role": "user", "content": question}
+            current_turn_ctx: List[ChatCompletionMessageParam] = []
+            current_turn_ctx.extend(checkpoint)
+            current_turn_ctx.append(user_message)
         else:
             system_message: ChatCompletionSystemMessageParam = {"role": "system", "content": self.system_prompt}
             user_message: ChatCompletionUserMessageParam = {"role": "user", "content": question}
-            current_turn_ctx = self._init_current_turn_ctx(
-                system_message=system_message,
-                user_message=user_message,
-                current_session_ctx=current_session_ctx,
-                history_session_ctx=history_session_ctx,
-            )
+            current_turn_ctx = [system_message, user_message]
 
         self._process_callback(
             update_process_callback,
@@ -321,23 +318,6 @@ class Agent(BaseModel):
         completion: ChatCompletion = await self.openai_client.chat.completions.create(**kwargs)
         content = completion.choices[0].message.content
         return content
-
-    def _init_current_turn_ctx(
-        self,
-        system_message: ChatCompletionSystemMessageParam,
-        user_message: ChatCompletionUserMessageParam,
-        current_session_ctx: List[ChatCompletionUserMessageParam | ChatCompletionAssistantMessageParam | ChatCompletionToolMessageParam],
-        history_session_ctx: List[ChatCompletionUserMessageParam | ChatCompletionAssistantMessageParam | ChatCompletionToolMessageParam],
-    ) -> List[ChatCompletionMessageParam]:
-        """Initialize the current turn context
-        The turn context follows system + history + current_session + question in this turn.
-        """
-
-        context = [system_message]
-        context.extend(history_session_ctx)
-        context.extend(current_session_ctx)
-        context.append(user_message)
-        return context
 
     def _process_callback(
         self,

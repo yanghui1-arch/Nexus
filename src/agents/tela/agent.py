@@ -51,10 +51,13 @@ class Tela(CodeAgent):
     GITHUB_NICKNAME: ClassVar[str] = "Nexus-Tela"
     sandbox_config: SandboxConfig = PYTHON_312
     sandbox_workspace_key: str | None = None
-    nexus_task_context: NexusTaskContext | None = None
 
     _sandbox: Sandbox | None = PrivateAttr(default=None)
     _sandbox_pool_manager: SandboxPoolManager | None = PrivateAttr(default=None)
+    _nexus_task_context: NexusTaskContext | None = PrivateAttr(default=None)
+
+    def set_nexus_task_context(self, context: NexusTaskContext | None) -> None:
+        self._nexus_task_context = context
 
     async def __aenter__(self) -> "Tela":
         repo_url = f"https://github.com/{self.github_repo}" if self.github_repo else None
@@ -66,8 +69,8 @@ class Tela(CodeAgent):
         )
 
         sandbox_tools = SandboxToolKit(self._sandbox)
-        github_kit = GithubTools(self._sandbox, self.nexus_task_context)
-        nexus_kit = NexusReviewTools(self._sandbox, self.nexus_task_context)
+        github_kit = GithubTools(self._sandbox)
+        nexus_kit = NexusReviewTools(self._sandbox, self._nexus_task_context)
 
         kits = {}
         kits.update(sandbox_tools.all_tools)
@@ -116,6 +119,7 @@ class Tela(CodeAgent):
                 await self._sandbox.__aexit__(*args)
             self._sandbox = None
             self._sandbox_pool_manager = None
+        await self.close()
 
     @track(tags=["exec", "tela"], step_type="llm", llm_provider=LLMProvider.KIMI, system_prompt="Tela/step@0.1")
     async def step(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> BaseAgentStepResult:
@@ -169,7 +173,6 @@ class Tela(CodeAgent):
         github_token: str | None = None,
         sandbox_config: SandboxConfig = PYTHON_312,
         sandbox_workspace_key: str | None = None,
-        nexus_task_context: NexusTaskContext | None = None,
     ) -> "Tela":
         """Convenience factory with sensible defaults."""
         return cls(
@@ -184,5 +187,4 @@ class Tela(CodeAgent):
             github_token=github_token,
             sandbox_config=sandbox_config,
             sandbox_workspace_key=sandbox_workspace_key,
-            nexus_task_context=nexus_task_context,
         )

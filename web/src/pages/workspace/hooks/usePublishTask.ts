@@ -9,6 +9,7 @@ const EMPTY_COMPOSER_VALUES: WorkspaceComposerValues = {
   question: '',
   repo: '',
   project: '',
+  externalIssueUrl: '',
   agentInstanceId: '',
 };
 
@@ -56,6 +57,7 @@ export function usePublishTask({
     const question = composerValues.question.trim();
     const repo = composerValues.repo.trim();
     const project = composerValues.project.trim();
+    const externalIssueUrl = composerValues.externalIssueUrl.trim();
     const selectedAgent = agentInstances.find(
       agent => agent.id === composerValues.agentInstanceId,
     );
@@ -75,6 +77,7 @@ export function usePublishTask({
         question,
         repo,
         project: project || null,
+        external_issue_url: externalIssueUrl || null,
       });
 
       startTransition(() => {

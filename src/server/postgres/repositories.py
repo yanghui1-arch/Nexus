@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
+from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 from sqlalchemy import and_, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
@@ -16,10 +18,15 @@ from src.server.postgres.models import (
     TaskStatus,
     TaskWorkItemRecord,
     TaskWorkItemStatus,
+    VirtualPullRequestCommentRecord,
+    VirtualPullRequestLineSide,
     VirtualPullRequestRecord,
     VirtualPullRequestReviewDecision,
     VirtualPullRequestReviewRecord,
     VirtualPullRequestStatus,
+    VirtualPullRequestThreadKind,
+    VirtualPullRequestThreadRecord,
+    VirtualPullRequestThreadStatus,
     WorkspaceRecord,
     WorkspaceStatus,
 )
@@ -28,6 +35,90 @@ from src.server.postgres.models import (
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
+
+_HUNK_HEADER_RE = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+
+
+def _normalize_diff_path(value: str) -> str | None:
+    trimmed = value.strip()
+    if not trimmed or trimmed == "/dev/null":
+        return None
+    if trimmed.startswith(("a/", "b/")):
+        return trimmed[2:]
+    return trimmed
+
+
+def _diff_file_matches(file_path: str, old_path: str | None, new_path: str | None) -> bool:
+    if old_path and new_path and old_path != new_path:
+        display_path = f"{old_path} \u2192 {new_path}"
+    else:
+        display_path = new_path or old_path
+
+    candidates = [path for path in (old_path, new_path, display_path) if path]
+    return any(candidate == file_path or candidate.endswith(file_path) for candidate in candidates)
+
+
+def _extract_code_snapshot(
+    raw_diff: str | None,
+    *,
+    file_path: str | None,
+    start_line: int | None,
+    end_line: int | None,
+    line_side: VirtualPullRequestLineSide | None,
+) -> str | None:
+    if not raw_diff or not file_path or start_line is None or line_side is None:
+        return None
+
+    lower_line = min(start_line, end_line or start_line)
+    upper_line = max(start_line, end_line or start_line)
+    captured: list[str] = []
+    old_path: str | None = None
+    new_path: str | None = None
+    old_line_number = 0
+    new_line_number = 0
+    in_target_file = False
+
+    def capture(line_number: int | None, raw_line: str) -> None:
+        if line_number is not None and lower_line <= line_number <= upper_line:
+            captured.append(raw_line)
+
+    for line in raw_diff.replace("\r\n", "\n").split("\n"):
+        if line.startswith("diff --git "):
+            parts = line.split(" ")
+            old_path = _normalize_diff_path(parts[2]) if len(parts) > 2 else None
+            new_path = _normalize_diff_path(parts[3]) if len(parts) > 3 else None
+            in_target_file = False
+            continue
+        if line.startswith("--- "):
+            old_path = _normalize_diff_path(line[4:])
+            continue
+        if line.startswith("+++ "):
+            new_path = _normalize_diff_path(line[4:])
+            continue
+        if line.startswith("@@ "):
+            match = _HUNK_HEADER_RE.match(line)
+            old_line_number = int(match.group(1)) if match else 0
+            new_line_number = int(match.group(2)) if match else 0
+            in_target_file = _diff_file_matches(file_path, old_path, new_path)
+            continue
+        if not in_target_file:
+            continue
+
+        if line.startswith("+") and not line.startswith("+++"):
+            capture(new_line_number if line_side == VirtualPullRequestLineSide.new else None, line)
+            new_line_number += 1
+            continue
+        if line.startswith("-") and not line.startswith("---"):
+            capture(old_line_number if line_side == VirtualPullRequestLineSide.old else None, line)
+            old_line_number += 1
+            continue
+        if line.startswith(" "):
+            line_number = new_line_number if line_side == VirtualPullRequestLineSide.new else old_line_number
+            capture(line_number, line)
+            old_line_number += 1
+            new_line_number += 1
+
+    return "\n".join(captured) if captured else None
 
 
 class AgentInstanceRepository:
@@ -193,6 +284,7 @@ class TaskRepository:
         question: str,
         repo: str | None,
         project: str | None,
+        external_issue_url: str | None,
         current_session_ctx: list[dict[str, Any]],
         history_session_ctx: list[dict[str, Any]],
     ) -> TaskRecord:
@@ -202,6 +294,7 @@ class TaskRepository:
             question=question,
             repo=repo,
             project=project,
+            external_issue_url=external_issue_url,
             requested_current_session_ctx=list(current_session_ctx),
             requested_history_session_ctx=list(history_session_ctx),
             status=TaskStatus.queued,
@@ -237,6 +330,30 @@ class TaskRepository:
             query = query.where(TaskRecord.project == project)
 
         query = query.order_by(TaskRecord.created_at.desc()).limit(limit)
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_review_queue(
+        session: AsyncSession,
+        *,
+        limit: int = 200,
+    ) -> list[TaskRecord]:
+        query = (
+            select(TaskRecord)
+            .where(
+                TaskRecord.status.in_(
+                    [
+                        TaskStatus.waiting_for_review,
+                        TaskStatus.waiting_for_merge,
+                        TaskStatus.merged,
+                        TaskStatus.closed,
+                    ]
+                )
+            )
+            .order_by(TaskRecord.updated_at.desc(), TaskRecord.created_at.desc())
+            .limit(limit)
+        )
         result = await session.execute(query)
         return list(result.scalars().all())
 
@@ -407,7 +524,7 @@ class TaskRepository:
         session: AsyncSession,
         task_id: uuid.UUID,
         *,
-        checkpoint: list[Any] | None,
+        checkpoint: list[ChatCompletionMessageParam] | None,
     ) -> TaskRecord | None:
         task = await session.get(TaskRecord, task_id)
         if task is None:
@@ -446,7 +563,7 @@ class TaskRepository:
         return task
 
     @staticmethod
-    async def set_waiting(
+    async def set_waiting_for_review(
         session: AsyncSession,
         task_id: uuid.UUID,
         *,
@@ -457,7 +574,7 @@ class TaskRepository:
             return None
 
         now = utc_now()
-        task.status = TaskStatus.waiting
+        task.status = TaskStatus.waiting_for_review
         task.result = result
         task.error = None
         task.finished_at = None
@@ -623,21 +740,17 @@ class TaskWorkItemRepository:
         session: AsyncSession,
         task_id: uuid.UUID,
     ) -> TaskWorkItemRecord | None:
-        for status in (TaskWorkItemStatus.changes_requested, TaskWorkItemStatus.pending):
-            query = (
-                select(TaskWorkItemRecord)
-                .where(
-                    TaskWorkItemRecord.task_id == task_id,
-                    TaskWorkItemRecord.status == status,
-                )
-                .order_by(TaskWorkItemRecord.order_index.asc())
-                .limit(1)
+        query = (
+            select(TaskWorkItemRecord)
+            .where(
+                TaskWorkItemRecord.task_id == task_id,
+                TaskWorkItemRecord.status == TaskWorkItemStatus.pending,
             )
-            result = await session.execute(query)
-            work_item = result.scalar_one_or_none()
-            if work_item is not None:
-                return work_item
-        return None
+            .order_by(TaskWorkItemRecord.order_index.asc())
+            .limit(1)
+        )
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
 
     @staticmethod
     async def set_running(
@@ -653,8 +766,9 @@ class TaskWorkItemRepository:
         work_item.status = TaskWorkItemStatus.running
         work_item.summary = None
         if previous_status == TaskWorkItemStatus.pending:
-            work_item.base_commit = None
             work_item.local_path = None
+            previous_item = await TaskWorkItemRepository.get_previous(session, work_item)
+            work_item.base_commit = previous_item.head_commit if previous_item else None
         work_item.head_commit = None
         work_item.started_at = now
         work_item.finished_at = None
@@ -663,25 +777,18 @@ class TaskWorkItemRepository:
         await session.refresh(work_item)
         return work_item
 
-    @staticmethod
-    async def capture_base_commit(
+    async def get_previous(
         session: AsyncSession,
-        work_item_id: uuid.UUID,
-        *,
-        base_commit: str,
-        local_path: str,
+        work_item: TaskWorkItemRecord,
     ) -> TaskWorkItemRecord | None:
-        work_item = await session.get(TaskWorkItemRecord, work_item_id)
-        if work_item is None:
+        if work_item.order_index <= 1:
             return None
-
-        if work_item.base_commit is None:
-            work_item.base_commit = base_commit
-        work_item.local_path = local_path
-        work_item.updated_at = utc_now()
-        await session.commit()
-        await session.refresh(work_item)
-        return work_item
+        query = select(TaskWorkItemRecord).where(
+            TaskWorkItemRecord.task_id == work_item.task_id,
+            TaskWorkItemRecord.order_index == work_item.order_index - 1,
+        )
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
 
     @staticmethod
     async def mark_ready_for_review(
@@ -689,7 +796,9 @@ class TaskWorkItemRepository:
         work_item_id: uuid.UUID,
         *,
         summary: str,
+        base_commit: str,
         head_commit: str,
+        local_path: str,
     ) -> TaskWorkItemRecord | None:
         work_item = await session.get(TaskWorkItemRecord, work_item_id)
         if work_item is None:
@@ -698,7 +807,9 @@ class TaskWorkItemRepository:
         now = utc_now()
         work_item.status = TaskWorkItemStatus.ready_for_review
         work_item.summary = summary
+        work_item.base_commit = base_commit
         work_item.head_commit = head_commit
+        work_item.local_path = local_path
         work_item.finished_at = now
         work_item.updated_at = now
         await session.commit()
@@ -717,24 +828,27 @@ class TaskWorkItemRepository:
         )
 
     @staticmethod
-    async def mark_changes_requested(
+    async def mark_closed(
         session: AsyncSession,
         work_item_id: uuid.UUID,
     ) -> TaskWorkItemRecord | None:
         return await TaskWorkItemRepository._set_status(
             session,
             work_item_id,
-            status=TaskWorkItemStatus.changes_requested,
+            status=TaskWorkItemStatus.closed,
         )
 
     @staticmethod
-    async def all_approved(session: AsyncSession, task_id: uuid.UUID) -> bool:
-        work_items = await TaskWorkItemRepository.list_by_task(session, task_id)
-        return bool(work_items) and all(
-            work_item.status == TaskWorkItemStatus.approved for work_item in work_items
+    async def reopen_for_review(
+        session: AsyncSession,
+        work_item_id: uuid.UUID,
+    ) -> TaskWorkItemRecord | None:
+        return await TaskWorkItemRepository._set_status(
+            session,
+            work_item_id,
+            status=TaskWorkItemStatus.ready_for_review,
         )
 
-    @staticmethod
     async def _set_status(
         session: AsyncSession,
         work_item_id: uuid.UUID,
@@ -843,8 +957,10 @@ class VirtualPullRequestRepository:
 
         if decision == VirtualPullRequestReviewDecision.approved:
             virtual_pr.status = VirtualPullRequestStatus.approved
-        else:
-            virtual_pr.status = VirtualPullRequestStatus.changes_requested
+        elif decision == VirtualPullRequestReviewDecision.closed:
+            virtual_pr.status = VirtualPullRequestStatus.closed
+        elif decision == VirtualPullRequestReviewDecision.reopened:
+            virtual_pr.status = VirtualPullRequestStatus.ready_for_review
         virtual_pr.updated_at = utc_now()
 
         review = VirtualPullRequestReviewRecord(
@@ -858,3 +974,155 @@ class VirtualPullRequestRepository:
         await session.commit()
         await session.refresh(review)
         return review
+
+    @staticmethod
+    async def list_reviews_by_virtual_pr(
+        session: AsyncSession,
+        virtual_pr_id: uuid.UUID,
+    ) -> list[VirtualPullRequestReviewRecord]:
+        query = (
+            select(VirtualPullRequestReviewRecord)
+            .where(VirtualPullRequestReviewRecord.virtual_pr_id == virtual_pr_id)
+            .order_by(VirtualPullRequestReviewRecord.created_at.asc())
+        )
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+
+class VirtualPullRequestThreadRepository:
+    @staticmethod
+    async def list_by_virtual_pr(
+        session: AsyncSession,
+        virtual_pr_id: uuid.UUID,
+    ) -> list[VirtualPullRequestThreadRecord]:
+        query = (
+            select(VirtualPullRequestThreadRecord)
+            .where(VirtualPullRequestThreadRecord.virtual_pr_id == virtual_pr_id)
+            .order_by(VirtualPullRequestThreadRecord.created_at.asc())
+        )
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def get(
+        session: AsyncSession,
+        thread_id: uuid.UUID,
+    ) -> VirtualPullRequestThreadRecord | None:
+        return await session.get(VirtualPullRequestThreadRecord, thread_id)
+
+    @staticmethod
+    async def create(
+        session: AsyncSession,
+        *,
+        task_id: uuid.UUID,
+        virtual_pr_id: uuid.UUID,
+        kind: VirtualPullRequestThreadKind,
+        created_by: str | None,
+        body: str,
+        file_path: str | None = None,
+        start_line: int | None = None,
+        end_line: int | None = None,
+        line_side: VirtualPullRequestLineSide | None = None,
+        diff_hunk: str | None = None,
+    ) -> tuple[VirtualPullRequestThreadRecord, VirtualPullRequestCommentRecord] | None:
+        virtual_pr = await session.get(VirtualPullRequestRecord, virtual_pr_id)
+        if virtual_pr is None or virtual_pr.task_id != task_id:
+            return None
+
+        thread = VirtualPullRequestThreadRecord(
+            task_id=task_id,
+            virtual_pr_id=virtual_pr_id,
+            kind=kind,
+            status=VirtualPullRequestThreadStatus.open,
+            file_path=file_path,
+            start_line=start_line,
+            end_line=end_line,
+            line_side=line_side,
+            diff_hunk=diff_hunk,
+            code_snapshot=_extract_code_snapshot(
+                virtual_pr.diff,
+                file_path=file_path,
+                start_line=start_line,
+                end_line=end_line,
+                line_side=line_side,
+            ),
+            created_by=created_by,
+        )
+        session.add(thread)
+        await session.flush()
+
+        comment = VirtualPullRequestCommentRecord(
+            thread_id=thread.id,
+            author=created_by,
+            body=body,
+        )
+        session.add(comment)
+        await session.commit()
+        await session.refresh(thread)
+        await session.refresh(comment)
+        return thread, comment
+
+    @staticmethod
+    async def update_status(
+        session: AsyncSession,
+        *,
+        virtual_pr_id: uuid.UUID,
+        thread_id: uuid.UUID,
+        status: VirtualPullRequestThreadStatus,
+    ) -> VirtualPullRequestThreadRecord | None:
+        thread = await session.get(VirtualPullRequestThreadRecord, thread_id)
+        if thread is None or thread.virtual_pr_id != virtual_pr_id:
+            return None
+        thread.status = status
+        thread.updated_at = utc_now()
+        await session.commit()
+        await session.refresh(thread)
+        return thread
+
+    @staticmethod
+    async def add_comment(
+        session: AsyncSession,
+        *,
+        thread_id: uuid.UUID,
+        author: str | None,
+        parent_comment_id: uuid.UUID | None = None,
+        body: str,
+    ) -> VirtualPullRequestCommentRecord | None:
+        thread = await session.get(VirtualPullRequestThreadRecord, thread_id)
+        if thread is None:
+            return None
+
+        if parent_comment_id is not None:
+            parent_comment = await session.get(VirtualPullRequestCommentRecord, parent_comment_id)
+            if parent_comment is None or parent_comment.thread_id != thread_id:
+                return None
+
+        comment = VirtualPullRequestCommentRecord(
+            thread_id=thread_id,
+            parent_comment_id=parent_comment_id,
+            author=author,
+            body=body,
+        )
+        thread.updated_at = utc_now()
+        session.add(comment)
+        await session.commit()
+        await session.refresh(comment)
+        return comment
+
+
+class VirtualPullRequestCommentRepository:
+    @staticmethod
+    async def list_by_thread_ids(
+        session: AsyncSession,
+        thread_ids: list[uuid.UUID],
+    ) -> list[VirtualPullRequestCommentRecord]:
+        if not thread_ids:
+            return []
+
+        query = (
+            select(VirtualPullRequestCommentRecord)
+            .where(VirtualPullRequestCommentRecord.thread_id.in_(thread_ids))
+            .order_by(VirtualPullRequestCommentRecord.created_at.asc())
+        )
+        result = await session.execute(query)
+        return list(result.scalars().all())

@@ -36,7 +36,7 @@ const createTask = (
 ): AgentTask => {
   const baseTime = new Date(now.getTime() - offsetMinutes * 60000);
   const actualDuration = duration ?? (Math.floor(Math.random() * 300) + 60);
-  const isActive = status === 'running' || status === 'waiting';
+  const isActive = status === 'running' || status === 'waiting_for_review';
   const branches = ['main', 'feature/auth', 'fix/bug-123', 'feat/api-v2'];
 
   return {
@@ -70,8 +70,8 @@ const nexusAgents: Agent[] = [
     id: 'sophie-1', name: 'Sophie-1', agentType: 'Sophie', status: 'busy',
     currentTask: createTask('s1-t1', 'Implement React dashboard component', 'running', 'Sophie', 'Sophie-1', nexusRepo, 5),
     taskQueue: [
-      createTask('s1-t2', 'Add unit tests for dashboard', 'waiting', 'Sophie', 'Sophie-1', nexusRepo, 0),
-      createTask('s1-t3', 'Update Tailwind config for new design tokens', 'waiting', 'Sophie', 'Sophie-1', nexusRepo, 0),
+      createTask('s1-t2', 'Add unit tests for dashboard', 'waiting_for_review', 'Sophie', 'Sophie-1', nexusRepo, 0),
+      createTask('s1-t3', 'Update Tailwind config for new design tokens', 'waiting_for_review', 'Sophie', 'Sophie-1', nexusRepo, 0),
     ],
     completedTasks: [
       createTask('s1-t0', 'Fix TypeScript errors in auth module', 'merged', 'Sophie', 'Sophie-1', nexusRepo, 45, 120, undefined, 'https://github.com/yanghui1-arch/Nexus/pull/14'),
@@ -81,7 +81,7 @@ const nexusAgents: Agent[] = [
     id: 'sophie-2', name: 'Sophie-2', agentType: 'Sophie', status: 'busy',
     currentTask: createTask('s2-t1', 'Refactor API client with React Query', 'running', 'Sophie', 'Sophie-2', nexusRepo, 12),
     taskQueue: [
-      createTask('s2-t2', 'Write Storybook stories for Button component', 'waiting', 'Sophie', 'Sophie-2', nexusRepo, 0),
+      createTask('s2-t2', 'Write Storybook stories for Button component', 'waiting_for_review', 'Sophie', 'Sophie-2', nexusRepo, 0),
     ],
     completedTasks: [
       createTask('s2-t0', 'Migrate pages to new router', 'merged', 'Sophie', 'Sophie-2', nexusRepo, 90, 300, undefined, 'https://github.com/yanghui1-arch/Nexus/pull/12'),
@@ -92,7 +92,7 @@ const nexusAgents: Agent[] = [
     id: 'tela-1', name: 'Tela-1', agentType: 'Tela', status: 'busy',
     currentTask: createTask('t1-t1', 'Implement GitHub fork polling in _ensure_fork', 'running', 'Tela', 'Tela-1', nexusRepo, 3),
     taskQueue: [
-      createTask('t1-t2', 'Add retry logic to sandbox pool manager', 'waiting', 'Tela', 'Tela-1', nexusRepo, 0),
+      createTask('t1-t2', 'Add retry logic to sandbox pool manager', 'waiting_for_review', 'Tela', 'Tela-1', nexusRepo, 0),
     ],
     completedTasks: [
       createTask('t1-t0', 'Refactor agent base class compact method', 'merged', 'Tela', 'Tela-1', nexusRepo, 30, 180, undefined, 'https://github.com/yanghui1-arch/Nexus/pull/20'),
@@ -102,8 +102,8 @@ const nexusAgents: Agent[] = [
     id: 'tela-2', name: 'Tela-2', agentType: 'Tela', status: 'busy',
     currentTask: createTask('t2-t1', 'Write pytest suite for sandbox tools', 'running', 'Tela', 'Tela-2', nexusRepo, 8),
     taskQueue: [
-      createTask('t2-t2', 'Profile memory usage in SandboxPoolManager', 'waiting', 'Tela', 'Tela-2', nexusRepo, 0),
-      createTask('t2-t3', 'Add structured logging to agent steps', 'waiting', 'Tela', 'Tela-2', nexusRepo, 0),
+      createTask('t2-t2', 'Profile memory usage in SandboxPoolManager', 'waiting_for_review', 'Tela', 'Tela-2', nexusRepo, 0),
+      createTask('t2-t3', 'Add structured logging to agent steps', 'waiting_for_review', 'Tela', 'Tela-2', nexusRepo, 0),
     ],
     completedTasks: [
       createTask('t2-t0', 'Fix SHA-256 fingerprint for repo reuse', 'merged', 'Tela', 'Tela-2', nexusRepo, 50, 240, undefined, 'https://github.com/yanghui1-arch/Nexus/pull/19'),
@@ -120,8 +120,8 @@ const docsAgents: Agent[] = [
     id: 'sophie-3', name: 'Sophie-3', agentType: 'Sophie', status: 'online',
     currentTask: undefined,
     taskQueue: [
-      createTask('s3-t1', 'Implement dark mode toggle', 'waiting', 'Sophie', 'Sophie-3', docsRepo, 0),
-      createTask('s3-t2', 'Write component API docs page', 'waiting', 'Sophie', 'Sophie-3', docsRepo, 0),
+      createTask('s3-t1', 'Implement dark mode toggle', 'waiting_for_review', 'Sophie', 'Sophie-3', docsRepo, 0),
+      createTask('s3-t2', 'Write component API docs page', 'waiting_for_review', 'Sophie', 'Sophie-3', docsRepo, 0),
     ],
     completedTasks: [
       createTask('s3-t0', 'Add accessibility attributes to modals', 'merged', 'Sophie', 'Sophie-3', docsRepo, 120, 90, undefined, 'https://github.com/yanghui1-arch/Nexus-Docs/pull/8'),
@@ -132,7 +132,7 @@ const docsAgents: Agent[] = [
     id: 'tela-3', name: 'Tela-3', agentType: 'Tela', status: 'online',
     currentTask: undefined,
     taskQueue: [
-      createTask('t3-t1', 'Implement token refresh for GitHub auth', 'waiting', 'Tela', 'Tela-3', docsRepo, 0),
+      createTask('t3-t1', 'Implement token refresh for GitHub auth', 'waiting_for_review', 'Tela', 'Tela-3', docsRepo, 0),
     ],
     completedTasks: [
       createTask('t3-t0', 'Add httpx retry middleware', 'merged', 'Tela', 'Tela-3', docsRepo, 100, 150, undefined, 'https://github.com/yanghui1-arch/Nexus-Docs/pull/6'),
@@ -161,7 +161,7 @@ const vllmAgents: Agent[] = [
     id: 'tela-4', name: 'Tela-4', agentType: 'Tela', status: 'busy',
     currentTask: createTask('t4-t1', 'Run inference benchmarks on A100 cluster', 'running', 'Tela', 'Tela-4', vllmRepo, 15),
     taskQueue: [
-      createTask('t4-t2', 'Generate latency report from profiler output', 'waiting', 'Tela', 'Tela-4', vllmRepo, 0),
+      createTask('t4-t2', 'Generate latency report from profiler output', 'waiting_for_review', 'Tela', 'Tela-4', vllmRepo, 0),
     ],
     completedTasks: [
       createTask('t4-t0', 'Implement sandbox Docker cleanup cron', 'merged', 'Tela', 'Tela-4', vllmRepo, 200, 360, undefined, 'https://github.com/yanghui1-arch/vLLM-Analysis/pull/4'),
@@ -173,7 +173,7 @@ const vllmAgents: Agent[] = [
     id: 'tela-5', name: 'Tela-5', agentType: 'Tela', status: 'online',
     currentTask: undefined,
     taskQueue: [
-      createTask('t5-t1', 'Summarise token throughput across model sizes', 'waiting', 'Tela', 'Tela-5', vllmRepo, 0),
+      createTask('t5-t1', 'Summarise token throughput across model sizes', 'waiting_for_review', 'Tela', 'Tela-5', vllmRepo, 0),
     ],
     completedTasks: [
       createTask('t5-t0', 'Scrape vLLM benchmark results from CI logs', 'merged', 'Tela', 'Tela-5', vllmRepo, 100, 270, undefined, 'https://github.com/yanghui1-arch/vLLM-Analysis/pull/2'),

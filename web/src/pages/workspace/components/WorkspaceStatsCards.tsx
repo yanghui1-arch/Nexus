@@ -19,7 +19,10 @@ type WorkspaceStatsCardsProps = {
 
 export function WorkspaceStatsCards({ tasks }: WorkspaceStatsCardsProps) {
   const activeCount = tasks.filter(
-    task => task.status === 'running' || task.status === 'waiting_for_merge',
+    task =>
+      task.status === 'running' ||
+      task.status === 'waiting_for_review' ||
+      task.status === 'waiting_for_merge',
   ).length;
   const queuedCount = tasks.filter(task => task.status === 'queued').length;
   const failedCount = tasks.filter(task => task.status === 'failed').length;
@@ -36,7 +39,7 @@ export function WorkspaceStatsCards({ tasks }: WorkspaceStatsCardsProps) {
         </CardHeader>
         <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
-          Running or awaiting merge
+          Running or awaiting review
         </CardContent>
       </Card>
 

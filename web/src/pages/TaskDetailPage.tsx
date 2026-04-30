@@ -1,6 +1,6 @@
 import { startTransition, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import { AlertCircle, CheckCircle2, FileText, GitBranch, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FileText, GitBranch } from 'lucide-react';
 import { getErrorDetail, ApiError } from '@/api/client';
 import {
   getTask,
@@ -109,13 +109,13 @@ const WORK_ITEM_STATUS_LABEL: Record<ApiTaskWorkItem['status'], string> = {
   running: 'Running',
   ready_for_review: 'Ready for Review',
   approved: 'Approved',
-  changes_requested: 'Changes Requested',
+  closed: 'Closed',
 };
 
 const VIRTUAL_PR_STATUS_LABEL: Record<ApiVirtualPullRequest['status'], string> = {
   ready_for_review: 'Ready for Review',
   approved: 'Approved',
-  changes_requested: 'Changes Requested',
+  closed: 'Closed',
 };
 
 function shortCommit(value: string | null | undefined): string {
@@ -142,7 +142,7 @@ function ReviewPanel({
   diffByVirtualPrId: Record<string, string>;
   activeActionId: string | null;
   onLoadDiff: (virtualPrId: string) => void;
-  onReview: (virtualPrId: string, decision: 'approved' | 'changes_requested') => void;
+  onReview: (virtualPrId: string, decision: 'approved') => void;
 }) {
   const workItemById = new Map(workItems.map((item) => [item.id, item]));
 
@@ -171,7 +171,7 @@ function ReviewPanel({
                       {item.description}
                     </p>
                   </div>
-                  <Badge variant={item.status === 'changes_requested' ? 'destructive' : 'secondary'}>
+                  <Badge variant="secondary">
                     {WORK_ITEM_STATUS_LABEL[item.status]}
                   </Badge>
                 </div>
@@ -203,7 +203,7 @@ function ReviewPanel({
                         {virtualPr.summary}
                       </p>
                     </div>
-                    <Badge variant={virtualPr.status === 'changes_requested' ? 'destructive' : 'outline'}>
+                    <Badge variant="outline">
                       {VIRTUAL_PR_STATUS_LABEL[virtualPr.status]}
                     </Badge>
                   </div>
@@ -238,16 +238,6 @@ function ReviewPanel({
                     >
                       <CheckCircle2 className="size-3.5" />
                       Approve
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={!canReview || activeActionId === virtualPr.id}
-                      onClick={() => onReview(virtualPr.id, 'changes_requested')}
-                    >
-                      <XCircle className="size-3.5" />
-                      Request changes
                     </Button>
                   </div>
                   {diffByVirtualPrId[virtualPr.id] ? (
@@ -482,7 +472,7 @@ export default function TaskDetailPage() {
 
   const submitVirtualPrReview = async (
     virtualPrId: string,
-    decision: 'approved' | 'changes_requested',
+    decision: 'approved',
   ) => {
     if (!task) {
       return;

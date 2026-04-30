@@ -15,6 +15,7 @@ export type WorkspaceComposerValues = {
   question: string;
   repo: string;
   project: string;
+  externalIssueUrl: string;
   agentInstanceId: string;
 };
 
@@ -59,7 +60,7 @@ export type BadgeTone = 'default' | 'secondary' | 'destructive' | 'outline';
 export const STATUS_ORDER: ApiTaskStatus[] = [
   'queued',
   'running',
-  'waiting',
+  'waiting_for_review',
   'waiting_for_merge',
   'merged',
   'closed',
@@ -80,8 +81,8 @@ export const STATUS_META: Record<
     icon: Loader2,
     badgeVariant: 'default',
   },
-  waiting: {
-    label: 'Review',
+  waiting_for_review: {
+    label: 'Waiting for Review',
     icon: GitBranch,
     badgeVariant: 'secondary',
   },
@@ -134,7 +135,7 @@ export function sortTasksForBoard(tasks: WorkspaceTaskView[]): WorkspaceTaskView
 
 const TRACKING_PRIORITY: Record<ApiTaskStatus, number> = {
   running: 0,
-  waiting: 1,
+  waiting_for_review: 1,
   waiting_for_merge: 2,
   queued: 3,
   merged: 4,
