@@ -143,6 +143,19 @@ services:
     networks:
       - nexus-net
 
+  nexus-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: nexus-web:latest
+    restart: unless-stopped
+    ports:
+      - "${NEXUS_WEB_PORT:-8080}:80"
+    depends_on:
+      - nexus-api
+    networks:
+      - nexus-net
+
 # ── Persistent volumes ────────────────────────────────────────────────────────
 
 volumes:
