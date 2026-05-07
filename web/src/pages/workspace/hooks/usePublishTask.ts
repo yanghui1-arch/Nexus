@@ -2,8 +2,8 @@ import { startTransition, useEffect, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { getErrorDetail } from '@/api/client';
 import { createTask } from '@/api/tasks';
-import type { WorkspaceComposerValues } from '../utils';
-import type { WorkspaceData } from './useWorkspaceData';
+import type { WorkspaceRecordsData } from '@/lib/useWorkspaceRecords';
+import type { WorkspaceComposerValues } from '../types';
 
 const EMPTY_COMPOSER_VALUES: WorkspaceComposerValues = {
   question: '',
@@ -14,7 +14,7 @@ const EMPTY_COMPOSER_VALUES: WorkspaceComposerValues = {
 };
 
 type UsePublishTaskInput = Pick<
-  WorkspaceData,
+  WorkspaceRecordsData,
   'agentInstances' | 'agentOptions' | 'reload'
 >;
 

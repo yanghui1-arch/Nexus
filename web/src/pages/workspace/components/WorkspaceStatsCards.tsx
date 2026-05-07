@@ -4,7 +4,6 @@ import {
   Clock3,
   Loader2,
 } from 'lucide-react';
-import type { WorkspaceTaskView } from '../utils';
 import {
   Card,
   CardContent,
@@ -12,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import type { WorkspaceTaskView } from '@/lib/workspace-task-view';
 
 type WorkspaceStatsCardsProps = {
   tasks: WorkspaceTaskView[];

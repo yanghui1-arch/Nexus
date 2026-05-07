@@ -1,13 +1,11 @@
 import type { FormEvent } from 'react';
-import type {
-  WorkspaceAgentOption,
-  WorkspaceComposerValues,
-} from '../utils';
+import type { WorkspaceAgentOption } from '@/lib/workspace-task-view';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import type { WorkspaceComposerValues } from '../types';
 
 type WorkspaceComposerCardProps = {
   value: WorkspaceComposerValues;

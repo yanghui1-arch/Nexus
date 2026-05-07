@@ -4,6 +4,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Toaster } from '@/components/ui/toaster';
 import LogPage from './pages/LogPage';
 import { NexusReviewPage } from './pages/nexus-review';
+import TaskBoardPage from './pages/task-board';
 import TaskDetailPage from './pages/TaskDetailPage';
 import WorkspacePage from './pages/workspace';
 
@@ -34,6 +35,7 @@ function App() {
             path="/workspace/code-review/nexus/tasks/:taskId"
             element={<NexusReviewPage mode="task" />}
           />
+          <Route path="/workspace/task-board" element={<TaskBoardPage />} />
           <Route path="/workspace/:section" element={<WorkspacePage />} />
 
           <Route path="/overview" element={<Navigate to={DEFAULT_OVERVIEW_PATH} replace />} />

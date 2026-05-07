@@ -4,12 +4,15 @@ import { getErrorDetail } from '@/api/client';
 import { consultTask } from '@/api/tasks';
 import {
   selectTrackingTask,
-  sortTasksForBoard,
-} from '../utils';
-import type { WorkspaceConsultMessageView, WorkspaceTaskView } from '../utils';
-import type { WorkspaceData } from './useWorkspaceData';
+  sortTaskViewsByNewest,
+} from '@/lib/workspace-task-view';
+import type {
+  WorkspaceConsultMessageView,
+  WorkspaceTaskView,
+} from '@/lib/workspace-task-view';
+import type { WorkspaceRecordsData } from '@/lib/useWorkspaceRecords';
 
-type UseProcessTrackingInput = Pick<WorkspaceData, 'agentOptions' | 'taskViews'>;
+type UseProcessTrackingInput = Pick<WorkspaceRecordsData, 'agentOptions' | 'taskViews'>;
 
 export type ProcessTracking = {
   selectedAgentId: string;
@@ -39,7 +42,7 @@ export function useProcessTracking({
 
   const tasksForSelectedAgent = useMemo(
     () =>
-      sortTasksForBoard(
+      sortTaskViewsByNewest(
         taskViews.filter(task => task.agentInstanceId === selectedAgentId),
       ),
     [selectedAgentId, taskViews],
