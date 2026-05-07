@@ -4,7 +4,7 @@ import type {
   WorkspaceAgentOption,
   WorkspaceConsultMessageView,
   WorkspaceTaskView,
-} from "../utils";
+} from "@/lib/workspace-task-view";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CardTitle } from "@/components/ui/card";
@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { STATUS_META, timeAgo } from "../utils";
+import { STATUS_META, timeAgo } from "@/lib/workspace-task-view";
 
 type WorkspaceTrackingPanelProps = {
   agents: WorkspaceAgentOption[];

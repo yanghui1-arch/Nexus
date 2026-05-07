@@ -6,6 +6,7 @@ import { getTask } from '@/api/tasks';
 import type { ApiTask } from '@/api/types';
 import { DashboardShell } from '@/components/layout/DashboardShell';
 import { Badge } from '@/components/ui/badge';
+import { STATUS_META } from '@/lib/workspace-task-view';
 import {
   Card,
   CardContent,
@@ -15,7 +16,6 @@ import {
 } from '@/components/ui/card';
 import { getTaskById } from '@/data/mockWorkflows';
 import { usePolling } from '@/lib/usePolling';
-import { STATUS_META } from '@/pages/workspace/utils';
 
 type LegacyTask = NonNullable<ReturnType<typeof getTaskById>>;
 

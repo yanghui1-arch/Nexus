@@ -25,10 +25,14 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  STATUS_META,
+  timeAgo,
+  type WorkspaceTaskView,
+} from '@/lib/workspace-task-view';
 import { cn } from '@/lib/utils';
 import { usePolling } from '@/lib/usePolling';
 import { parseUnifiedDiff, type ParsedDiffLineKind } from '@/lib/reviewDiff';
-import { STATUS_META, timeAgo, type WorkspaceTaskView } from '../utils';
 
 type WorkspaceCodeReviewProps = {
   tasks: WorkspaceTaskView[];
