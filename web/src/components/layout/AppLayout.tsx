@@ -1,12 +1,38 @@
+import {
+  createContext,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import { NavLink, Outlet, useMatch } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
-import {
-  OVERVIEW_NAV_ITEMS,
-  WORKSPACE_NAV_ITEMS,
-} from '@/lib/dashboard-nav';
+import { WORKSPACE_NAV_ITEMS } from '@/lib/dashboard-nav';
 import { cn } from '@/lib/utils';
 
-function WorkspaceNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number] }) {
+type AppLayoutState = {
+  title?: string;
+  description?: string;
+  topActions?: ReactNode;
+  mainClassName?: string;
+};
+
+type AppLayoutContextValue = {
+  resetLayout: () => void;
+  setLayout: (state: AppLayoutState) => void;
+};
+
+const DEFAULT_LAYOUT_STATE: AppLayoutState = {
+  title: '',
+  description: '',
+  topActions: null,
+  mainClassName: undefined,
+};
+
+const AppLayoutContext = createContext<AppLayoutContextValue | null>(null);
+
+function SidebarNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number] }) {
   const isParentActive = useMatch({ path: item.to, end: false });
 
   return (
@@ -16,7 +42,7 @@ function WorkspaceNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number
         end={!item.subItems}
         className={({ isActive }) =>
           cn(
-            'inline-flex items-center rounded-md px-3 py-1.5 text-sm transition-colors',
+            'inline-flex items-center rounded-md px-3 py-2 text-sm transition-colors',
             isActive || (item.subItems && isParentActive)
               ? 'bg-primary text-primary-foreground font-medium shadow-sm'
               : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
@@ -27,10 +53,10 @@ function WorkspaceNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number
       </NavLink>
       {item.subItems && isParentActive ? (
         <div className="ml-3 flex flex-col gap-1 border-l pl-3">
-          {item.subItems.map(sub => (
+          {item.subItems.map(subItem => (
             <NavLink
-              key={sub.to}
-              to={sub.to}
+              key={subItem.to}
+              to={subItem.to}
               end={false}
               className={({ isActive }) =>
                 cn(
@@ -41,7 +67,7 @@ function WorkspaceNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number
                 )
               }
             >
-              {sub.label}
+              {subItem.label}
             </NavLink>
           ))}
         </div>
@@ -50,7 +76,42 @@ function WorkspaceNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number
   );
 }
 
+export function useAppLayout(state: AppLayoutState) {
+  const context = useContext(AppLayoutContext);
+
+  if (!context) {
+    throw new Error('useAppLayout must be used within AppLayout.');
+  }
+
+  const { description, mainClassName, title, topActions } = state;
+
+  useLayoutEffect(() => {
+    context.setLayout({
+      title,
+      description,
+      topActions,
+      mainClassName,
+    });
+
+    return () => {
+      context.resetLayout();
+    };
+  }, [context, description, mainClassName, title, topActions]);
+}
+
 export function AppLayout() {
+  const [layout, setLayout] = useState<AppLayoutState>(DEFAULT_LAYOUT_STATE);
+  const layoutContextValue = useMemo<AppLayoutContextValue>(
+    () => ({
+      setLayout,
+      resetLayout: () => {
+        setLayout(DEFAULT_LAYOUT_STATE);
+      },
+    }),
+    [],
+  );
+  const showHeader = Boolean(layout.title || layout.description || layout.topActions);
+
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,hsl(var(--background)),hsl(var(--muted)/0.55))] lg:h-screen lg:overflow-hidden">
       <div className="grid min-h-screen lg:h-screen lg:grid-cols-[280px_minmax(0,1fr)]">
@@ -67,50 +128,45 @@ export function AppLayout() {
               </div>
             </div>
 
-            <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-4">
-              <section className="flex flex-col gap-2">
-                <p className="px-3 text-sm font-semibold tracking-tight text-foreground/80">
-                  Workspace
-                </p>
-                <div className="ml-3 flex flex-col gap-1 border-l pl-3">
-                  {WORKSPACE_NAV_ITEMS.map(item => (
-                    <WorkspaceNavEntry key={item.to} item={item} />
-                  ))}
-                </div>
-              </section>
-
-              <section className="flex flex-col gap-2">
-                <p className="px-3 text-sm font-semibold tracking-tight text-foreground/80">
-                  Overview
-                </p>
-                <div className="ml-3 flex flex-col gap-1 border-l pl-3">
-                  {OVERVIEW_NAV_ITEMS.map(item => (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      end
-                      className={({ isActive }) =>
-                        cn(
-                          'inline-flex items-center rounded-md px-3 py-1.5 text-sm transition-colors',
-                          isActive
-                            ? 'bg-primary text-primary-foreground font-medium shadow-sm'
-                            : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                        )
-                      }
-                    >
-                      {item.label}
-                    </NavLink>
-                  ))}
-                </div>
-              </section>
+            <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
+              {WORKSPACE_NAV_ITEMS.map(item => (
+                <SidebarNavEntry key={item.to} item={item} />
+              ))}
             </nav>
           </div>
         </aside>
 
-        {/* Right column — each page controls its own scroll behavior */}
-        <div className="flex min-h-0 min-w-0 flex-col lg:overflow-hidden">
-          <Outlet />
-        </div>
+        <AppLayoutContext.Provider value={layoutContextValue}>
+          <div className="flex min-h-0 min-w-0 flex-col lg:overflow-hidden">
+            {showHeader ? (
+              <header className="shrink-0 border-b bg-background/80 backdrop-blur-sm">
+                <div className="mx-auto flex w-full max-w-[1600px] items-center gap-3 px-6 py-4">
+                  <div className="flex min-w-0 flex-col">
+                    {layout.title ? (
+                      <h1 className="truncate text-lg font-semibold">{layout.title}</h1>
+                    ) : null}
+                    {layout.description ? (
+                      <p className="text-sm text-muted-foreground">{layout.description}</p>
+                    ) : null}
+                  </div>
+
+                  {layout.topActions ? (
+                    <div className="ml-auto flex items-center gap-2">{layout.topActions}</div>
+                  ) : null}
+                </div>
+              </header>
+            ) : null}
+
+            <main
+              className={cn(
+                'mx-auto flex w-full max-w-[1600px] min-h-0 flex-1 flex-col overflow-y-auto px-6 py-6',
+                layout.mainClassName,
+              )}
+            >
+              <Outlet />
+            </main>
+          </div>
+        </AppLayoutContext.Provider>
       </div>
     </div>
   );

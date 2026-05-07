@@ -75,7 +75,7 @@ export function PullRequestDetailPage() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   if (!taskId || !virtualPrId) {
-    return <Navigate to="/workspace/code-review/nexus" replace />;
+    return <Navigate to="/code-review/nexus" replace />;
   }
 
   const isClosed = detail?.virtual_pr.status === 'closed';
@@ -144,7 +144,7 @@ export function PullRequestDetailPage() {
             <div className="mx-auto max-w-[1400px]">
               <div className="mb-4">
                 <Button asChild variant="ghost" size="sm" className="-ml-2">
-                  <Link to={`/workspace/code-review/nexus/tasks/${taskId}`}>
+                  <Link to={`/code-review/nexus/tasks/${taskId}`}>
                     <ArrowLeft className="size-4" />
                     Back to pull requests
                   </Link>

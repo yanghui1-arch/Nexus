@@ -3,13 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { getErrorDetail } from '@/api/client';
 import { getTaskReviewSummary } from '@/api/tasks';
-import { DashboardShell } from '@/components/layout/DashboardShell';
+import { useAppLayout } from '@/components/layout/AppLayout';
 import { TaskBoardColumn } from './components/TaskBoardColumn';
 import { TaskBoardRepoSelect } from './components/TaskBoardRepoSelect';
 import { useTaskBoardData } from './hooks/useTaskBoardData';
 import { TASK_BOARD_STATUS_ORDER } from './utils';
 
 export default function TaskBoardPage() {
+  useAppLayout({
+    title: 'Task Board',
+    description: 'Live task board grouped by backend task status.',
+  });
+
   const navigate = useNavigate();
   const [activeReviewTaskId, setActiveReviewTaskId] = useState<string | null>(null);
   const { groupedTasks, repoOptions, repoFilter, setRepoFilter, isLoading } =
@@ -31,8 +36,8 @@ export default function TaskBoardPage() {
 
       navigate(
         targetVirtualPr
-          ? `/workspace/code-review/nexus/tasks/${taskId}/pull-requests/${targetVirtualPr.id}`
-          : `/workspace/code-review/nexus/tasks/${taskId}`,
+          ? `/code-review/nexus/tasks/${taskId}/pull-requests/${targetVirtualPr.id}`
+          : `/code-review/nexus/tasks/${taskId}`,
       );
     } catch (error) {
       toast.error('Failed to open review', {
@@ -44,34 +49,29 @@ export default function TaskBoardPage() {
   };
 
   return (
-    <DashboardShell
-      title="Task Board"
-      description="Live task board grouped by backend task status."
-    >
-      <section className="space-y-4">
-        <TaskBoardRepoSelect
-          repoOptions={repoOptions}
-          value={repoFilter}
-          onChange={setRepoFilter}
-        />
+    <section className="space-y-4">
+      <TaskBoardRepoSelect
+        repoOptions={repoOptions}
+        value={repoFilter}
+        onChange={setRepoFilter}
+      />
 
-        <div className="overflow-x-auto">
-          <div className="grid min-w-[720px] grid-cols-4 gap-4">
-            {TASK_BOARD_STATUS_ORDER.map(status => (
-              <TaskBoardColumn
-                key={status}
-                status={status}
-                tasks={groupedTasks[status]}
-                isLoading={isLoading}
-                activeReviewTaskId={activeReviewTaskId}
-                onOpenReview={taskId => {
-                  void openReview(taskId);
-                }}
-              />
-            ))}
-          </div>
+      <div className="overflow-x-auto">
+        <div className="grid min-w-[720px] grid-cols-4 gap-4">
+          {TASK_BOARD_STATUS_ORDER.map(status => (
+            <TaskBoardColumn
+              key={status}
+              status={status}
+              tasks={groupedTasks[status]}
+              isLoading={isLoading}
+              activeReviewTaskId={activeReviewTaskId}
+              onOpenReview={taskId => {
+                void openReview(taskId);
+              }}
+            />
+          ))}
         </div>
-      </section>
-    </DashboardShell>
+      </div>
+    </section>
   );
 }

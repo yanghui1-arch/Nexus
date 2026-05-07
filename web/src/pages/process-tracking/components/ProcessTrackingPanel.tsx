@@ -22,7 +22,7 @@ import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { STATUS_META, timeAgo } from "@/lib/workspace-task-view";
 
-type WorkspaceTrackingPanelProps = {
+type ProcessTrackingPanelProps = {
   agents: WorkspaceAgentOption[];
   tasksForAgent: WorkspaceTaskView[];
   messages: WorkspaceConsultMessageView[];
@@ -46,7 +46,7 @@ function detailValue(value: string | null | undefined): string {
   return value || "-";
 }
 
-export function WorkspaceTrackingPanel({
+export function ProcessTrackingPanel({
   agents,
   tasksForAgent,
   messages,
@@ -60,7 +60,7 @@ export function WorkspaceTrackingPanel({
   onSelectedTaskChange,
   onInputChange,
   onSubmit,
-}: WorkspaceTrackingPanelProps) {
+}: ProcessTrackingPanelProps) {
   const [isTaskPickerOpen, setIsTaskPickerOpen] = useState(false);
   const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
 
@@ -82,12 +82,11 @@ export function WorkspaceTrackingPanel({
   }, [messages.length, selectedTaskId, isSending]);
 
   return (
-    // Use a plain flex-col div styled like a card — avoids CardHeader's built-in grid
+    // Use a plain flex-col div styled like a card - avoids CardHeader's built-in grid
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm">
-      {/* ── Top section: Agent+Task picker (left) | Selected task detail (right) ── */}
+      {/* Top section: Agent+Task picker (left) | Selected task detail (right) */}
       <div className="shrink-0 border-b px-6 py-5">
-        <div className="grid grid-cols-2 gap-6 items-start">
-          {/* Left column: selectors */}
+        <div className="grid grid-cols-2 items-start gap-6">
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <label htmlFor="tracking-agent" className="text-sm font-medium">
@@ -99,10 +98,10 @@ export function WorkspaceTrackingPanel({
                 onChange={(e) => onSelectedAgentChange(e.target.value)}
                 disabled={!hasAgents || isSending}
               >
-                {isLoadingAgents && <option value="">Loading agent instances…</option>}
+                {isLoadingAgents && <option value="">Loading agent instances...</option>}
                 {agents.map((agent) => (
                   <option key={agent.id} value={agent.id} selected={agent.id === selectedAgentId}>
-                    {agent.label} — {agent.subtitle}
+                    {agent.label} - {agent.subtitle}
                   </option>
                 ))}
               </Select>
@@ -125,8 +124,8 @@ export function WorkspaceTrackingPanel({
                       {selectedTask
                         ? selectedTask.question
                         : selectedAgentId
-                        ? "Choose a task…"
-                        : "Select an agent first"}
+                          ? "Choose a task..."
+                          : "Select an agent first"}
                     </span>
                     <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
                   </Button>
@@ -164,16 +163,16 @@ export function WorkspaceTrackingPanel({
                               </p>
                               <Badge
                                 variant={STATUS_META[task.status].badgeVariant}
-                                className="shrink-0 mt-0.5"
+                                className="mt-0.5 shrink-0"
                               >
                                 {STATUS_META[task.status].label}
                               </Badge>
                             </div>
                             <div className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
                               <span className="truncate">{detailValue(task.repo)}</span>
-                              <span className="shrink-0">·</span>
+                              <span className="shrink-0">.</span>
                               <span className="shrink-0">{task.agentLabel}</span>
-                              <span className="shrink-0 ml-auto">{timeAgo(task.updatedAt)}</span>
+                              <span className="ml-auto shrink-0">{timeAgo(task.updatedAt)}</span>
                             </div>
                           </button>
                         );
@@ -193,7 +192,6 @@ export function WorkspaceTrackingPanel({
             </div>
           </div>
 
-          {/* Right column: selected task detail */}
           <div className="rounded-xl bg-muted/40 p-4">
             <div className="flex items-start justify-between gap-3">
               <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
@@ -245,12 +243,10 @@ export function WorkspaceTrackingPanel({
             ) : null}
           </div>
         </div>
-
       </div>
 
-      {/* ── Bottom section: chat ── */}
+      {/* Bottom section: chat */}
       <div className="flex min-h-0 flex-1 flex-col gap-4 px-6 py-5">
-        {/* Chat label */}
         <div className="shrink-0">
           <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
             Chat
@@ -262,7 +258,6 @@ export function WorkspaceTrackingPanel({
           </p>
         </div>
 
-        {/* Scrollable messages — fills remaining vertical space */}
         <div className="min-h-0 flex-1">
           <ScrollArea className="h-full">
             <div className="flex flex-col gap-2 pb-2 pr-1">
@@ -290,28 +285,27 @@ export function WorkspaceTrackingPanel({
                 </article>
               ))}
 
-              {/* Waiting animation — shown while agent is responding */}
               {isSending && (
                 <article
                   className={cn(
-                    "max-w-[88%] rounded-lg px-3 py-2 text-sm bg-muted",
+                    "max-w-[88%] rounded-lg bg-muted px-3 py-2 text-sm",
                     "motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2",
                     "transition-all duration-300 ease-out"
                   )}
                   aria-label="Agent is typing"
                 >
                   <p className="text-xs font-semibold opacity-70">Agent</p>
-                  <div className="mt-2 mb-1 flex items-center gap-1.5">
+                  <div className="mb-1 mt-2 flex items-center gap-1.5">
                     <span
-                      className="size-2 rounded-full bg-current opacity-60 animate-bounce"
+                      className="size-2 animate-bounce rounded-full bg-current opacity-60"
                       style={{ animationDelay: "0ms", animationDuration: "1s" }}
                     />
                     <span
-                      className="size-2 rounded-full bg-current opacity-60 animate-bounce"
+                      className="size-2 animate-bounce rounded-full bg-current opacity-60"
                       style={{ animationDelay: "160ms", animationDuration: "1s" }}
                     />
                     <span
-                      className="size-2 rounded-full bg-current opacity-60 animate-bounce"
+                      className="size-2 animate-bounce rounded-full bg-current opacity-60"
                       style={{ animationDelay: "320ms", animationDuration: "1s" }}
                     />
                   </div>
@@ -323,7 +317,6 @@ export function WorkspaceTrackingPanel({
           </ScrollArea>
         </div>
 
-        {/* Input bar — pinned to bottom */}
         <form onSubmit={onSubmit} className="shrink-0 flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <Input
@@ -331,7 +324,7 @@ export function WorkspaceTrackingPanel({
               onChange={(e) => onInputChange(e.target.value)}
               placeholder={
                 selectedTask
-                  ? "Ask for the latest process, blockers, or ETA…"
+                  ? "Ask for the latest process, blockers, or ETA..."
                   : "Select a task first."
               }
               disabled={!selectedTask || isSending}

@@ -4,7 +4,7 @@ import { AlertCircle, GitBranch } from 'lucide-react';
 import { ApiError, getErrorDetail } from '@/api/client';
 import { getTask } from '@/api/tasks';
 import type { ApiTask } from '@/api/types';
-import { DashboardShell } from '@/components/layout/DashboardShell';
+import { useAppLayout } from '@/components/layout/AppLayout';
 import { Badge } from '@/components/ui/badge';
 import { STATUS_META } from '@/lib/workspace-task-view';
 import {
@@ -49,39 +49,37 @@ function MetadataRow({
 
 function LegacyTaskDetail({ task }: { task: LegacyTask }) {
   return (
-    <DashboardShell title={task.title} description="Task status and metadata.">
-      <Card className="h-fit max-w-3xl">
-        <CardHeader>
-          <CardTitle>Metadata</CardTitle>
-          <CardDescription>Task routing and execution context.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3 text-sm">
-          <MetadataRow label="Agent" value={task.agentName} />
-          <MetadataRow label="Type" value={task.agentType} />
+    <Card className="h-fit max-w-3xl">
+      <CardHeader>
+        <CardTitle>Metadata</CardTitle>
+        <CardDescription>Task routing and execution context.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 text-sm">
+        <MetadataRow label="Agent" value={task.agentName} />
+        <MetadataRow label="Type" value={task.agentType} />
+        <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+          <span className="text-muted-foreground">Status</span>
+          <Badge variant="secondary">{task.status}</Badge>
+        </div>
+        {task.metadata?.repository ? (
+          <MetadataRow label="Repository" value={task.metadata.repository} />
+        ) : null}
+        {task.metadata?.branch ? (
           <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-            <span className="text-muted-foreground">Status</span>
-            <Badge variant="secondary">{task.status}</Badge>
+            <span className="inline-flex items-center gap-1 text-muted-foreground">
+              <GitBranch className="size-3.5" />
+              Branch
+            </span>
+            <code>{task.metadata.branch}</code>
           </div>
-          {task.metadata?.repository ? (
-            <MetadataRow label="Repository" value={task.metadata.repository} />
-          ) : null}
-          {task.metadata?.branch ? (
-            <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-              <span className="inline-flex items-center gap-1 text-muted-foreground">
-                <GitBranch className="size-3.5" />
-                Branch
-              </span>
-              <code>{task.metadata.branch}</code>
-            </div>
-          ) : null}
-          {task.error ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {task.error}
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-    </DashboardShell>
+        ) : null}
+        {task.error ? (
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {task.error}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -141,84 +139,86 @@ export default function TaskDetailPage() {
     enabled: Boolean(taskId && isUuidLike(taskId) && !useLegacyFallback),
   });
 
+  useAppLayout({
+    title:
+      useLegacyFallback && legacyTask
+        ? legacyTask.title
+        : task?.question ?? 'Task Detail',
+    description: 'Task status and metadata.',
+  });
+
   if (useLegacyFallback && legacyTask) {
     return <LegacyTaskDetail task={legacyTask} />;
   }
 
   if (isLoadingTask && !task) {
     return (
-      <DashboardShell title="Task Detail" description="Task status and metadata.">
-        <Card>
-          <CardHeader>
-            <CardTitle>Loading task</CardTitle>
-            <CardDescription>Fetching the latest task details.</CardDescription>
-          </CardHeader>
-        </Card>
-      </DashboardShell>
+      <Card>
+        <CardHeader>
+          <CardTitle>Loading task</CardTitle>
+          <CardDescription>Fetching the latest task details.</CardDescription>
+        </CardHeader>
+      </Card>
     );
   }
 
   if (!task) {
     return (
-      <DashboardShell title="Task Detail" description="Task status and metadata.">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertCircle className="size-4 text-destructive" />
-              Task not found
-            </CardTitle>
-            <CardDescription>
-              {taskError ?? `The requested task ID does not exist: ${taskId}`}
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      </DashboardShell>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertCircle className="size-4 text-destructive" />
+            Task not found
+          </CardTitle>
+          <CardDescription>
+            {taskError ?? `The requested task ID does not exist: ${taskId}`}
+          </CardDescription>
+        </CardHeader>
+      </Card>
     );
   }
 
   return (
-    <DashboardShell title={task.question} description="Task status and metadata.">
-      <Card className="h-fit max-w-3xl">
-        <CardHeader>
-          <CardTitle>Metadata</CardTitle>
-          <CardDescription>Real task record returned by the backend.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3 text-sm">
-          <MetadataRow label="Agent" value={task.agent} />
-          <MetadataRow label="Agent instance" value={task.agent_instance_id} />
-          <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-            <span className="text-muted-foreground">Status</span>
-            <Badge variant={STATUS_META[task.status].badgeVariant}>
-              {STATUS_META[task.status].label}
-            </Badge>
+    <Card className="h-fit max-w-3xl">
+      <CardHeader>
+        <CardTitle>Metadata</CardTitle>
+        <CardDescription>Real task record returned by the backend.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 text-sm">
+        <MetadataRow label="Agent" value={task.agent} />
+        <MetadataRow label="Agent instance" value={task.agent_instance_id} />
+        <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+          <span className="text-muted-foreground">Status</span>
+          <Badge variant={STATUS_META[task.status].badgeVariant}>
+            {STATUS_META[task.status].label}
+          </Badge>
+        </div>
+        <MetadataRow label="Repository" value={detailValue(task.repo)} />
+        <MetadataRow label="Project" value={detailValue(task.project)} />
+        <MetadataRow label="Created" value={new Date(task.created_at).toLocaleString()} />
+        <MetadataRow label="Updated" value={new Date(task.updated_at).toLocaleString()} />
+        <MetadataRow
+          label="Started"
+          value={detailValue(task.started_at ? new Date(task.started_at).toLocaleString() : null)}
+        />
+        <MetadataRow
+          label="Finished"
+          value={detailValue(task.finished_at ? new Date(task.finished_at).toLocaleString() : null)}
+        />
+        {task.result ? (
+          <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+            <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              Result
+            </p>
+            <p className="mt-2 whitespace-pre-wrap break-words">{task.result}</p>
           </div>
-          <MetadataRow label="Repository" value={detailValue(task.repo)} />
-          <MetadataRow label="Project" value={detailValue(task.project)} />
-          <MetadataRow label="Created" value={new Date(task.created_at).toLocaleString()} />
-          <MetadataRow label="Updated" value={new Date(task.updated_at).toLocaleString()} />
-          <MetadataRow
-            label="Started"
-            value={detailValue(task.started_at ? new Date(task.started_at).toLocaleString() : null)}
-          />
-          <MetadataRow
-            label="Finished"
-            value={detailValue(task.finished_at ? new Date(task.finished_at).toLocaleString() : null)}
-          />
-          {task.result ? (
-            <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
-              <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                Result
-              </p>
-              <p className="mt-2 whitespace-pre-wrap break-words">{task.result}</p>
-            </div>
-          ) : null}
-          {task.error ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {task.error}
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-    </DashboardShell>
+        ) : null}
+        {task.error ? (
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {task.error}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
