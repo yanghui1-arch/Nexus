@@ -1,11 +1,14 @@
-import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import type { ApiTaskStatus } from '@/api/types';
 import type { WorkspaceTaskView } from '../utils';
+import { getErrorDetail } from '@/api/client';
+import { getTaskReviewSummary } from '@/api/tasks';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select } from '@/components/ui/select';
+import { toast } from 'sonner';
 import {
   Card,
   CardContent,
@@ -33,6 +36,9 @@ export function WorkspaceTaskBoard({
   isLoading,
   onRepoFilterChange,
 }: WorkspaceTaskBoardProps) {
+  const navigate = useNavigate();
+  const [activeReviewTaskId, setActiveReviewTaskId] = useState<string | null>(null);
+
   const filteredTasks = useMemo(() => {
     const byRepo = tasks.filter(task => task.repo === repoFilter);
     return sortTasksForBoard(byRepo).filter(task =>
@@ -55,6 +61,34 @@ export function WorkspaceTaskBoard({
 
     return groups;
   }, [filteredTasks]);
+
+  const openReview = async (taskId: string) => {
+    setActiveReviewTaskId(taskId);
+    try {
+      const summary = await getTaskReviewSummary(taskId);
+      const readyForReviewVirtualPrs = summary.virtual_prs.filter(
+        virtualPr => virtualPr.status === 'ready_for_review',
+      );
+      const targetVirtualPr =
+        readyForReviewVirtualPrs.length === 1
+          ? readyForReviewVirtualPrs[0]
+          : summary.virtual_prs.length === 1
+            ? summary.virtual_prs[0]
+            : null;
+
+      navigate(
+        targetVirtualPr
+          ? `/workspace/code-review/nexus/tasks/${taskId}/pull-requests/${targetVirtualPr.id}`
+          : `/workspace/code-review/nexus/tasks/${taskId}`,
+      );
+    } catch (error) {
+      toast.error('Failed to open review', {
+        description: getErrorDetail(error, 'Unable to load the review target.'),
+      });
+    } finally {
+      setActiveReviewTaskId(null);
+    }
+  };
 
   return (
     <section className="space-y-4">
@@ -143,9 +177,23 @@ export function WorkspaceTaskBoard({
                             </div>
 
                             <div className="mt-2 flex justify-end">
-                              <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
-                                <Link to={`/task/${task.id}`}>Details</Link>
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                {task.status === 'waiting_for_review' ? (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="secondary"
+                                    className="h-7 px-2 text-xs"
+                                    disabled={activeReviewTaskId === task.id}
+                                    onClick={() => void openReview(task.id)}
+                                  >
+                                    {activeReviewTaskId === task.id ? 'Opening...' : 'To Review'}
+                                  </Button>
+                                ) : null}
+                                <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
+                                  <Link to={`/task/${task.id}`}>Details</Link>
+                                </Button>
+                              </div>
                             </div>
                           </article>
                         ))}
