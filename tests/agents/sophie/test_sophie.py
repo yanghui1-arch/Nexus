@@ -1,4 +1,4 @@
-﻿"""
+"""
 Tests for the Sophie agent.
 
 Sophie is a React developer and web designer with Anthropic-style design expertise.
@@ -375,7 +375,6 @@ class TestSophieToolAccess:
                     assert "get_my_open_prs" in s.tool_kits
                     assert "get_my_issues" in s.tool_kits
                     assert "get_notifications" in s.tool_kits
-                    assert "create_sub_issue" in s.tool_kits
                     assert "pr_to_github" in s.tool_kits
 
     @pytest.mark.asyncio

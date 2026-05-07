@@ -1,4 +1,4 @@
-﻿"""Unit tests for Tela.
+"""Unit tests for Tela.
 
 All tests use mocked OpenAI client and a mocked Docker sandbox so they run
 without any real API keys or Docker daemon.
@@ -220,8 +220,7 @@ class TestStep:
             async with tela:
                 tela.openai_client.chat.completions.create.return_value = make_stop_response()
                 await tela.step([])
-
-        call_kwargs = tela.openai_client.chat.completions.create.call_args
+                call_kwargs = tela.openai_client.chat.completions.create.call_args
         tools_passed = call_kwargs.kwargs["tools"]
         tool_names = {t["function"]["name"] for t in tools_passed}
         assert tool_names == {t["function"]["name"] for t in _ALL_TOOL_DEFINITIONS}
