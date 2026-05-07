@@ -7,7 +7,7 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { WorkspaceComposerValues } from '../types';
 
-type WorkspaceComposerCardProps = {
+type PublishTaskComposerCardProps = {
   value: WorkspaceComposerValues;
   agents: WorkspaceAgentOption[];
   isSubmitting: boolean;
@@ -15,13 +15,13 @@ type WorkspaceComposerCardProps = {
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
 
-export function WorkspaceComposerCard({
+export function PublishTaskComposerCard({
   value,
   agents,
   isSubmitting,
   onValueChange,
   onSubmit,
-}: WorkspaceComposerCardProps) {
+}: PublishTaskComposerCardProps) {
   const updateField = <K extends keyof WorkspaceComposerValues>(
     key: K,
     nextValue: WorkspaceComposerValues[K],

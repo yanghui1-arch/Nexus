@@ -124,7 +124,7 @@ export function ReviewQueuePage() {
             return (
               <Link
                 key={task.id}
-                to={`/workspace/code-review/nexus/tasks/${task.id}`}
+                to={`/code-review/nexus/tasks/${task.id}`}
                 className="rounded-xl border bg-card px-5 py-4 transition-colors hover:bg-accent/20"
               >
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">

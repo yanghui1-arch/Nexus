@@ -36,8 +36,8 @@ export default function TaskBoardPage() {
 
       navigate(
         targetVirtualPr
-          ? `/workspace/code-review/nexus/tasks/${taskId}/pull-requests/${targetVirtualPr.id}`
-          : `/workspace/code-review/nexus/tasks/${taskId}`,
+          ? `/code-review/nexus/tasks/${taskId}/pull-requests/${targetVirtualPr.id}`
+          : `/code-review/nexus/tasks/${taskId}`,
       );
     } catch (error) {
       toast.error('Failed to open review', {

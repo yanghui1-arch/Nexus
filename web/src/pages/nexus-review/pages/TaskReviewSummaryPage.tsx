@@ -131,13 +131,13 @@ export function TaskReviewSummaryPage() {
     }
 
     navigate(
-      `/workspace/code-review/nexus/tasks/${summary.task.id}/pull-requests/${summary.virtual_prs[0].id}`,
+      `/code-review/nexus/tasks/${summary.task.id}/pull-requests/${summary.virtual_prs[0].id}`,
       { replace: true },
     );
   }, [navigate, summary]);
 
   if (!taskId) {
-    return <Navigate to="/workspace/code-review/nexus" replace />;
+    return <Navigate to="/code-review/nexus" replace />;
   }
 
   const taskStatusMeta = summary ? TASK_STATUS_META[summary.task.status] : null;
@@ -192,7 +192,7 @@ export function TaskReviewSummaryPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
         <Button asChild variant="ghost" size="sm">
-          <Link to="/workspace/code-review/nexus">
+          <Link to="/code-review/nexus">
             <ArrowLeft className="size-4" />
             Back to queue
           </Link>
@@ -229,7 +229,7 @@ export function TaskReviewSummaryPage() {
                   return (
                     <Link
                       key={virtualPr.id}
-                      to={`/workspace/code-review/nexus/tasks/${summary.task.id}/pull-requests/${virtualPr.id}`}
+                      to={`/code-review/nexus/tasks/${summary.task.id}/pull-requests/${virtualPr.id}`}
                       className="block overflow-hidden rounded-xl border bg-card px-5 py-4 transition-colors hover:bg-accent/20"
                     >
                       <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">

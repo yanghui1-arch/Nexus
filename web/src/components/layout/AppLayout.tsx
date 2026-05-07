@@ -8,10 +8,7 @@ import {
 } from 'react';
 import { NavLink, Outlet, useMatch } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
-import {
-  OVERVIEW_NAV_ITEMS,
-  WORKSPACE_NAV_ITEMS,
-} from '@/lib/dashboard-nav';
+import { WORKSPACE_NAV_ITEMS } from '@/lib/dashboard-nav';
 import { cn } from '@/lib/utils';
 
 type AppLayoutState = {
@@ -35,7 +32,7 @@ const DEFAULT_LAYOUT_STATE: AppLayoutState = {
 
 const AppLayoutContext = createContext<AppLayoutContextValue | null>(null);
 
-function WorkspaceNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number] }) {
+function SidebarNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number] }) {
   const isParentActive = useMatch({ path: item.to, end: false });
 
   return (
@@ -45,7 +42,7 @@ function WorkspaceNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number
         end={!item.subItems}
         className={({ isActive }) =>
           cn(
-            'inline-flex items-center rounded-md px-3 py-1.5 text-sm transition-colors',
+            'inline-flex items-center rounded-md px-3 py-2 text-sm transition-colors',
             isActive || (item.subItems && isParentActive)
               ? 'bg-primary text-primary-foreground font-medium shadow-sm'
               : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
@@ -56,10 +53,10 @@ function WorkspaceNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number
       </NavLink>
       {item.subItems && isParentActive ? (
         <div className="ml-3 flex flex-col gap-1 border-l pl-3">
-          {item.subItems.map(sub => (
+          {item.subItems.map(subItem => (
             <NavLink
-              key={sub.to}
-              to={sub.to}
+              key={subItem.to}
+              to={subItem.to}
               end={false}
               className={({ isActive }) =>
                 cn(
@@ -70,7 +67,7 @@ function WorkspaceNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number
                 )
               }
             >
-              {sub.label}
+              {subItem.label}
             </NavLink>
           ))}
         </div>
@@ -131,42 +128,10 @@ export function AppLayout() {
               </div>
             </div>
 
-            <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-4">
-              <section className="flex flex-col gap-2">
-                <p className="px-3 text-sm font-semibold tracking-tight text-foreground/80">
-                  Workspace
-                </p>
-                <div className="ml-3 flex flex-col gap-1 border-l pl-3">
-                  {WORKSPACE_NAV_ITEMS.map(item => (
-                    <WorkspaceNavEntry key={item.to} item={item} />
-                  ))}
-                </div>
-              </section>
-
-              <section className="flex flex-col gap-2">
-                <p className="px-3 text-sm font-semibold tracking-tight text-foreground/80">
-                  Overview
-                </p>
-                <div className="ml-3 flex flex-col gap-1 border-l pl-3">
-                  {OVERVIEW_NAV_ITEMS.map(item => (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      end
-                      className={({ isActive }) =>
-                        cn(
-                          'inline-flex items-center rounded-md px-3 py-1.5 text-sm transition-colors',
-                          isActive
-                            ? 'bg-primary text-primary-foreground font-medium shadow-sm'
-                            : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                        )
-                      }
-                    >
-                      {item.label}
-                    </NavLink>
-                  ))}
-                </div>
-              </section>
+            <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
+              {WORKSPACE_NAV_ITEMS.map(item => (
+                <SidebarNavEntry key={item.to} item={item} />
+              ))}
             </nav>
           </div>
         </aside>
