@@ -30,5 +30,6 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 markers = [
-    "integration: hits real network and MCP server (deselect with '-m not integration')",
+    "integration: hits real network, Docker, or an MCP server (deselect with '-m not integration')",
+    "slow: long-running tests that are not suitable for the default CI pass",
 ]

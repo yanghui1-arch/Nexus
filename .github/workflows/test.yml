@@ -21,4 +21,4 @@ jobs:
         run: uv sync --all-groups
 
       - name: Test
-        run: uv run pytest tests/ -m "not slow" -v
+        run: uv run pytest tests/ -m "not slow and not integration" -v
