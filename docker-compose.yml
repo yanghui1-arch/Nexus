@@ -1,0 +1,169 @@
+# ──────────────────────────────────────────────────────────────────────────────
+#  Nexus — Docker Compose deployment
+# ──────────────────────────────────────────────────────────────────────────────
+#
+#  Services:
+#    postgres      PostgreSQL 16 — persistent task / agent state
+#    redis         Redis 7 — Celery broker, result backend & cache
+#    nexus-api     FastAPI server (uvicorn)
+#    nexus-worker  Celery worker (executes agent coding tasks)
+#    nexus-web     React dashboard served via Nginx
+#
+#  Quick start:
+#    1. cp .env.example .env   # then fill in NEXUS_API_KEY, tokens, etc.
+#    2. docker compose up -d
+#    3. Open http://localhost:8080
+# ──────────────────────────────────────────────────────────────────────────────
+
+version: "3.9"
+
+services:
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nexus
+      POSTGRES_PASSWORD: nexus
+      POSTGRES_DB: nexus
+    ports:
+      - "${NEXUS_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - nexus-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexus -d nexus"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - nexus-net
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${NEXUS_REDIS_PORT:-6379}:6379"
+    volumes:
+      - nexus-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - nexus-net
+
+  # ── Application ─────────────────────────────────────────────────────────────
+
+  nexus-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nexus:latest
+    restart: unless-stopped
+    command: api
+    ports:
+      - "${NEXUS_API_PORT:-8000}:8000"
+    environment:
+      # LLM
+      NEXUS_API_KEY: "${NEXUS_API_KEY}"
+      NEXUS_BASE_URL: "${NEXUS_BASE_URL:-https://api.openai.com/v1}"
+      NEXUS_MODEL: "${NEXUS_MODEL:-gpt-4o}"
+      NEXUS_MAX_CONTEXT: "${NEXUS_MAX_CONTEXT:-128000}"
+      NEXUS_MAX_ATTEMPTS: "${NEXUS_MAX_ATTEMPTS:-256}"
+      # GitHub
+      NEXUS_GITHUB_REPO: "${NEXUS_GITHUB_REPO:-}"
+      NEXUS_GITHUB_TOKEN: "${NEXUS_GITHUB_TOKEN}"
+      NEXUS_SOPHIE_GITHUB_TOKEN: "${NEXUS_SOPHIE_GITHUB_TOKEN}"
+      # Database
+      NEXUS_DATABASE_URL: "postgresql+asyncpg://nexus:nexus@postgres:5432/nexus"
+      # Redis / Celery
+      NEXUS_REDIS_URL: "redis://redis:6379/0"
+      NEXUS_REDIS_MESSAGE_TTL_SECONDS: "${NEXUS_REDIS_MESSAGE_TTL_SECONDS:-86400}"
+      NEXUS_CELERY_BROKER_URL: "redis://redis:6379/0"
+      NEXUS_CELERY_RESULT_BACKEND: "redis://redis:6379/0"
+      NEXUS_CELERY_QUEUE: "${NEXUS_CELERY_QUEUE:-nexus_agent_tasks}"
+      NEXUS_CELERY_VISIBILITY_TIMEOUT_SECONDS: "${NEXUS_CELERY_VISIBILITY_TIMEOUT_SECONDS:-86400}"
+      # Runner
+      NEXUS_TASK_DISPATCH_LEASE_SECONDS: "${NEXUS_TASK_DISPATCH_LEASE_SECONDS:-60}"
+      # API port
+      NEXUS_API_PORT: "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - nexus-net
+
+  nexus-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nexus:latest
+    restart: unless-stopped
+    command: worker
+    environment:
+      # LLM (same as API)
+      NEXUS_API_KEY: "${NEXUS_API_KEY}"
+      NEXUS_BASE_URL: "${NEXUS_BASE_URL:-https://api.openai.com/v1}"
+      NEXUS_MODEL: "${NEXUS_MODEL:-gpt-4o}"
+      NEXUS_MAX_CONTEXT: "${NEXUS_MAX_CONTEXT:-128000}"
+      NEXUS_MAX_ATTEMPTS: "${NEXUS_MAX_ATTEMPTS:-256}"
+      # GitHub
+      NEXUS_GITHUB_REPO: "${NEXUS_GITHUB_REPO:-}"
+      NEXUS_GITHUB_TOKEN: "${NEXUS_GITHUB_TOKEN}"
+      NEXUS_SOPHIE_GITHUB_TOKEN: "${NEXUS_SOPHIE_GITHUB_TOKEN}"
+      # Database
+      NEXUS_DATABASE_URL: "postgresql+asyncpg://nexus:nexus@postgres:5432/nexus"
+      # Redis / Celery
+      NEXUS_REDIS_URL: "redis://redis:6379/0"
+      NEXUS_REDIS_MESSAGE_TTL_SECONDS: "${NEXUS_REDIS_MESSAGE_TTL_SECONDS:-86400}"
+      NEXUS_CELERY_BROKER_URL: "redis://redis:6379/0"
+      NEXUS_CELERY_RESULT_BACKEND: "redis://redis:6379/0"
+      NEXUS_CELERY_QUEUE: "${NEXUS_CELERY_QUEUE:-nexus_agent_tasks}"
+      NEXUS_CELERY_VISIBILITY_TIMEOUT_SECONDS: "${NEXUS_CELERY_VISIBILITY_TIMEOUT_SECONDS:-86400}"
+      # Runner
+      NEXUS_TASK_DISPATCH_LEASE_SECONDS: "${NEXUS_TASK_DISPATCH_LEASE_SECONDS:-60}"
+      # Celery
+      CELERY_LOGLEVEL: "${CELERY_LOGLEVEL:-info}"
+      CELERY_CONCURRENCY: "${CELERY_CONCURRENCY:-4}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nexus-api:
+        condition: service_started
+    # Mount Docker socket for sandbox containers (docker-in-docker)
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - nexus-net
+
+  nexus-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: nexus-web:latest
+    restart: unless-stopped
+    ports:
+      - "${NEXUS_WEB_PORT:-8080}:80"
+    depends_on:
+      - nexus-api
+    networks:
+      - nexus-net
+
+# ── Persistent volumes ────────────────────────────────────────────────────────
+
+volumes:
+  nexus-pgdata:
+  nexus-redisdata:
+
+# ── Network ───────────────────────────────────────────────────────────────────
+
+networks:
+  nexus-net:
+    driver: bridge
