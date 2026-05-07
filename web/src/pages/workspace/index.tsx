@@ -1,5 +1,5 @@
 import { Navigate, useParams } from 'react-router-dom';
-import { DashboardShell } from '@/components/layout/DashboardShell';
+import { useAppLayout } from '@/components/layout/AppLayout';
 import { WorkspaceComposerCard } from './components/WorkspaceComposerCard';
 import { WorkspaceTrackingPanel } from './components/WorkspaceTrackingPanel';
 import { useWorkspaceData } from './hooks/useWorkspaceData';
@@ -18,6 +18,31 @@ export default function WorkspacePage() {
   const publisher = usePublishTask(data);
   const tracking = useProcessTracking(data);
 
+  const title =
+    section === 'publish-task'
+      ? 'Publish Task'
+      : section === 'process-tracking'
+        ? 'Process Tracking'
+        : 'Workspace';
+  const description =
+    section === 'publish-task'
+      ? 'Create and assign new work items for agents.'
+      : section === 'process-tracking'
+        ? 'Select an agent and task, then ask for the latest process.'
+        : 'Workspace tools and task flows.';
+  const mainClassName =
+    section === 'publish-task'
+      ? 'pt-3 pb-6'
+      : section === 'process-tracking'
+        ? 'overflow-hidden p-0'
+        : undefined;
+
+  useAppLayout({
+    title,
+    description,
+    mainClassName,
+  });
+
   if (!section) {
     return <Navigate to={DEFAULT_WORKSPACE_PATH} replace />;
   }
@@ -30,23 +55,8 @@ export default function WorkspacePage() {
     return <Navigate to="/workspace/code-review/nexus" replace />;
   }
 
-  const title =
-    section === 'publish-task' ? 'Publish Task' : 'Process Tracking';
-  const description =
-    section === 'publish-task'
-      ? 'Create and assign new work items for agents.'
-      : 'Select an agent and task, then ask for the latest process.';
-  const mainClassName =
-    section === 'publish-task'
-      ? 'pt-3 pb-6'
-      : 'overflow-hidden p-0';
-
   return (
-    <DashboardShell
-      title={title}
-      description={description}
-      mainClassName={mainClassName}
-    >
+    <>
       {section === 'publish-task' && (
         <section className="w-full max-w-5xl">
           <WorkspaceComposerCard
@@ -78,6 +88,6 @@ export default function WorkspacePage() {
           />
         </section>
       )}
-    </DashboardShell>
+    </>
   );
 }

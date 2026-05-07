@@ -1,3 +1,11 @@
+import {
+  createContext,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import { NavLink, Outlet, useMatch } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
 import {
@@ -5,6 +13,27 @@ import {
   WORKSPACE_NAV_ITEMS,
 } from '@/lib/dashboard-nav';
 import { cn } from '@/lib/utils';
+
+type AppLayoutState = {
+  title?: string;
+  description?: string;
+  topActions?: ReactNode;
+  mainClassName?: string;
+};
+
+type AppLayoutContextValue = {
+  resetLayout: () => void;
+  setLayout: (state: AppLayoutState) => void;
+};
+
+const DEFAULT_LAYOUT_STATE: AppLayoutState = {
+  title: '',
+  description: '',
+  topActions: null,
+  mainClassName: undefined,
+};
+
+const AppLayoutContext = createContext<AppLayoutContextValue | null>(null);
 
 function WorkspaceNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number] }) {
   const isParentActive = useMatch({ path: item.to, end: false });
@@ -50,7 +79,42 @@ function WorkspaceNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number
   );
 }
 
+export function useAppLayout(state: AppLayoutState) {
+  const context = useContext(AppLayoutContext);
+
+  if (!context) {
+    throw new Error('useAppLayout must be used within AppLayout.');
+  }
+
+  const { description, mainClassName, title, topActions } = state;
+
+  useLayoutEffect(() => {
+    context.setLayout({
+      title,
+      description,
+      topActions,
+      mainClassName,
+    });
+
+    return () => {
+      context.resetLayout();
+    };
+  }, [context, description, mainClassName, title, topActions]);
+}
+
 export function AppLayout() {
+  const [layout, setLayout] = useState<AppLayoutState>(DEFAULT_LAYOUT_STATE);
+  const layoutContextValue = useMemo<AppLayoutContextValue>(
+    () => ({
+      setLayout,
+      resetLayout: () => {
+        setLayout(DEFAULT_LAYOUT_STATE);
+      },
+    }),
+    [],
+  );
+  const showHeader = Boolean(layout.title || layout.description || layout.topActions);
+
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,hsl(var(--background)),hsl(var(--muted)/0.55))] lg:h-screen lg:overflow-hidden">
       <div className="grid min-h-screen lg:h-screen lg:grid-cols-[280px_minmax(0,1fr)]">
@@ -107,10 +171,37 @@ export function AppLayout() {
           </div>
         </aside>
 
-        {/* Right column — each page controls its own scroll behavior */}
-        <div className="flex min-h-0 min-w-0 flex-col lg:overflow-hidden">
-          <Outlet />
-        </div>
+        <AppLayoutContext.Provider value={layoutContextValue}>
+          <div className="flex min-h-0 min-w-0 flex-col lg:overflow-hidden">
+            {showHeader ? (
+              <header className="shrink-0 border-b bg-background/80 backdrop-blur-sm">
+                <div className="mx-auto flex w-full max-w-[1600px] items-center gap-3 px-6 py-4">
+                  <div className="flex min-w-0 flex-col">
+                    {layout.title ? (
+                      <h1 className="truncate text-lg font-semibold">{layout.title}</h1>
+                    ) : null}
+                    {layout.description ? (
+                      <p className="text-sm text-muted-foreground">{layout.description}</p>
+                    ) : null}
+                  </div>
+
+                  {layout.topActions ? (
+                    <div className="ml-auto flex items-center gap-2">{layout.topActions}</div>
+                  ) : null}
+                </div>
+              </header>
+            ) : null}
+
+            <main
+              className={cn(
+                'mx-auto flex w-full max-w-[1600px] min-h-0 flex-1 flex-col overflow-y-auto px-6 py-6',
+                layout.mainClassName,
+              )}
+            >
+              <Outlet />
+            </main>
+          </div>
+        </AppLayoutContext.Provider>
       </div>
     </div>
   );

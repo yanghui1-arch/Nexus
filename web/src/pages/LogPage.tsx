@@ -5,7 +5,7 @@ import {
   getProjectTasks,
   mockProjects,
 } from '@/data/mockWorkflows';
-import { DashboardShell } from '@/components/layout/DashboardShell';
+import { useAppLayout } from '@/components/layout/AppLayout';
 import { OverviewSummaryCards } from '@/components/overview/OverviewSummaryCards';
 import { OverviewTaskFilters } from '@/components/overview/OverviewTaskFilters';
 import { OverviewTaskList } from '@/components/overview/OverviewTaskList';
@@ -34,6 +34,11 @@ export default function LogPage() {
     return mockProjects.find(candidate => candidate.id === projectId) ?? null;
   }, [projectId]);
 
+  useAppLayout({
+    title: project ? `Overview · ${project.name}` : 'Overview',
+    description: project?.description ?? 'Project workflow overview.',
+  });
+
   if (!project) {
     return <Navigate to={DEFAULT_OVERVIEW_PATH} replace />;
   }
@@ -55,64 +60,59 @@ export default function LogPage() {
   );
 
   return (
-    <DashboardShell
-      title={`Overview · ${project.name}`}
-      description={project.description}
-    >
-      <section className="flex min-w-0 flex-col gap-6">
-        <OverviewSummaryCards
-          project={project}
-          projectCount={mockProjects.length}
-          counts={counts}
-          taskTotal={baseTasks.length}
-          selectedAgentName={selectedAgent?.name ?? null}
-        />
+    <section className="flex min-w-0 flex-col gap-6">
+      <OverviewSummaryCards
+        project={project}
+        projectCount={mockProjects.length}
+        counts={counts}
+        taskTotal={baseTasks.length}
+        selectedAgentName={selectedAgent?.name ?? null}
+      />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Agent Scope</CardTitle>
-            <CardDescription>
-              Narrow the feed to one agent or keep all agents.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
+      <Card>
+        <CardHeader>
+          <CardTitle>Agent Scope</CardTitle>
+          <CardDescription>
+            Narrow the feed to one agent or keep all agents.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={selectedAgentId === null ? 'default' : 'outline'}
+            onClick={() => {
+              setSelectedAgentId(null);
+              setFilter('all');
+            }}
+          >
+            All agents
+          </Button>
+          {project.agents.map(agent => (
             <Button
+              key={agent.id}
               type="button"
               size="sm"
-              variant={selectedAgentId === null ? 'default' : 'outline'}
+              variant={selectedAgentId === agent.id ? 'default' : 'outline'}
               onClick={() => {
-                setSelectedAgentId(null);
+                setSelectedAgentId(agent.id);
                 setFilter('all');
               }}
             >
-              All agents
+              {agent.name}
             </Button>
-            {project.agents.map(agent => (
-              <Button
-                key={agent.id}
-                type="button"
-                size="sm"
-                variant={selectedAgentId === agent.id ? 'default' : 'outline'}
-                onClick={() => {
-                  setSelectedAgentId(agent.id);
-                  setFilter('all');
-                }}
-              >
-                {agent.name}
-              </Button>
-            ))}
-          </CardContent>
-        </Card>
+          ))}
+        </CardContent>
+      </Card>
 
-        <OverviewTaskFilters
-          filter={filter}
-          counts={counts}
-          total={baseTasks.length}
-          onChange={setFilter}
-        />
+      <OverviewTaskFilters
+        filter={filter}
+        counts={counts}
+        total={baseTasks.length}
+        onChange={setFilter}
+      />
 
-        <OverviewTaskList tasks={filteredTasks} />
-      </section>
-    </DashboardShell>
+      <OverviewTaskList tasks={filteredTasks} />
+    </section>
   );
 }
