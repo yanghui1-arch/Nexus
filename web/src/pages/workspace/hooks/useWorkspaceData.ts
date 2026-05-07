@@ -36,12 +36,14 @@ async function loadWorkspaceData(): Promise<{
   };
 }
 
+const DEFAULT_TASK_BOARD_REPO = 'yanghui1-arch/Nexus';
+
 export type WorkspaceData = {
   agentInstances: ApiAgentInstance[];
   agentOptions: WorkspaceAgentOption[];
   agentOptionsById: Map<string, WorkspaceAgentOption>;
   taskViews: WorkspaceTaskView[];
-  repoFilters: string[];
+  repoOptions: string[];
   boardRepoFilter: string;
   setBoardRepoFilter: (filter: string) => void;
   isLoadingAgents: boolean;
@@ -54,7 +56,9 @@ export function useWorkspaceData(): WorkspaceData {
   const [tasks, setTasks] = useState<ApiTask[]>([]);
   const [isLoadingAgents, setIsLoadingAgents] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
-  const [boardRepoFilter, setBoardRepoFilter] = useState<string>('all');
+  const [boardRepoFilter, setBoardRepoFilter] = useState<string>(
+    DEFAULT_TASK_BOARD_REPO,
+  );
 
   const agentOptions = useMemo(
     () => agentInstances.map(toWorkspaceAgentOption),
@@ -72,6 +76,13 @@ export function useWorkspaceData(): WorkspaceData {
   );
 
   const repoFilters = useMemo(() => deriveRepoFilters(taskViews), [taskViews]);
+  const repoOptions = useMemo(
+    () => [
+      DEFAULT_TASK_BOARD_REPO,
+      ...repoFilters.filter(repo => repo !== DEFAULT_TASK_BOARD_REPO),
+    ],
+    [repoFilters],
+  );
 
   const applyResult = (result: Awaited<ReturnType<typeof loadWorkspaceData>>) => {
     if (result.agentsError) {
@@ -94,12 +105,12 @@ export function useWorkspaceData(): WorkspaceData {
     loadWorkspaceData().then(applyResult);
   }, []);
 
-  // Reset board filter when the filtered repo disappears from the task list.
+  // Reset board filter when the selected repo disappears from the available options.
   useEffect(() => {
-    if (boardRepoFilter !== 'all' && !repoFilters.includes(boardRepoFilter)) {
-      setBoardRepoFilter('all');
+    if (!repoOptions.includes(boardRepoFilter)) {
+      setBoardRepoFilter(DEFAULT_TASK_BOARD_REPO);
     }
-  }, [boardRepoFilter, repoFilters]);
+  }, [boardRepoFilter, repoOptions]);
 
   const reload = async () => {
     const result = await loadWorkspaceData();
@@ -111,7 +122,7 @@ export function useWorkspaceData(): WorkspaceData {
     agentOptions,
     agentOptionsById,
     taskViews,
-    repoFilters,
+    repoOptions,
     boardRepoFilter,
     setBoardRepoFilter,
     isLoadingAgents,
@@ -119,4 +130,3 @@ export function useWorkspaceData(): WorkspaceData {
     reload,
   };
 }
-

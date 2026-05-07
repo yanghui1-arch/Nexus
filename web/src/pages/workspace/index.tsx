@@ -95,7 +95,7 @@ export default function WorkspacePage() {
       {section === 'task-board' && (
         <WorkspaceTaskBoard
           tasks={data.taskViews}
-          repoFilters={data.repoFilters}
+          repoOptions={data.repoOptions}
           repoFilter={data.boardRepoFilter}
           isLoading={data.isLoading}
           onRepoFilterChange={data.setBoardRepoFilter}
