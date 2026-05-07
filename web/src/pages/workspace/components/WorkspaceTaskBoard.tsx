@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/card';
 import {
   STATUS_META,
-  STATUS_ORDER,
+  TASK_BOARD_STATUS_ORDER,
   sortTasksForBoard,
   timeAgo,
 } from '../utils';
@@ -36,20 +36,22 @@ export function WorkspaceTaskBoard({
       repoFilter === 'all'
         ? tasks
         : tasks.filter(task => task.repo === repoFilter);
-    return sortTasksForBoard(byRepo);
+    return sortTasksForBoard(byRepo).filter(task =>
+      TASK_BOARD_STATUS_ORDER.includes(task.status),
+    );
   }, [tasks, repoFilter]);
 
   const groupedTasks = useMemo(() => {
-    const groups = STATUS_ORDER.reduce(
+    const groups = TASK_BOARD_STATUS_ORDER.reduce(
       (acc, status) => {
         acc[status] = [];
         return acc;
       },
-      {} as Record<ApiTaskStatus, WorkspaceTaskView[]>,
+      {} as Partial<Record<ApiTaskStatus, WorkspaceTaskView[]>>,
     );
 
     filteredTasks.forEach(task => {
-      groups[task.status].push(task);
+      groups[task.status]?.push(task);
     });
 
     return groups;
@@ -81,11 +83,11 @@ export function WorkspaceTaskBoard({
       </CardHeader>
 
       <CardContent className="overflow-x-auto">
-        <div className="grid min-w-[1050px] gap-4 grid-cols-7">
-          {STATUS_ORDER.map(status => {
+        <div className="grid min-w-[720px] grid-cols-4 gap-4">
+          {TASK_BOARD_STATUS_ORDER.map(status => {
             const statusMeta = STATUS_META[status];
             const StatusIcon = statusMeta.icon;
-            const statusTasks = groupedTasks[status];
+            const statusTasks = groupedTasks[status] ?? [];
 
             return (
               <Card key={status} className="min-w-0 gap-4 py-4">

@@ -57,14 +57,11 @@ export type WorkspaceConsultMessageView = {
 
 export type BadgeTone = 'default' | 'secondary' | 'destructive' | 'outline';
 
-export const STATUS_ORDER: ApiTaskStatus[] = [
+export const TASK_BOARD_STATUS_ORDER: ApiTaskStatus[] = [
   'queued',
   'running',
   'waiting_for_review',
-  'waiting_for_merge',
   'merged',
-  'closed',
-  'failed',
 ];
 
 export const STATUS_META: Record<
