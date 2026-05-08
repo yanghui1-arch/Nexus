@@ -2,7 +2,9 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { DEFAULT_WORKSPACE_PATH } from '@/lib/dashboard-nav';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Toaster } from '@/components/ui/toaster';
+import { AuthCallbackPage, LoginPage, RequireAuth } from './pages/auth/LoginPage';
 import { NexusReviewPage } from './pages/nexus-review';
+import { PricingPage } from './pages/pricing/PricingPage';
 import ProcessTrackingPage from './pages/process-tracking';
 import PublishTaskPage from './pages/publish-task';
 import TaskBoardPage from './pages/task-board';
@@ -13,16 +15,19 @@ function App() {
     <BrowserRouter>
       <Toaster />
       <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/auth/github/callback" element={<AuthCallbackPage />} />
         <Route
           path="/workspace/code-review/nexus/tasks/:taskId/pull-requests/:virtualPrId"
-          element={<NexusReviewPage mode="pull-request" />}
+          element={<RequireAuth><NexusReviewPage mode="pull-request" /></RequireAuth>}
         />
         <Route
           path="/code-review/nexus/tasks/:taskId/pull-requests/:virtualPrId"
-          element={<NexusReviewPage mode="pull-request" />}
+          element={<RequireAuth><NexusReviewPage mode="pull-request" /></RequireAuth>}
         />
-        <Route element={<AppLayout />}>
+        <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
           <Route path="/" element={<Navigate to={DEFAULT_WORKSPACE_PATH} replace />} />
+          <Route path="/pricing" element={<PricingPage />} />
           <Route path="/publish-task" element={<PublishTaskPage />} />
           <Route path="/process-tracking" element={<ProcessTrackingPage />} />
           <Route path="/task-board" element={<TaskBoardPage />} />

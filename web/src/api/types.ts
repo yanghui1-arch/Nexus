@@ -248,3 +248,33 @@ export interface ApiAgentInstance {
   updated_at: string;
   workspace: ApiWorkspace | null;
 }
+
+export interface ApiGithubLoginResponse {
+  authorization_url: string;
+}
+
+export interface ApiAuthTokenResponse {
+  access_token: string;
+  token_type: 'bearer';
+}
+
+export interface ApiUser {
+  id: string;
+  github_login: string;
+  email: string | null;
+  balance: string;
+}
+
+export interface ApiBuyAgentRequest {
+  agent: ApiAgentKind;
+  months: number;
+}
+
+export interface ApiUserAgentSubscription {
+  id: string;
+  user_id: string;
+  agent: ApiAgentKind;
+  started_at: string;
+  expires_at: string;
+  created_at: string;
+}
