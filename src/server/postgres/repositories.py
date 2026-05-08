@@ -18,6 +18,8 @@ from src.server.postgres.models import (
     TaskStatus,
     TaskWorkItemRecord,
     TaskWorkItemStatus,
+    UserAgentSubscriptionRecord,
+    UserRecord,
     VirtualPullRequestCommentRecord,
     VirtualPullRequestLineSide,
     VirtualPullRequestRecord,
@@ -1126,3 +1128,120 @@ class VirtualPullRequestCommentRepository:
         )
         result = await session.execute(query)
         return list(result.scalars().all())
+
+
+class UserRepository:
+    @staticmethod
+    async def create(
+        session: AsyncSession,
+        *,
+        github_id: str,
+        github_login: str,
+        email: str | None,
+    ) -> UserRecord:
+        user = UserRecord(
+            github_id=github_id,
+            github_login=github_login,
+            email=email,
+        )
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        return user
+
+    @staticmethod
+    async def get_by_id(session: AsyncSession, user_id: uuid.UUID) -> UserRecord | None:
+        return await session.get(UserRecord, user_id)
+
+    @staticmethod
+    async def get_by_github_id(session: AsyncSession, github_id: str) -> UserRecord | None:
+        query = select(UserRecord).where(UserRecord.github_id == github_id)
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def add_balance(
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        amount: Any,
+    ) -> UserRecord | None:
+        user = await session.get(UserRecord, user_id)
+        if user is None:
+            return None
+        user.balance = user.balance + amount
+        user.updated_at = utc_now()
+        await session.commit()
+        await session.refresh(user)
+        return user
+
+    @staticmethod
+    async def deduct_balance(
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        amount: Any,
+    ) -> UserRecord | None:
+        user = await session.get(UserRecord, user_id)
+        if user is None:
+            return None
+        if user.balance < amount:
+            return None
+        user.balance = user.balance - amount
+        user.updated_at = utc_now()
+        await session.commit()
+        await session.refresh(user)
+        return user
+
+
+class UserAgentSubscriptionRepository:
+    @staticmethod
+    async def create(
+        session: AsyncSession,
+        *,
+        user_id: uuid.UUID,
+        agent: AgentName,
+        started_at: datetime,
+        expires_at: datetime,
+    ) -> UserAgentSubscriptionRecord:
+        sub = UserAgentSubscriptionRecord(
+            user_id=user_id,
+            agent=agent,
+            started_at=started_at,
+            expires_at=expires_at,
+        )
+        session.add(sub)
+        await session.commit()
+        await session.refresh(sub)
+        return sub
+
+    @staticmethod
+    async def list_by_user(
+        session: AsyncSession,
+        user_id: uuid.UUID,
+    ) -> list[UserAgentSubscriptionRecord]:
+        query = (
+            select(UserAgentSubscriptionRecord)
+            .where(UserAgentSubscriptionRecord.user_id == user_id)
+            .order_by(UserAgentSubscriptionRecord.created_at.desc())
+        )
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def get_active_for_user_and_agent(
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        agent: AgentName,
+    ) -> UserAgentSubscriptionRecord | None:
+        now = utc_now()
+        query = (
+            select(UserAgentSubscriptionRecord)
+            .where(
+                UserAgentSubscriptionRecord.user_id == user_id,
+                UserAgentSubscriptionRecord.agent == agent,
+                UserAgentSubscriptionRecord.expires_at > now,
+            )
+            .order_by(UserAgentSubscriptionRecord.expires_at.desc())
+            .limit(1)
+        )
+        result = await session.execute(query)
+        return result.scalar_one_or_none()

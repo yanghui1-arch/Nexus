@@ -80,6 +80,20 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
         "author",
         "body",
     },
+    "user": {
+        "id",
+        "github_id",
+        "github_login",
+        "email",
+        "balance",
+    },
+    "user_agent_subscription": {
+        "id",
+        "user_id",
+        "agent",
+        "started_at",
+        "expires_at",
+    },
 }
 
 
