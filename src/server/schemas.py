@@ -471,3 +471,68 @@ class AgentInstanceResponse(BaseModel):
             updated_at=instance.updated_at,
             workspace=WorkspaceResponse.from_record(workspace) if workspace else None,
         )
+
+
+class UserResponse(BaseModel):
+    id: uuid.UUID
+    github_login: str
+    email: str | None
+    balance: str
+
+    @classmethod
+    def from_record(cls, user: Any) -> "UserResponse":
+        return cls(
+            id=user.id,
+            github_login=user.github_login,
+            email=user.email,
+            balance=str(user.balance),
+        )
+
+
+class RechargeRequest(BaseModel):
+    amount: str = Field(min_length=1)
+
+    @field_validator("amount")
+    @classmethod
+    def validate_amount(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("amount cannot be empty")
+        from decimal import Decimal, InvalidOperation
+        try:
+            Decimal(stripped)
+        except InvalidOperation:
+            raise ValueError("amount must be a valid decimal number")
+        if Decimal(stripped) <= 0:
+            raise ValueError("amount must be positive")
+        return stripped
+
+
+class BuyAgentRequest(BaseModel):
+    agent: AgentKind
+    months: int = Field(default=1, ge=1, le=12)
+
+
+class AuthTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class UserAgentSubscriptionResponse(BaseModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    agent: str
+    started_at: datetime
+    expires_at: datetime
+    created_at: datetime
+
+    @classmethod
+    def from_record(cls, sub: Any) -> "UserAgentSubscriptionResponse":
+        return cls(
+            id=sub.id,
+            user_id=sub.user_id,
+            agent=sub.agent.value,
+            started_at=sub.started_at,
+            expires_at=sub.expires_at,
+            created_at=sub.created_at,
+        )

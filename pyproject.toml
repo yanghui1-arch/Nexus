@@ -15,6 +15,7 @@ dependencies = [
     "mcp-server-fetch>=0.1.0",
     "mwin>=0.2.2",
     "openai>=2.29.0",
+    "pyjwt>=2.10.0",
     "python-dotenv>=1.1.0",
     "redis>=5.2.0",
     "sqlalchemy>=2.0.38",
