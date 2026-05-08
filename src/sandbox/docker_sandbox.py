@@ -1,7 +1,5 @@
 ﻿import asyncio
 import base64
-import tempfile
-import shutil
 from typing import Literal
 from dataclasses import dataclass
 from pathlib import Path
@@ -73,9 +71,8 @@ class Sandbox:
     share the same container, so state (installed packages, written files)
     persists across calls within the same session.
 
-    All file I/O runs through Docker exec — the host filesystem is never
-    touched directly. The /workspace volume mount is kept for potential
-    future use but is not relied on by any operation.
+    All file I/O runs through Docker exec inside the container workspace;
+    the host filesystem is not relied on by any operation.
 
     Requires Docker to be running locally. No API key or internet access needed.
 
@@ -97,21 +94,18 @@ class Sandbox:
         self._config = config
         self._client: docker.DockerClient | None = None
         self._container = None
-        self._workdir: str | None = None
 
 
     async def __aenter__(self) -> "Sandbox":
         self._client = await asyncio.to_thread(docker.from_env)
-        self._workdir = tempfile.mkdtemp(prefix="nexus_sandbox_")
         self._container = await asyncio.to_thread(
             self._client.containers.run,
             self._config.image,
-            command="sleep infinity",
+            command=["/bin/sh", "-lc", "mkdir -p /workspace && sleep infinity"],
             detach=True,
             auto_remove=True,
             mem_limit=self._config.mem_limit,
             security_opt=["no-new-privileges"],
-            volumes={self._workdir: {"bind": "/workspace", "mode": "rw"}},
             working_dir="/workspace",
         )
         for cmd in self._config.init_commands:
@@ -127,9 +121,6 @@ class Sandbox:
         if self._container:
             await asyncio.to_thread(self._container.kill)
             self._container = None
-        if self._workdir:
-            shutil.rmtree(self._workdir, ignore_errors=True)
-            self._workdir = None
 
 
     async def recreate(self) -> "Sandbox":
@@ -279,12 +270,3 @@ class Sandbox:
             "exit_code": exit_code,
             "error": stderr if exit_code != 0 else None,
         }
-
-    def _to_host_path(self, container_path: str) -> Path:
-        """Translate a /workspace container path to the host-side temp directory.
-        Available for use when the volume mount is active.
-        Currently it's not used and must keep it.
-        """
-        rel = container_path.removeprefix("/workspace").lstrip("/")
-        return Path(self._workdir) / rel
-
