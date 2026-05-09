@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.server.postgres.models import (
     AgentInstanceRecord,
     AgentName,
+    AgentPurchaseRecord,
+    AuthSessionRecord,
     GithubPullRequestFeedbackKind,
     GithubPullRequestFeedbackRecord,
     GithubPullRequestFeedbackStatus,
@@ -21,6 +23,7 @@ from src.server.postgres.models import (
     TaskStatus,
     TaskWorkItemRecord,
     TaskWorkItemStatus,
+    UserRecord,
     VirtualPullRequestCommentRecord,
     VirtualPullRequestLineSide,
     VirtualPullRequestRecord,
@@ -1420,3 +1423,106 @@ class GithubPullRequestFeedbackRepository:
             record.processed_at = None
             record.updated_at = now
         await session.commit()
+
+
+class UserRepository:
+    @staticmethod
+    async def get(session: AsyncSession, user_id: uuid.UUID) -> UserRecord | None:
+        return await session.get(UserRecord, user_id)
+
+    @staticmethod
+    async def get_by_github_id(session: AsyncSession, github_id: str) -> UserRecord | None:
+        result = await session.execute(select(UserRecord).where(UserRecord.github_id == github_id))
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def upsert_github_user(
+        session: AsyncSession,
+        *,
+        github_id: str,
+        github_login: str,
+        email: str | None,
+    ) -> UserRecord:
+        user = await UserRepository.get_by_github_id(session, github_id)
+        if user is None:
+            user = UserRecord(github_id=github_id, github_login=github_login, email=email)
+            session.add(user)
+        else:
+            user.github_login = github_login
+            user.email = email or user.email
+            user.updated_at = utc_now()
+        await session.commit()
+        await session.refresh(user)
+        return user
+
+    @staticmethod
+    async def add_balance(session: AsyncSession, user_id: uuid.UUID, amount_cents: int) -> UserRecord | None:
+        user = await session.get(UserRecord, user_id)
+        if user is None:
+            return None
+        user.balance_cents += amount_cents
+        user.updated_at = utc_now()
+        await session.commit()
+        await session.refresh(user)
+        return user
+
+
+class AuthSessionRepository:
+    @staticmethod
+    async def create(
+        session: AsyncSession,
+        *,
+        token_hash: str,
+        user_id: uuid.UUID,
+        expires_at: datetime,
+    ) -> AuthSessionRecord:
+        auth_session = AuthSessionRecord(token_hash=token_hash, user_id=user_id, expires_at=expires_at)
+        session.add(auth_session)
+        await session.commit()
+        await session.refresh(auth_session)
+        return auth_session
+
+    @staticmethod
+    async def get_user_by_token_hash(session: AsyncSession, token_hash: str) -> UserRecord | None:
+        result = await session.execute(
+            select(UserRecord)
+            .join(AuthSessionRecord, AuthSessionRecord.user_id == UserRecord.id)
+            .where(AuthSessionRecord.token_hash == token_hash, AuthSessionRecord.expires_at > utc_now())
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def delete(session: AsyncSession, token_hash: str) -> None:
+        auth_session = await session.get(AuthSessionRecord, token_hash)
+        if auth_session is not None:
+            await session.delete(auth_session)
+            await session.commit()
+
+
+class AgentPurchaseRepository:
+    @staticmethod
+    async def create_purchase(
+        session: AsyncSession,
+        *,
+        user_id: uuid.UUID,
+        agent: AgentName,
+        price_cents: int,
+        expires_at: datetime,
+    ) -> AgentPurchaseRecord:
+        user = await session.get(UserRecord, user_id, with_for_update=True)
+        if user is None:
+            raise ValueError("User not found")
+        if user.balance_cents < price_cents:
+            raise ValueError("Insufficient balance")
+        user.balance_cents -= price_cents
+        user.updated_at = utc_now()
+        purchase = AgentPurchaseRecord(
+            user_id=user_id,
+            agent=agent,
+            price_cents=price_cents,
+            expires_at=expires_at,
+        )
+        session.add(purchase)
+        await session.commit()
+        await session.refresh(purchase)
+        return purchase
