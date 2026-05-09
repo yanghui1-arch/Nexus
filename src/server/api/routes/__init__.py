@@ -2,13 +2,6 @@
 
 from src.server.api.routes.agent_instances import router as agent_instances_router
 from src.server.api.routes.auth import auth_router, users_router
+from src.server.api.routes.tasks import router as tasks_router
 
 __all__ = ["agent_instances_router", "auth_router", "tasks_router", "users_router"]
-
-
-def __getattr__(name: str):
-    if name == "tasks_router":
-        from src.server.api.routes.tasks import router as tasks_router
-
-        return tasks_router
-    raise AttributeError(name)
