@@ -18,10 +18,18 @@ from src.server.postgres.models import AgentName
 from src.server.postgres.repositories import UserAgentSubscriptionRepository, UserRepository, UserSessionRepository
 
 
+class FakeSession:
+    async def commit(self) -> None:
+        return None
+
+    async def refresh(self, item: Any) -> None:
+        return None
+
+
 class FakeDatabase:
     @asynccontextmanager
     async def session(self):
-        yield SimpleNamespace(commit=lambda: None, refresh=lambda item: None)
+        yield FakeSession()
 
 
 def build_app() -> FastAPI:
