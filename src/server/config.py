@@ -28,6 +28,11 @@ class Settings:
     celery_task_publish_max_retries: int
     celery_broker_connection_timeout_seconds: float
     task_dispatch_lease_seconds: int
+    github_oauth_client_id: str | None
+    github_oauth_client_secret: str | None
+    jwt_secret: str | None
+    jwt_algorithm: str
+    jwt_expiration_hours: int
 
 
 @lru_cache(maxsize=1)
@@ -70,4 +75,9 @@ def get_settings() -> Settings:
         task_dispatch_lease_seconds=int(
             os.getenv("NEXUS_TASK_DISPATCH_LEASE_SECONDS", "60"),
         ),
+        github_oauth_client_id=os.getenv("NEXUS_GITHUB_OAUTH_CLIENT_ID"),
+        github_oauth_client_secret=os.getenv("NEXUS_GITHUB_OAUTH_CLIENT_SECRET"),
+        jwt_secret=os.getenv("NEXUS_JWT_SECRET"),
+        jwt_algorithm=os.getenv("NEXUS_JWT_ALGORITHM", "HS256"),
+        jwt_expiration_hours=int(os.getenv("NEXUS_JWT_EXPIRATION_HOURS", "168")),
     )
