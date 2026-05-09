@@ -1171,7 +1171,9 @@ class UserRepository:
         return user
 
     @staticmethod
-    async def deduct_balance(session: AsyncSession, user_id: uuid.UUID, amount: Decimal) -> UserRecord | None:
+    async def deduct_balance(
+        session: AsyncSession, user_id: uuid.UUID, amount: Decimal, *, commit: bool = True
+    ) -> UserRecord | None:
         stmt = (
             update(UserRecord)
             .where(UserRecord.id == user_id, UserRecord.balance >= amount)
@@ -1183,7 +1185,8 @@ class UserRepository:
         if user is None:
             await session.rollback()
             return None
-        await session.commit()
+        if commit:
+            await session.commit()
         return user
 
 
@@ -1203,6 +1206,28 @@ class UserSessionRepository:
         return record
 
 
+    @staticmethod
+    async def get_active(session: AsyncSession, token_hash: str) -> UserSessionRecord | None:
+        query = select(UserSessionRecord).where(
+            UserSessionRecord.token_hash == token_hash,
+            UserSessionRecord.revoked_at.is_(None),
+            UserSessionRecord.expires_at > utc_now(),
+        )
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def revoke(session: AsyncSession, token_hash: str) -> bool:
+        stmt = (
+            update(UserSessionRecord)
+            .where(UserSessionRecord.token_hash == token_hash, UserSessionRecord.revoked_at.is_(None))
+            .values(revoked_at=utc_now())
+        )
+        result = await session.execute(stmt)
+        await session.commit()
+        return bool(result.rowcount)
+
+
 class UserAgentSubscriptionRepository:
     @staticmethod
     async def create(
@@ -1212,6 +1237,7 @@ class UserAgentSubscriptionRepository:
         agent: AgentName,
         started_at: datetime,
         expires_at: datetime,
+        commit: bool = True,
     ) -> UserAgentSubscriptionRecord:
         subscription = UserAgentSubscriptionRecord(
             user_id=user_id,
@@ -1220,6 +1246,9 @@ class UserAgentSubscriptionRepository:
             expires_at=expires_at,
         )
         session.add(subscription)
-        await session.commit()
-        await session.refresh(subscription)
+        if commit:
+            await session.commit()
+            await session.refresh(subscription)
+        else:
+            await session.flush()
         return subscription
