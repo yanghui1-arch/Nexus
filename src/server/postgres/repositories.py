@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any, cast
 
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
@@ -18,6 +19,9 @@ from src.server.postgres.models import (
     TaskStatus,
     TaskWorkItemRecord,
     TaskWorkItemStatus,
+    UserAgentSubscriptionRecord,
+    UserRecord,
+    UserSessionRecord,
     VirtualPullRequestCommentRecord,
     VirtualPullRequestLineSide,
     VirtualPullRequestRecord,
@@ -1126,3 +1130,96 @@ class VirtualPullRequestCommentRepository:
         )
         result = await session.execute(query)
         return list(result.scalars().all())
+
+
+AGENT_MONTHLY_PRICES_CNY: dict[AgentName, Decimal] = {AgentName.tela: Decimal("5500.00"), AgentName.sophie: Decimal("6000.00")}
+
+
+class UserRepository:
+    @staticmethod
+    async def create(
+        session: AsyncSession,
+        *,
+        github_id: str,
+        github_login: str,
+        email: str | None,
+    ) -> UserRecord:
+        user = UserRecord(github_id=github_id, github_login=github_login, email=email)
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        return user
+
+    @staticmethod
+    async def get_by_id(session: AsyncSession, user_id: uuid.UUID) -> UserRecord | None:
+        return await session.get(UserRecord, user_id)
+
+    @staticmethod
+    async def get_by_github_id(session: AsyncSession, github_id: str) -> UserRecord | None:
+        result = await session.execute(select(UserRecord).where(UserRecord.github_id == github_id))
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def add_balance(session: AsyncSession, user_id: uuid.UUID, amount: Decimal) -> UserRecord | None:
+        user = await session.get(UserRecord, user_id)
+        if user is None:
+            return None
+        user.balance = user.balance + amount
+        user.updated_at = utc_now()
+        await session.commit()
+        await session.refresh(user)
+        return user
+
+    @staticmethod
+    async def deduct_balance(session: AsyncSession, user_id: uuid.UUID, amount: Decimal) -> UserRecord | None:
+        stmt = (
+            update(UserRecord)
+            .where(UserRecord.id == user_id, UserRecord.balance >= amount)
+            .values(balance=UserRecord.balance - amount, updated_at=utc_now())
+            .returning(UserRecord)
+        )
+        result: CursorResult[Any] = cast(CursorResult[Any], await session.execute(stmt))
+        user = result.scalar_one_or_none()
+        if user is None:
+            await session.rollback()
+            return None
+        await session.commit()
+        return user
+
+
+class UserSessionRepository:
+    @staticmethod
+    async def create(
+        session: AsyncSession,
+        *,
+        user_id: uuid.UUID,
+        token_hash: str,
+        expires_at: datetime,
+    ) -> UserSessionRecord:
+        record = UserSessionRecord(user_id=user_id, token_hash=token_hash, expires_at=expires_at)
+        session.add(record)
+        await session.commit()
+        await session.refresh(record)
+        return record
+
+
+class UserAgentSubscriptionRepository:
+    @staticmethod
+    async def create(
+        session: AsyncSession,
+        *,
+        user_id: uuid.UUID,
+        agent: AgentName,
+        started_at: datetime,
+        expires_at: datetime,
+    ) -> UserAgentSubscriptionRecord:
+        subscription = UserAgentSubscriptionRecord(
+            user_id=user_id,
+            agent=agent,
+            started_at=started_at,
+            expires_at=expires_at,
+        )
+        session.add(subscription)
+        await session.commit()
+        await session.refresh(subscription)
+        return subscription
