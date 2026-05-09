@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 
 from src.logger import logger
-from src.server.api.routes import agent_instances_router, tasks_router
+from src.server.api.routes import agent_instances_router, auth_router, tasks_router, users_router
 from src.server.config import get_settings
 from src.server.postgres.database import Database
 from src.server.redis.client import RedisClient
@@ -62,6 +62,8 @@ app = FastAPI(
 
 app.include_router(agent_instances_router)
 app.include_router(tasks_router)
+app.include_router(auth_router)
+app.include_router(users_router)
 
 
 @app.get("/health")
