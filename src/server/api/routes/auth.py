@@ -36,9 +36,12 @@ users_router = APIRouter(prefix="/v1/users", tags=["users"])
 
 
 @auth_router.get("/github/login")
-async def github_login(state: str = Query(default="")) -> dict[str, str]:
+async def github_login(
+    state: str = Query(default=""),
+    redirect_uri: str | None = Query(default=None),
+) -> dict[str, str]:
     try:
-        return {"authorization_url": build_github_login_url(state)}
+        return {"authorization_url": build_github_login_url(state, redirect_uri)}
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 

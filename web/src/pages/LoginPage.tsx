@@ -43,7 +43,7 @@ export default function LoginPage() {
     sessionStorage.setItem(STATE_KEY, state);
 
     try {
-      const { authorization_url } = await getGitHubLoginUrl(state);
+      const { authorization_url } = await getGitHubLoginUrl(state, window.location.href.split('?')[0]);
       window.location.href = authorization_url;
     } catch (err) {
       setError(getErrorDetail(err, 'Unable to start GitHub login.'));
@@ -68,7 +68,7 @@ export default function LoginPage() {
             Continue with GitHub
           </Button>
           <p className="text-center text-xs text-muted-foreground">
-            Configure the GitHub OAuth callback as /v1/auth/github/callback on your API domain.
+            Configure the GitHub OAuth callback URL as this page URL, for example https://your-web-domain/login.
           </p>
         </CardContent>
       </Card>

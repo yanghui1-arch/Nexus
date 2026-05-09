@@ -79,11 +79,14 @@ def get_token_claims(token: str) -> tuple[uuid.UUID, str] | None:
         return None
 
 
-def build_github_login_url(state: str) -> str:
+def build_github_login_url(state: str, redirect_uri: str | None = None) -> str:
     settings = get_settings()
     if not settings.github_oauth_client_id:
         raise RuntimeError("NEXUS_GITHUB_OAUTH_CLIENT_ID is not configured")
-    query = urlencode({"client_id": settings.github_oauth_client_id, "scope": "read:user user:email", "state": state})
+    params = {"client_id": settings.github_oauth_client_id, "scope": "read:user user:email", "state": state}
+    if redirect_uri:
+        params["redirect_uri"] = redirect_uri
+    query = urlencode(params)
     return f"{_GITHUB_AUTHORIZE_URL}?{query}"
 
 

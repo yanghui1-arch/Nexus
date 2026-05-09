@@ -73,6 +73,7 @@ def test_github_login_url(monkeypatch) -> None:
     assert response.status_code == 200
     assert "client_id=client-id" in response.json()["authorization_url"]
     assert "state=abc" in response.json()["authorization_url"]
+    assert "scope=read%3Auser+user%3Aemail" in response.json()["authorization_url"]
 
 
 def test_github_callback_creates_user_and_session(monkeypatch) -> None:

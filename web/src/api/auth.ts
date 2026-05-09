@@ -23,8 +23,10 @@ export function authHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : undefined;
 }
 
-export function getGitHubLoginUrl(state: string) {
-  return apiRequest<{ authorization_url: string }>(buildApiPath('/v1/auth/github/login', { state }));
+export function getGitHubLoginUrl(state: string, redirectUri: string) {
+  return apiRequest<{ authorization_url: string }>(
+    buildApiPath('/v1/auth/github/login', { state, redirect_uri: redirectUri }),
+  );
 }
 
 export async function completeGitHubLogin(code: string) {
