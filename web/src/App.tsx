@@ -2,7 +2,9 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { DEFAULT_WORKSPACE_PATH } from '@/lib/dashboard-nav';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Toaster } from '@/components/ui/toaster';
+import LoginPage from './pages/login';
 import { NexusReviewPage } from './pages/nexus-review';
+import PricingPage from './pages/pricing';
 import ProcessTrackingPage from './pages/process-tracking';
 import PublishTaskPage from './pages/publish-task';
 import TaskBoardPage from './pages/task-board';
@@ -13,8 +15,10 @@ function App() {
     <BrowserRouter>
       <Toaster />
       <Routes>
+        <Route path="/login" element={<LoginPage />} />
         <Route element={<AppLayout />}>
           <Route path="/" element={<Navigate to={DEFAULT_WORKSPACE_PATH} replace />} />
+          <Route path="/pricing" element={<PricingPage />} />
           <Route path="/publish-task" element={<PublishTaskPage />} />
           <Route path="/process-tracking" element={<ProcessTrackingPage />} />
           <Route path="/task-board" element={<TaskBoardPage />} />
@@ -23,7 +27,7 @@ function App() {
           <Route path="/code-review/nexus/tasks/:taskId" element={<NexusReviewPage />} />
           <Route
             path="/code-review/nexus/tasks/:taskId/pull-requests/:virtualPrId"
-            element={<NexusReviewPage />}
+            element={<NexusReviewPage mode="pull-request" />}
           />
           <Route path="/workspace" element={<Navigate to={DEFAULT_WORKSPACE_PATH} replace />} />
           <Route path="/workspace/publish-task" element={<Navigate to="/publish-task" replace />} />
@@ -40,7 +44,7 @@ function App() {
           />
           <Route
             path="/workspace/code-review/nexus/tasks/:taskId/pull-requests/:virtualPrId"
-            element={<NexusReviewPage />}
+            element={<NexusReviewPage mode="pull-request" />}
           />
           <Route path="/overview" element={<Navigate to={DEFAULT_WORKSPACE_PATH} replace />} />
           <Route
