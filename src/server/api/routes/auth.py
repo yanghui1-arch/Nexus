@@ -100,9 +100,36 @@ async def recharge(
     return UserResponse.from_record(user)
 
 
+async def buy_agent(
+    request: Request,
+    payload: BuyAgentRequest,
+    current_user: UserRecord = Depends(get_current_user),
+) -> UserAgentSubscriptionResponse:
+    price = AGENT_MONTHLY_PRICES_CNY[AgentName(payload.agent.value)] * Decimal(payload.months)
+    database: Database = request.app.state.database
+    async with database.session() as session:
+        user = await UserRepository.deduct_balance(session, current_user.id, price, commit=False)
+        if user is None:
+            raise HTTPException(status_code=400, detail="Insufficient balance")
+        now = datetime.now(timezone.utc)
+        subscription = await UserAgentSubscriptionRepository.create(
+            session,
+            user_id=user.id,
+            agent=AgentName(payload.agent.value),
+            started_at=now,
+            expires_at=now + timedelta(days=30 * payload.months),
+            commit=False,
+        )
+        await session.commit()
+        await session.refresh(subscription)
+    return UserAgentSubscriptionResponse.from_record(subscription)
+
+
 auth_router.add_api_route("/me", me, methods=["GET"], response_model=UserResponse)
 auth_router.add_api_route("/recharge", recharge, methods=["POST"], response_model=UserResponse)
+auth_router.add_api_route("/buy-agent", buy_agent, methods=["POST"], response_model=UserAgentSubscriptionResponse)
 users_router.add_api_route("/me", me, methods=["GET"], response_model=UserResponse)
 users_router.add_api_route("/me/balance/recharge", recharge, methods=["POST"], response_model=UserResponse)
+users_router.add_api_route("/me/agents/purchase", buy_agent, methods=["POST"], response_model=UserAgentSubscriptionResponse)
 
 router = auth_router
