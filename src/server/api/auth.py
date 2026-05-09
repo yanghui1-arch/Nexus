@@ -105,3 +105,21 @@ async def get_current_user(request: Request) -> UserRecord:
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
     return user
+
+async def exchange_code_for_token(code: str) -> str | None:
+    settings = get_settings()
+    if not settings.github_oauth_client_id or not settings.github_oauth_client_secret:
+        return None
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            _GITHUB_ACCESS_TOKEN_URL,
+            headers={"Accept": "application/json"},
+            data={"client_id": settings.github_oauth_client_id, "client_secret": settings.github_oauth_client_secret, "code": code},
+        )
+    return response.json().get("access_token") if response.status_code == 200 else None
+
+
+async def fetch_github_user(token: str) -> dict[str, Any] | None:
+    async with httpx.AsyncClient() as client:
+        response = await client.get(_GITHUB_USER_URL, headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"})
+    return response.json() if response.status_code == 200 else None
