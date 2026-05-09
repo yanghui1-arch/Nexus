@@ -6,6 +6,8 @@ import { NexusReviewPage } from './pages/nexus-review';
 import ProcessTrackingPage from './pages/process-tracking';
 import PublishTaskPage from './pages/publish-task';
 import TaskBoardPage from './pages/task-board';
+import LoginPage from './pages/LoginPage';
+import PricingPage from './pages/PricingPage';
 import TaskDetailPage from './pages/TaskDetailPage';
 
 function App() {
@@ -13,6 +15,7 @@ function App() {
     <BrowserRouter>
       <Toaster />
       <Routes>
+        <Route path="/login" element={<LoginPage />} />
         <Route
           path="/workspace/code-review/nexus/tasks/:taskId/pull-requests/:virtualPrId"
           element={<NexusReviewPage mode="pull-request" />}
@@ -26,6 +29,7 @@ function App() {
           <Route path="/publish-task" element={<PublishTaskPage />} />
           <Route path="/process-tracking" element={<ProcessTrackingPage />} />
           <Route path="/task-board" element={<TaskBoardPage />} />
+          <Route path="/pricing" element={<PricingPage />} />
           <Route path="/code-review" element={<Navigate to="/code-review/nexus" replace />} />
           <Route
             path="/code-review/nexus"
