@@ -11,6 +11,9 @@ from src.server.postgres.models import Base, TASK_STATUS_VARCHAR_LENGTH
 
 
 _REQUIRED_SCHEMA: dict[str, set[str]] = {
+    "user_account": {"id", "github_id", "github_login", "balance_cents"},
+    "auth_session": {"token_hash", "user_id", "expires_at"},
+    "agent_purchase": {"id", "user_id", "agent", "price_cents", "expires_at"},
     "agent_instance": {"id", "agent", "client_id", "is_active"},
     "workspace": {"id", "agent_instance_id", "workspace_key", "status"},
     "task": {

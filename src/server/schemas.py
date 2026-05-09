@@ -250,3 +250,27 @@ class AgentInstanceResponse(BaseModel):
             updated_at=instance.updated_at,
             workspace=WorkspaceResponse.from_record(workspace) if workspace else None,
         )
+
+
+class UserResponse(BaseModel):
+    id: uuid.UUID
+    github_login: str
+    email: str | None
+    balance_cents: int
+
+
+class RechargeRequest(BaseModel):
+    amount_cents: int = Field(gt=0, le=100_000_000)
+
+
+class PurchaseAgentRequest(BaseModel):
+    agent: AgentKind
+
+
+class PurchaseAgentResponse(BaseModel):
+    id: uuid.UUID
+    agent: str
+    price_cents: int
+    balance_cents: int
+    purchased_at: datetime
+    expires_at: datetime

@@ -32,6 +32,11 @@ class Settings:
     github_feedback_poll_task_limit: int
     github_feedback_batch_size: int
     github_feedback_http_timeout_seconds: float
+    github_oauth_client_id: str | None
+    github_oauth_client_secret: str | None
+    github_oauth_redirect_uri: str
+    auth_session_cookie_name: str
+    auth_session_ttl_seconds: int
 
 
 @lru_cache(maxsize=1)
@@ -86,4 +91,12 @@ def get_settings() -> Settings:
         github_feedback_http_timeout_seconds=float(
             os.getenv("NEXUS_GITHUB_FEEDBACK_HTTP_TIMEOUT_SECONDS", "10.0"),
         ),
+        github_oauth_client_id=os.getenv("NEXUS_GITHUB_OAUTH_CLIENT_ID"),
+        github_oauth_client_secret=os.getenv("NEXUS_GITHUB_OAUTH_CLIENT_SECRET"),
+        github_oauth_redirect_uri=os.getenv(
+            "NEXUS_GITHUB_OAUTH_REDIRECT_URI",
+            "http://localhost:8000/v1/auth/github/callback",
+        ),
+        auth_session_cookie_name=os.getenv("NEXUS_AUTH_SESSION_COOKIE_NAME", "nexus_session"),
+        auth_session_ttl_seconds=int(os.getenv("NEXUS_AUTH_SESSION_TTL_SECONDS", "2592000")),
     )
