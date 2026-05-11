@@ -519,7 +519,7 @@ def test_run_agent_workflow_processes_github_feedback_from_checkpoint(monkeypatc
         {"role": "system", "content": "checkpoint system"},
         {"role": "assistant", "content": "checkpoint progress"},
     ]
-    assert "Continue the current task from its saved checkpoint." in captured["run"]["question"]
+    assert "Continue the current task." in captured["run"]["question"]
     assert "reply_to_pr_review_comment(pull_number=17, comment_id=901)" in captured["run"]["question"]
     assert (
         "<agent-system-reminder>The following feedback was sent from GitHub by `reviewer` "
