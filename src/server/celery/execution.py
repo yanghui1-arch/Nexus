@@ -651,7 +651,7 @@ def _build_github_feedback_prompt(
 ) -> str:
     pull_number = feedback_items[0].pull_request_number
     lines = [
-        "Continue the current task.",
+        "Continue the current task from its saved checkpoint.",
         f"There is new GitHub feedback on the existing pull request #{pull_number} in {task.repo}.",
         "This is not a new task and you must not open a new pull request.",
         "If code changes are needed, update the existing branch/PR and then reply on GitHub.",
