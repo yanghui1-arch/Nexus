@@ -150,12 +150,17 @@ def test_run_agent_workflow_small_task_passthrough(monkeypatch):
         assert task_id == task.id
         return []
 
+    async def no_pending_feedback(database, task_id, *, limit):
+        assert task_id == task.id
+        return []
+
     monkeypatch.setattr(TaskWorkItemRepository, "list_by_task", no_work_items)
     monkeypatch.setattr(TaskWorkItemRepository, "get_running", no_running)
     monkeypatch.setattr(TaskWorkItemRepository, "get_next_for_execution", no_next)
     monkeypatch.setattr(execution, "_build_agent", lambda **_: fake_agent)
     monkeypatch.setattr(execution, "_run_agent", fake_run_agent)
     monkeypatch.setattr(execution, "_get_latest_checkpoint", empty_checkpoint)
+    monkeypatch.setattr(execution, "_claim_pending_github_feedback", no_pending_feedback)
 
     result = asyncio.run(
         execution._run_agent_workflow(
@@ -234,6 +239,10 @@ def test_run_agent_workflow_pauses_when_work_item_is_ready(monkeypatch):
         assert task_id == task.id
         return []
 
+    async def no_pending_feedback(database, task_id, *, limit):
+        assert task_id == task.id
+        return []
+
     monkeypatch.setattr(TaskWorkItemRepository, "list_by_task", list_items)
     monkeypatch.setattr(TaskWorkItemRepository, "get_running", no_running)
     monkeypatch.setattr(TaskWorkItemRepository, "get_next_for_execution", next_item)
@@ -244,6 +253,7 @@ def test_run_agent_workflow_pauses_when_work_item_is_ready(monkeypatch):
     monkeypatch.setattr(execution, "_build_agent", lambda **_: fake_agent)
     monkeypatch.setattr(execution, "_run_agent", fake_run_agent)
     monkeypatch.setattr(execution, "_get_latest_checkpoint", empty_checkpoint)
+    monkeypatch.setattr(execution, "_claim_pending_github_feedback", no_pending_feedback)
 
     result = asyncio.run(
         execution._run_agent_workflow(
@@ -348,6 +358,10 @@ def test_run_agent_workflow_keeps_checkpoint_between_work_items(monkeypatch):
         assert task_id == task.id
         return task.checkpoint or []
 
+    async def no_pending_feedback(database, task_id, *, limit):
+        assert task_id == task.id
+        return []
+
     monkeypatch.setattr(TaskWorkItemRepository, "list_by_task", list_items)
     monkeypatch.setattr(TaskWorkItemRepository, "get_running", no_running)
     monkeypatch.setattr(TaskWorkItemRepository, "get_next_for_execution", next_item)
@@ -358,6 +372,7 @@ def test_run_agent_workflow_keeps_checkpoint_between_work_items(monkeypatch):
     monkeypatch.setattr(execution, "_build_agent", lambda **_: fake_agent)
     monkeypatch.setattr(execution, "_run_agent", fake_run_agent)
     monkeypatch.setattr(execution, "_get_latest_checkpoint", latest_checkpoint)
+    monkeypatch.setattr(execution, "_claim_pending_github_feedback", no_pending_feedback)
 
     result = asyncio.run(
         execution._run_agent_workflow(
@@ -410,6 +425,10 @@ def test_run_agent_workflow_waits_when_all_work_items_review_ready(monkeypatch):
         assert task_id == task.id
         return task.checkpoint or []
 
+    async def no_pending_feedback(database, task_id, *, limit):
+        assert task_id == task.id
+        return []
+
     async def fail_run_agent(**kwargs):
         raise AssertionError("review-ready work items should not run the agent")
 
@@ -417,6 +436,7 @@ def test_run_agent_workflow_waits_when_all_work_items_review_ready(monkeypatch):
     monkeypatch.setattr(execution, "_build_agent", lambda **_: fake_agent)
     monkeypatch.setattr(execution, "_run_agent", fail_run_agent)
     monkeypatch.setattr(execution, "_get_latest_checkpoint", latest_checkpoint)
+    monkeypatch.setattr(execution, "_claim_pending_github_feedback", no_pending_feedback)
 
     result = asyncio.run(
         execution._run_agent_workflow(
@@ -499,7 +519,7 @@ def test_run_agent_workflow_processes_github_feedback_from_checkpoint(monkeypatc
         {"role": "system", "content": "checkpoint system"},
         {"role": "assistant", "content": "checkpoint progress"},
     ]
-    assert "Continue the current task from its saved checkpoint." in captured["run"]["question"]
+    assert "Continue the current task." in captured["run"]["question"]
     assert "reply_to_pr_review_comment(pull_number=17, comment_id=901)" in captured["run"]["question"]
     assert (
         "<agent-system-reminder>The following feedback was sent from GitHub by `reviewer` "
