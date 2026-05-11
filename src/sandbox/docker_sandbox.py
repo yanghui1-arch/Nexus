@@ -100,17 +100,21 @@ class Sandbox:
         return await self.start()
 
 
-    async def start(
-        self,
-        *,
-        labels: dict[str, str] | None = None,
-        reuse_labels: dict[str, str] | None = None,
-    ) -> "Sandbox":
-        """Start a new container or attach to an existing matching one."""
+    async def start(self, *, labels: dict[str, str] | None = None) -> "Sandbox":
+        """Start a container, reusing an existing labeled one when possible."""
         self._client = await asyncio.to_thread(docker.from_env)
-        if reuse_labels:
-            self._container = await self._find_reusable_container(reuse_labels)
-            if self._container is not None:
+        if labels:
+            containers = await asyncio.to_thread(
+                self._client.containers.list,
+                all=True,
+                filters={"label": [f"{key}={value}" for key, value in labels.items()]},
+            )
+            if containers:
+                self._container = containers[0]
+                if getattr(self._container, "status", None) != "running":
+                    await asyncio.to_thread(self._container.start)
+                    if hasattr(self._container, "reload"):
+                        await asyncio.to_thread(self._container.reload)
                 logger.info("Reusing existing Docker sandbox container after worker restart")
                 return self
 
@@ -132,22 +136,6 @@ class Sandbox:
                 logger.info(f"Initializing {cmd.name}")
             await self.run_shell(cmd.command)
         return self
-
-
-    async def _find_reusable_container(self, labels: dict[str, str]):
-        label_filters = [f"{key}={value}" for key, value in labels.items()]
-        containers = await asyncio.to_thread(
-            self._client.containers.list,
-            all=True,
-            filters={"label": label_filters},
-        )
-        for container in containers:
-            if getattr(container, "status", None) != "running":
-                await asyncio.to_thread(container.start)
-                if hasattr(container, "reload"):
-                    await asyncio.to_thread(container.reload)
-            return container
-        return None
 
 
     async def __aexit__(self, *_) -> None:

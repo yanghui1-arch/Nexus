@@ -16,9 +16,9 @@ class DummySandbox:
         self.enter_calls = 0
         self.exit_calls = 0
 
-    async def start(self, *, labels=None, reuse_labels=None):
+    async def start(self, *, labels=None):
         self.enter_calls += 1
-        self.start_calls.append((labels, reuse_labels))
+        self.start_calls.append(labels)
         return self
 
     async def __aenter__(self):
@@ -52,8 +52,7 @@ async def test_pool_labels_new_sandboxes_for_cross_process_reuse(sandbox_stub):
 
     await manager.acquire(PYTHON_312, repo_url="https://github.com/owner/repo")
 
-    labels, reuse_labels = DummySandbox.start_calls[-1]
-    assert labels == reuse_labels
+    labels = DummySandbox.start_calls[-1]
     assert labels[pool_management._POOL_MANAGED_LABEL] == "true"
     assert labels[pool_management._POOL_KEY_LABEL].startswith("https://github.com/owner/repo::")
     await manager.shutdown()

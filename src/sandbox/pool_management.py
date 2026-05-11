@@ -86,7 +86,7 @@ class SandboxPoolManager:
 
             sandbox = Sandbox(config)
             labels = {_POOL_MANAGED_LABEL: "true", _POOL_KEY_LABEL: key}
-            await sandbox.start(labels=labels, reuse_labels=labels)
+            await sandbox.start(labels=labels)
             now = time.time()
             entry = _SandboxPoolEntry(
                 key=key,
