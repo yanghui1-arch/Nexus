@@ -3,8 +3,6 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import datetime, timezone
-from typing import Any
-
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 from sqlalchemy import (
     Boolean,
@@ -192,18 +190,6 @@ class TaskRecord(Base):
     repo: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     project: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     external_issue_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    requested_current_session_ctx: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSON,
-        nullable=False,
-        default=list,
-        server_default=text("'[]'::json"),
-    )
-    requested_history_session_ctx: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSON,
-        nullable=False,
-        default=list,
-        server_default=text("'[]'::json"),
-    )
     checkpoint: Mapped[list[ChatCompletionMessageParam] | None] = mapped_column(JSON, nullable=True)
     dispatch_token: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)

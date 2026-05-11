@@ -39,8 +39,6 @@ def make_task(**overrides):
         "id": "task-id",
         "repo": "owner/repo",
         "question": "do the task",
-        "requested_current_session_ctx": [{"role": "assistant", "content": "current"}],
-        "requested_history_session_ctx": [{"role": "user", "content": "history"}],
         "checkpoint": None,
     }
     values.update(overrides)

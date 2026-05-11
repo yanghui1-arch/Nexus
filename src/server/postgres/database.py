@@ -20,8 +20,6 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
         "question",
         "external_issue_url",
         "status",
-        "requested_current_session_ctx",
-        "requested_history_session_ctx",
         "checkpoint",
         "dispatch_token",
         "lease_expires_at",
@@ -104,18 +102,6 @@ class Database:
 
         async with self._engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-            await conn.execute(
-                text(
-                    "ALTER TABLE task ADD COLUMN IF NOT EXISTS requested_current_session_ctx JSON "
-                    "NOT NULL DEFAULT '[]'::json"
-                )
-            )
-            await conn.execute(
-                text(
-                    "ALTER TABLE task ADD COLUMN IF NOT EXISTS requested_history_session_ctx JSON "
-                    "NOT NULL DEFAULT '[]'::json"
-                )
-            )
             await conn.execute(text("ALTER TABLE task ADD COLUMN IF NOT EXISTS checkpoint JSON"))
             await conn.execute(text("ALTER TABLE task ADD COLUMN IF NOT EXISTS dispatch_token VARCHAR(64)"))
             await conn.execute(text("ALTER TABLE task ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMPTZ"))

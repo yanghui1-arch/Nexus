@@ -6,7 +6,6 @@ PostgreSQL is the source of truth, and runner recovers undispatched/orphaned tas
 from __future__ import annotations
 
 import uuid
-from typing import Any
 
 from src.logger import logger
 from src.server.celery.app import celery_app
@@ -45,7 +44,6 @@ class AgentTaskRunner:
                     f"agent type mismatch: task asks for {request.agent.value} but instance is {instance.agent.value}"
                 )
 
-            current_session_ctx, history_session_ctx = self._load_server_owned_context(request)
             task = await TaskRepository.create(
                 session,
                 agent=AgentName(request.agent.value),
@@ -54,8 +52,6 @@ class AgentTaskRunner:
                 repo=request.repo,
                 project=request.project,
                 external_issue_url=request.external_issue_url,
-                current_session_ctx=current_session_ctx,
-                history_session_ctx=history_session_ctx,
             )
 
             workspace = await WorkspaceRepository.ensure_for_agent_instance(session, instance)
@@ -170,19 +166,6 @@ class AgentTaskRunner:
 
     async def dispatch_existing_task(self, task_id: uuid.UUID, *, recovered: bool = False) -> bool:
         return await self._dispatch(task_id, recovered=recovered)
-
-    def _load_server_owned_context(
-        self,
-        request: TaskCreateRequest,
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        """Resolve server-owned execution context for a new task submission.
-
-        The public API does not accept session/history context from clients.
-        Until a dedicated server-side context source is wired in, new tasks start
-        with empty persisted context.
-        """
-        _ = request
-        return [], []
 
     async def _dispatch(self, task_id: uuid.UUID, *, recovered: bool) -> bool:
         """Acquire a dispatch lease then emit a Celery message.

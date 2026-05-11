@@ -285,8 +285,6 @@ class TaskRepository:
         repo: str | None,
         project: str | None,
         external_issue_url: str | None,
-        current_session_ctx: list[dict[str, Any]],
-        history_session_ctx: list[dict[str, Any]],
     ) -> TaskRecord:
         task = TaskRecord(
             agent=agent,
@@ -295,8 +293,6 @@ class TaskRepository:
             repo=repo,
             project=project,
             external_issue_url=external_issue_url,
-            requested_current_session_ctx=list(current_session_ctx),
-            requested_history_session_ctx=list(history_session_ctx),
             status=TaskStatus.queued,
         )
         session.add(task)
