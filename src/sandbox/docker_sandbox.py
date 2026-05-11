@@ -104,6 +104,8 @@ class Sandbox:
         """Start a container, reusing an existing labeled one when possible."""
         self._client = await asyncio.to_thread(docker.from_env)
         if labels:
+            # Labels are the durable resume key: after a Celery worker restart,
+            # the in-memory pool is gone but Docker can still find this container.
             containers = await asyncio.to_thread(
                 self._client.containers.list,
                 all=True,
