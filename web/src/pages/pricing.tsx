@@ -1,5 +1,5 @@
 import { startTransition, useEffect, useMemo, useState } from 'react';
-import { Bot, Check, Coins, Github, LogOut, Wallet } from 'lucide-react';
+import { Bot, Check, Coins, Github, LogOut, Sparkles, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCurrentUser, logout, purchaseAgent, rechargeBalance } from '@/api/auth';
 import { getErrorDetail } from '@/api/client';
@@ -48,7 +48,7 @@ export default function PricingPage() {
   useAppLayout({
     title: 'Pricing',
     description: 'Recharge balance and buy monthly access for Tela or Sophie.',
-    mainClassName: 'gap-6',
+    mainClassName: 'gap-7 bg-[radial-gradient(circle_at_top_right,hsl(var(--primary)/0.10),transparent_34%)]',
   });
 
   useEffect(() => {
@@ -92,8 +92,24 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <Card>
+    <div className="space-y-7">
+      <section className="overflow-hidden rounded-[2rem] border bg-primary p-8 text-primary-foreground shadow-xl shadow-primary/15">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-2xl space-y-4">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-sm font-medium text-primary-foreground/90">
+              <Sparkles className="size-4" /> Agent subscriptions
+            </div>
+            <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">Choose the right Nexus agent for your next sprint.</h1>
+            <p className="text-lg text-primary-foreground/80">Recharge once, then activate Tela or Sophie monthly from a single GitHub-backed wallet.</p>
+          </div>
+          <div className="rounded-2xl border border-white/15 bg-white/10 p-5 text-sm backdrop-blur">
+            <p className="text-primary-foreground/70">Available balance</p>
+            <p className="mt-2 text-3xl font-semibold">{balance}</p>
+          </div>
+        </div>
+      </section>
+
+      <Card className="border-0 bg-card/90 shadow-lg shadow-primary/5">
         <CardContent className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
             <div className="flex size-11 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -113,7 +129,7 @@ export default function PricingPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-0 bg-card/90 shadow-lg shadow-primary/5">
         <CardHeader>
           <CardTitle>Recharge balance</CardTitle>
           <CardDescription>Demo recharge credits your wallet directly. Server stores money as integer cents.</CardDescription>
@@ -126,9 +142,10 @@ export default function PricingPage() {
 
       <div className="grid gap-5 lg:grid-cols-3">
         {PLANS.map(plan => (
-          <Card key={plan.name} className={plan.agent === 'tela' ? 'border-primary shadow-md' : ''}>
+          <Card key={plan.name} className={plan.agent === 'tela' ? 'relative overflow-hidden border-primary shadow-xl shadow-primary/10' : 'border-0 shadow-lg shadow-primary/5'}>
+            {plan.agent === 'tela' ? <div className="absolute right-4 top-4 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">Popular</div> : null}
             <CardHeader>
-              <div className="mb-3 flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <div className="mb-3 flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                 <Bot className="size-5" />
               </div>
               <CardTitle>{plan.name}</CardTitle>
