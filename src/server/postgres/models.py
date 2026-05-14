@@ -52,6 +52,11 @@ class AgentName(str, enum.Enum):
     marc = "marc"
 
 
+class AgentEntitlementStatus(str, enum.Enum):
+    active = "active"
+    expired = "expired"
+
+
 class WorkspaceStatus(str, enum.Enum):
     idle = "idle"
     running = "running"
@@ -130,6 +135,53 @@ class GithubPullRequestFeedbackStatus(str, enum.Enum):
 
 class Base(DeclarativeBase):
     pass
+
+
+class AccountRecord(Base):
+    __tablename__ = "account"
+
+    github_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    github_login: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    github_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    github_avatar_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    github_html_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    balance_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+        server_default=func.now(),
+    )
+
+
+class AgentEntitlementRecord(Base):
+    __tablename__ = "agent_entitlement"
+    __table_args__ = (
+        Index("ix_agent_entitlement_account_expiry", "account_github_id", "expires_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    account_github_id: Mapped[int] = mapped_column(
+        ForeignKey("account.github_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    agent: Mapped[AgentName] = mapped_column(Enum(AgentName, native_enum=False), nullable=False, index=True)
+    purchased_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        server_default=func.now(),
+    )
 
 
 class AgentInstanceRecord(Base):

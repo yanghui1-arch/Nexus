@@ -11,6 +11,21 @@ from src.server.postgres.models import Base, TASK_CATEGORY_VARCHAR_LENGTH, TASK_
 
 
 _REQUIRED_SCHEMA: dict[str, set[str]] = {
+    "account": {
+        "github_id",
+        "github_login",
+        "github_name",
+        "github_avatar_url",
+        "github_html_url",
+        "balance_cents",
+    },
+    "agent_entitlement": {
+        "id",
+        "account_github_id",
+        "agent",
+        "purchased_at",
+        "expires_at",
+    },
     "agent_instance": {"id", "agent", "client_id", "is_active"},
     "workspace": {
         "id",
