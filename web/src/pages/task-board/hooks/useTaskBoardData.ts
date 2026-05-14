@@ -15,10 +15,11 @@ export type TaskBoardData = {
   repoFilter: string;
   setRepoFilter: (repo: string) => void;
   isLoading: boolean;
+  hasActiveAgents: boolean;
 };
 
 export function useTaskBoardData(): TaskBoardData {
-  const { taskViews, isLoading } = useWorkspaceRecords();
+  const { agentInstances, taskViews, isLoading } = useWorkspaceRecords();
   const [repoFilter, setRepoFilter] = useState(DEFAULT_TASK_BOARD_REPO);
 
   const repoOptions = useMemo(
@@ -48,5 +49,6 @@ export function useTaskBoardData(): TaskBoardData {
     repoFilter,
     setRepoFilter,
     isLoading,
+    hasActiveAgents: agentInstances.length > 0,
   };
 }

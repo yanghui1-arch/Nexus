@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { DEFAULT_WORKSPACE_PATH } from '@/lib/dashboard-nav';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Toaster } from '@/components/ui/toaster';
+import AgentEntitlementPage from './pages/agent-entitlement';
 import { NexusReviewPage } from './pages/nexus-review';
 import ProcessTrackingPage from './pages/process-tracking';
 import PublishTaskPage from './pages/publish-task';
@@ -15,6 +16,7 @@ function App() {
       <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<Navigate to={DEFAULT_WORKSPACE_PATH} replace />} />
+          <Route path="/agent-entitlement" element={<AgentEntitlementPage />} />
           <Route path="/publish-task" element={<PublishTaskPage />} />
           <Route path="/process-tracking" element={<ProcessTrackingPage />} />
           <Route path="/task-board" element={<TaskBoardPage />} />

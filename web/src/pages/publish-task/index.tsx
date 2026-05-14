@@ -1,3 +1,4 @@
+import { AgentEntitlementEmptyState } from '@/components/entitlements/AgentEntitlementStates';
 import { useAppLayout } from '@/components/layout/AppLayout';
 import { useWorkspaceRecords } from '@/lib/useWorkspaceRecords';
 import { PublishTaskComposerCard } from './components/PublishTaskComposerCard';
@@ -12,6 +13,14 @@ export default function PublishTaskPage() {
 
   const data = useWorkspaceRecords();
   const publisher = usePublishTask(data);
+
+  if (!data.isLoadingAgents && data.agentInstances.length === 0) {
+    return (
+      <section className="w-full max-w-5xl">
+        <AgentEntitlementEmptyState description="You need an active Tela or Sophie entitlement before you can publish tasks to an agent." />
+      </section>
+    );
+  }
 
   return (
     <section className="w-full max-w-5xl">

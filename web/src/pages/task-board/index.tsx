@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { AgentEntitlementEmptyState } from '@/components/entitlements/AgentEntitlementStates';
 import { useAppLayout } from '@/components/layout/AppLayout';
 import { TaskBoardColumn } from './components/TaskBoardColumn';
 import { TaskBoardRepoSelect } from './components/TaskBoardRepoSelect';
@@ -12,12 +13,16 @@ export default function TaskBoardPage() {
   });
 
   const navigate = useNavigate();
-  const { groupedTasks, repoOptions, repoFilter, setRepoFilter, isLoading } =
+  const { groupedTasks, repoOptions, repoFilter, setRepoFilter, isLoading, hasActiveAgents } =
     useTaskBoardData();
 
   const openReview = (taskId: string) => {
     navigate(`/code-review/nexus/tasks/${taskId}`);
   };
+
+  if (!isLoading && !hasActiveAgents) {
+    return <AgentEntitlementEmptyState />;
+  }
 
   return (
     <section className="space-y-4">
