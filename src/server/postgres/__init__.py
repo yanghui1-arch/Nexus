@@ -2,7 +2,6 @@ from src.server.postgres.database import Database
 from src.server.postgres.models import (
     AccountRecord,
     AgentEntitlementRecord,
-    AgentEntitlementStatus,
     AgentInstanceRecord,
     AgentName,
     Base,
@@ -22,7 +21,6 @@ __all__ = [
     "Database",
     "AccountRecord",
     "AgentEntitlementRecord",
-    "AgentEntitlementStatus",
     "AgentInstanceRecord",
     "AgentName",
     "Base",

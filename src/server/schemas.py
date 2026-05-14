@@ -3,14 +3,13 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 from src.server.postgres.models import (
     AccountRecord,
     AgentEntitlementRecord,
-    AgentEntitlementStatus,
     AgentInstanceRecord,
     ProductProposalRecord,
     ProductProposalStatus,
@@ -37,7 +36,7 @@ class AccountEntitlementResponse(BaseModel):
     agent: AgentKind
     purchased_at: datetime
     expires_at: datetime
-    status: AgentEntitlementStatus
+    status: Literal["active", "expired"]
 
     @classmethod
     def from_record(
@@ -50,11 +49,7 @@ class AccountEntitlementResponse(BaseModel):
             agent=AgentKind(entitlement.agent.value),
             purchased_at=entitlement.purchased_at,
             expires_at=entitlement.expires_at,
-            status=(
-                AgentEntitlementStatus.active
-                if entitlement.expires_at > now
-                else AgentEntitlementStatus.expired
-            ),
+            status="active" if entitlement.expires_at > now else "expired",
         )
 
 

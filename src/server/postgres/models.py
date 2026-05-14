@@ -52,11 +52,6 @@ class AgentName(str, enum.Enum):
     marc = "marc"
 
 
-class AgentEntitlementStatus(str, enum.Enum):
-    active = "active"
-    expired = "expired"
-
-
 class WorkspaceStatus(str, enum.Enum):
     idle = "idle"
     running = "running"
