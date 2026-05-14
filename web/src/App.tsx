@@ -3,6 +3,7 @@ import { DEFAULT_WORKSPACE_PATH } from '@/lib/dashboard-nav';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Toaster } from '@/components/ui/toaster';
 import { NexusReviewPage } from './pages/nexus-review';
+import AccountPage from './pages/account';
 import ProcessTrackingPage from './pages/process-tracking';
 import PublishTaskPage from './pages/publish-task';
 import TaskBoardPage from './pages/task-board';
@@ -15,6 +16,8 @@ function App() {
       <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<Navigate to={DEFAULT_WORKSPACE_PATH} replace />} />
+          <Route path="/account" element={<AccountPage />} />
+          <Route path="/pricing" element={<AccountPage />} />
           <Route path="/publish-task" element={<PublishTaskPage />} />
           <Route path="/process-tracking" element={<ProcessTrackingPage />} />
           <Route path="/task-board" element={<TaskBoardPage />} />
@@ -26,6 +29,8 @@ function App() {
             element={<NexusReviewPage />}
           />
           <Route path="/workspace" element={<Navigate to={DEFAULT_WORKSPACE_PATH} replace />} />
+          <Route path="/workspace/account" element={<Navigate to="/account" replace />} />
+          <Route path="/workspace/pricing" element={<Navigate to="/pricing" replace />} />
           <Route path="/workspace/publish-task" element={<Navigate to="/publish-task" replace />} />
           <Route
             path="/workspace/process-tracking"
