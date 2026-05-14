@@ -12,6 +12,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.server.postgres.models import (
+    AccountRecord,
+    AgentEntitlementRecord,
     AgentInstanceRecord,
     AgentName,
     TaskCategory,
@@ -40,6 +42,25 @@ from src.server.postgres.models import (
     WorkspaceRecord,
     WorkspaceStatus,
 )
+
+
+class AccountRepository:
+    @staticmethod
+    async def get_by_github_id(session: AsyncSession, github_id: int) -> AccountRecord | None:
+        return await session.get(AccountRecord, github_id)
+
+    @staticmethod
+    async def list_entitlements(
+        session: AsyncSession,
+        github_id: int,
+    ) -> list[AgentEntitlementRecord]:
+        query = (
+            select(AgentEntitlementRecord)
+            .where(AgentEntitlementRecord.account_github_id == github_id)
+            .order_by(AgentEntitlementRecord.expires_at.desc(), AgentEntitlementRecord.purchased_at.desc())
+        )
+        result = await session.execute(query)
+        return list(result.scalars().all())
 
 
 def utc_now() -> datetime:
