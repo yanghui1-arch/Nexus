@@ -52,6 +52,11 @@ class AgentName(str, enum.Enum):
     marc = "marc"
 
 
+class AgentPurchaseStatus(str, enum.Enum):
+    active = "active"
+    expired = "expired"
+
+
 class WorkspaceStatus(str, enum.Enum):
     idle = "idle"
     running = "running"
@@ -158,6 +163,30 @@ class AgentInstanceRecord(Base):
         nullable=False,
         default=utc_now,
         onupdate=utc_now,
+        server_default=func.now(),
+    )
+
+
+class AgentPurchaseRecord(Base):
+    __tablename__ = "agent_purchase"
+    __table_args__ = (
+        Index("ix_agent_purchase_client_purchased", "client_id", "purchased_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    agent: Mapped[AgentName] = mapped_column(
+        Enum(AgentName, native_enum=False),
+        nullable=False,
+        index=True,
+    )
+    price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    purchased_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
         server_default=func.now(),
     )
 

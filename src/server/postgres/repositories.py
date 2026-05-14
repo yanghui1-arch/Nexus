@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.server.postgres.models import (
     AgentInstanceRecord,
     AgentName,
+    AgentPurchaseRecord,
     TaskCategory,
     ProductProposalRecord,
     ProductProposalStatus,
@@ -270,6 +271,25 @@ class AgentInstanceRepository:
         await session.commit()
         await session.refresh(instance)
         return instance
+
+
+
+class AgentPurchaseRepository:
+    @staticmethod
+    async def list_by_client_id(
+        session: AsyncSession,
+        *,
+        client_id: str,
+        limit: int = 50,
+    ) -> list[AgentPurchaseRecord]:
+        query = (
+            select(AgentPurchaseRecord)
+            .where(AgentPurchaseRecord.client_id == client_id)
+            .order_by(AgentPurchaseRecord.purchased_at.desc())
+            .limit(limit)
+        )
+        result = await session.execute(query)
+        return list(result.scalars().all())
 
 
 class WorkspaceRepository:

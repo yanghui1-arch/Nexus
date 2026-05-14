@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -9,6 +9,8 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 from src.server.postgres.models import (
     AgentInstanceRecord,
+    AgentPurchaseRecord,
+    AgentPurchaseStatus,
     ProductProposalRecord,
     ProductProposalStatus,
     FeatureItemRecord,
@@ -434,4 +436,31 @@ class AgentInstanceResponse(BaseModel):
             created_at=instance.created_at,
             updated_at=instance.updated_at,
             workspace=WorkspaceResponse.from_record(workspace) if workspace else None,
+        )
+
+
+class AgentPurchaseResponse(BaseModel):
+    id: uuid.UUID
+    agent: str
+    price_cents: int
+    purchased_at: datetime
+    expires_at: datetime | None
+    status: AgentPurchaseStatus
+
+    @classmethod
+    def from_record(cls, purchase: AgentPurchaseRecord) -> "AgentPurchaseResponse":
+        now = datetime.now(timezone.utc)
+        expires_at = purchase.expires_at
+        status = (
+            AgentPurchaseStatus.expired
+            if expires_at is not None and expires_at <= now
+            else AgentPurchaseStatus.active
+        )
+        return cls(
+            id=purchase.id,
+            agent=purchase.agent.value,
+            price_cents=purchase.price_cents,
+            purchased_at=purchase.purchased_at,
+            expires_at=expires_at,
+            status=status,
         )
