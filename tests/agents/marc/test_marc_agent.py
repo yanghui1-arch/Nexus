@@ -11,10 +11,6 @@ from src.agents.marc.agent import Marc, _ALL_TOOL_DEFINITIONS
 EXPECTED_TOOLS = {
     "RunCommand",
     "WebSearch",
-    "ListCodeRepositoryFiles",
-    "ReadCodeRepositoryFile",
-    "SearchCodeRepository",
-    "InspectDockerConfig",
     "ListGithubIssues",
     "GetGithubIssue",
     "ListGithubPullRequests",
@@ -75,7 +71,7 @@ def test_marc_tool_kits_are_read_only():
                 assert FORBIDDEN_MUTATING_TOOLS.isdisjoint(marc.tool_kits)
                 assert "GitHub repo: owner/repo" in marc.system_prompt
                 assert "GitHub repo URL: https://github.com/owner/repo" in marc.system_prompt
-                assert "github-token" not in marc.system_prompt
+                assert "GitHub token: github-token" in marc.system_prompt
         pool.acquire.assert_awaited_once()
         pool.release.assert_awaited_once_with(sandbox)
 
@@ -89,7 +85,7 @@ def test_marc_tool_definitions_include_only_expected_read_only_tools():
     assert FORBIDDEN_MUTATING_TOOLS.isdisjoint(tool_names)
 
 
-def test_marc_create_keeps_token_out_of_system_prompt():
+def test_marc_create_keeps_token_for_runtime_prompt_only():
     marc = make_marc()
 
     assert marc.github_repo == "owner/repo"
