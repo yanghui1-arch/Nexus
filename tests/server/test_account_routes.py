@@ -71,7 +71,7 @@ def test_account_overview_returns_identity_balance_and_entitlements(monkeypatch)
     assert payload["github_name"] == "Mona Lisa"
     assert payload["balance_cents"] == 12345
     assert [item["agent"] for item in payload["entitlements"]] == ["tela", "sophie"]
-    assert [item["status"] for item in payload["entitlements"]] == ["active", "expired"]
+    assert [item["status"] for item in payload["entitlements"]] == ["active", "inactive"]
     assert payload["entitlements"][0]["purchased_at"]
     assert payload["entitlements"][0]["expires_at"]
 

@@ -36,7 +36,7 @@ class AccountEntitlementResponse(BaseModel):
     agent: AgentKind
     purchased_at: datetime
     expires_at: datetime
-    status: Literal["active", "expired"]
+    status: Literal["active", "inactive"]
 
     @classmethod
     def from_record(
@@ -49,7 +49,7 @@ class AccountEntitlementResponse(BaseModel):
             agent=AgentKind(entitlement.agent.value),
             purchased_at=entitlement.purchased_at,
             expires_at=entitlement.expires_at,
-            status="active" if entitlement.expires_at > now else "expired",
+            status="active" if entitlement.expires_at > now else "inactive",
         )
 
 
