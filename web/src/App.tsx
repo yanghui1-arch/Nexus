@@ -7,6 +7,7 @@ import ProcessTrackingPage from './pages/process-tracking';
 import PublishTaskPage from './pages/publish-task';
 import TaskBoardPage from './pages/task-board';
 import TaskDetailPage from './pages/TaskDetailPage';
+import AccountPricingPage from './pages/account-pricing';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
           <Route path="/publish-task" element={<PublishTaskPage />} />
           <Route path="/process-tracking" element={<ProcessTrackingPage />} />
           <Route path="/task-board" element={<TaskBoardPage />} />
+          <Route path="/account/pricing" element={<AccountPricingPage />} />
           <Route path="/code-review" element={<Navigate to="/code-review/nexus" replace />} />
           <Route path="/code-review/nexus" element={<NexusReviewPage />} />
           <Route path="/code-review/nexus/tasks/:taskId" element={<NexusReviewPage />} />
@@ -32,6 +34,10 @@ function App() {
             element={<Navigate to="/process-tracking" replace />}
           />
           <Route path="/workspace/task-board" element={<Navigate to="/task-board" replace />} />
+          <Route
+            path="/workspace/account/pricing"
+            element={<Navigate to="/account/pricing" replace />}
+          />
           <Route path="/workspace/code-review" element={<Navigate to="/code-review" replace />} />
           <Route path="/workspace/code-review/nexus" element={<NexusReviewPage />} />
           <Route
