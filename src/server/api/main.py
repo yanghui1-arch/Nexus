@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 
 from src.logger import logger
-from src.server.api.routes import agent_instances_router, product_router, tasks_router
+from src.server.api.routes import agent_instances_router, product_router, purchases_router, tasks_router
 from src.server.config import get_settings
 from src.server.github_feedback import GithubFeedbackPoller
 from src.server.postgres.database import Database
@@ -90,6 +90,7 @@ app = FastAPI(
 app.include_router(agent_instances_router)
 app.include_router(tasks_router)
 app.include_router(product_router)
+app.include_router(purchases_router)
 
 
 @app.get("/health")
