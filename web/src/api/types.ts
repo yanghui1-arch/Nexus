@@ -102,3 +102,14 @@ export interface ApiAgentInstance {
   updated_at: string;
   workspace: ApiWorkspace | null;
 }
+
+export type ApiPurchaseStatus = 'active' | 'expired';
+
+export interface ApiPurchase {
+  id: string;
+  agent: ApiAgentKind;
+  price_cents: number;
+  purchased_at: string;
+  expires_at: string | null;
+  status: ApiPurchaseStatus;
+}
