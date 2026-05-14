@@ -3,7 +3,7 @@ FROM node:22-alpine AS build
 
 WORKDIR /app
 COPY web/package.json web/skills-lock.json ./
-RUN npm ci
+RUN npm install
 
 COPY web/ ./
 RUN npm run build
