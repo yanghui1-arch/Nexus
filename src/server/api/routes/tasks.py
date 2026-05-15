@@ -12,6 +12,7 @@ from src.agents.base import Agent
 from src.server.config import get_settings
 from src.server.postgres.database import Database
 from src.server.postgres.models import (
+    TaskCategory,
     TaskStatus,
     TaskWorkItemStatus,
 )
@@ -43,14 +44,21 @@ async def create_task(
     payload: TaskCreateRequest,
 ) -> TaskSubmitResponse:
     runner: AgentTaskRunner = request.app.state.runner
+    database: Database = request.app.state.database
     try:
         task_id = await runner.submit_task(payload)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    async with database.session() as session:
+        task = await TaskRepository.get(session, task_id)
+    if task is None:
+        raise HTTPException(status_code=500, detail="Created task could not be loaded")
+
     return TaskSubmitResponse(
         task_id=task_id,
         agent_instance_id=payload.agent_instance_id,
+        category=task.category,
         status=TaskStatus.queued,
     )
 
@@ -60,6 +68,7 @@ async def list_tasks(
     request: Request,
     agent_instance_id: uuid.UUID | None = Query(default=None),
     status: TaskStatus | None = Query(default=None),
+    category: TaskCategory | None = Query(default=None),
     repo: str | None = Query(default=None),
     project: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
@@ -70,6 +79,7 @@ async def list_tasks(
             session,
             agent_instance_id=agent_instance_id,
             status=status,
+            category=category,
             repo=repo,
             project=project,
             limit=limit,

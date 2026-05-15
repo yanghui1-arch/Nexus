@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -30,6 +31,7 @@ import src.server.api.routes.tasks as tasks_routes
 from src.server.api.routes.tasks import router as tasks_router
 from src.server.postgres.models import (
     AgentName,
+    TaskCategory,
     TaskStatus,
     TaskWorkItemStatus,
     VirtualPullRequestLineSide,
@@ -88,6 +90,7 @@ def _make_task(
     question: str,
     status: TaskStatus,
     created_at: datetime,
+    category: TaskCategory = TaskCategory.coding,
     repo: str = 'owner/repo',
     project: str | None = 'workspace',
     agent: AgentName = AgentName.sophie,
@@ -104,6 +107,7 @@ def _make_task(
         id=uuid.uuid4(),
         agent=agent,
         agent_instance_id=agent_instance_id or uuid.uuid4(),
+        category=category,
         question=question,
         repo=repo,
         project=project,
@@ -166,6 +170,7 @@ def test_list_tasks_returns_newest_first(monkeypatch: pytest.MonkeyPatch) -> Non
         'id',
         'agent',
         'agent_instance_id',
+        'category',
         'question',
         'repo',
         'project',
@@ -179,6 +184,49 @@ def test_list_tasks_returns_newest_first(monkeypatch: pytest.MonkeyPatch) -> Non
         'started_at',
         'finished_at',
     }
+
+
+def test_create_task_returns_category_from_persisted_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = datetime.now(timezone.utc)
+    created_task = _make_task(
+        question='ship a coding task',
+        status=TaskStatus.queued,
+        category=TaskCategory.coding,
+        created_at=now,
+    )
+    runner = SimpleNamespace(submit_task=AsyncMock(return_value=created_task.id))
+
+    async def fake_get(session, task_id):
+        assert task_id == created_task.id
+        return created_task
+
+    monkeypatch.setattr(TaskRepository, 'get', fake_get)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(runner_obj=runner))
+        async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
+            return await client.post(
+                '/v1/tasks',
+                json={
+                    'agent_instance_id': str(created_task.agent_instance_id),
+                    'agent': created_task.agent.value,
+                    'question': created_task.question,
+                    'repo': created_task.repo,
+                    'project': created_task.project,
+                    'external_issue_url': None,
+                },
+            )
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 202
+    assert response.json() == {
+        'task_id': str(created_task.id),
+        'agent_instance_id': str(created_task.agent_instance_id),
+        'category': created_task.category.value,
+        'status': TaskStatus.queued.value,
+    }
+    runner.submit_task.assert_awaited_once()
 
 
 def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -211,6 +259,7 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
                 params={
                     'agent_instance_id': str(agent_instance_id),
                     'status': 'waiting_for_merge',
+                    'category': 'coding',
                     'repo': 'owner/nexus',
                     'project': 'web',
                     'limit': '10',
@@ -225,6 +274,7 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
             'id': str(expected_task.id),
             'agent': expected_task.agent.value,
             'agent_instance_id': str(expected_task.agent_instance_id),
+            'category': expected_task.category.value,
             'question': expected_task.question,
             'repo': expected_task.repo,
             'project': expected_task.project,
@@ -243,6 +293,7 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
         'session': session_obj,
         'agent_instance_id': agent_instance_id,
         'status': TaskStatus.waiting_for_merge,
+        'category': TaskCategory.coding,
         'repo': 'owner/nexus',
         'project': 'web',
         'limit': 10,
