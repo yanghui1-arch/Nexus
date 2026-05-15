@@ -99,7 +99,7 @@ def get_settings() -> Settings:
         github_oauth_client_secret=os.getenv("NEXUS_GITHUB_OAUTH_CLIENT_SECRET"),
         github_oauth_redirect_uri=os.getenv(
             "NEXUS_GITHUB_OAUTH_REDIRECT_URI",
-            "http://localhost:6515/v1/auth/github/callback",
+            "http://localhost:8000/v1/auth/github/callback",
         ),
         auth_session_cookie_name=os.getenv("NEXUS_AUTH_SESSION_COOKIE_NAME", "nexus_session"),
         auth_session_ttl_seconds=int(os.getenv("NEXUS_AUTH_SESSION_TTL_SECONDS", "2592000")),
