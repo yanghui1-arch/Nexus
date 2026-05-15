@@ -1,5 +1,5 @@
 import { startTransition, useEffect, useMemo, useState } from 'react';
-import { Bot, Check, Coins } from 'lucide-react';
+import { Check, Coins } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCurrentUser, purchaseAgent, rechargeBalance } from '@/api/auth';
 import { getErrorDetail } from '@/api/client';
@@ -111,13 +111,7 @@ export default function PricingPage() {
                 'hover:border-primary hover:shadow-xl hover:shadow-primary/10',
               )}
             >
-              <div className="absolute right-4 top-4 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
-                Select
-              </div>
               <CardHeader>
-                <div className="mb-3 flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                  <Bot className="size-5" />
-                </div>
                 <CardTitle>{plan.name}</CardTitle>
                 <CardDescription>{plan.description}</CardDescription>
                 <div className="pt-4"><span className="text-4xl font-semibold">{plan.price}</span><span className="text-muted-foreground"> / month</span></div>
