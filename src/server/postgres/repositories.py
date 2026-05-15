@@ -1940,6 +1940,8 @@ class AgentPurchaseRepository:
         price: Decimal,
         expires_at: datetime,
     ) -> AgentPurchaseRecord:
+        # Purchasing touches user balance, agent instance, workspace, and purchase records;
+        # keep every related write in this method so one commit/rollback covers the flow.
         try:
             user = await session.get(UserRecord, user_id, with_for_update=True)
             if user is None:
