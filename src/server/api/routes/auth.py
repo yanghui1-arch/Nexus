@@ -37,15 +37,6 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def _user_response(user: UserRecord) -> UserResponse:
-    return UserResponse(
-        id=user.id,
-        github_login=user.github_login,
-        email=user.email,
-        balance_cents=user.balance_cents,
-    )
-
-
 async def get_current_user(request: Request) -> UserRecord:
     settings = get_settings()
     token = request.cookies.get(settings.auth_session_cookie_name)
@@ -128,7 +119,12 @@ async def github_callback(request: Request, code: str) -> RedirectResponse:
 
 @router.get("/auth/me", response_model=UserResponse)
 async def get_me(user: UserRecord = Depends(get_current_user)) -> UserResponse:
-    return _user_response(user)
+    return UserResponse(
+        id=user.id,
+        github_login=user.github_login,
+        email=user.email,
+        balance_cents=user.balance_cents,
+    )
 
 
 @router.post("/auth/logout", status_code=204)
@@ -153,7 +149,12 @@ async def recharge_balance(
         updated = await UserRepository.add_balance(session, user.id, payload.amount_cents)
     if updated is None:
         raise HTTPException(status_code=404, detail="User not found")
-    return _user_response(updated)
+    return UserResponse(
+        id=updated.id,
+        github_login=updated.github_login,
+        email=updated.email,
+        balance_cents=updated.balance_cents,
+    )
 
 
 @router.post("/billing/purchases", response_model=PurchaseAgentResponse, status_code=201)
