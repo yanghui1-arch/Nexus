@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from src.server.api.routes.auth import get_current_user, router as auth_router
 from sqlalchemy import select
 
-from src.server.postgres.models import AgentInstanceRecord, AgentName, AgentPurchaseRecord
+from src.server.postgres.models import AgentInstanceRecord, AgentName, AgentPurchaseRecord, WorkspaceRecord, WorkspaceStatus
 from src.server.postgres.repositories import (
     AgentPurchaseRepository,
     AuthSessionRepository,
@@ -67,6 +67,10 @@ async def test_session_lookup_recharge_and_purchase(db_session):
     assert instance.agent == AgentName.tela
     assert instance.expires_at.replace(tzinfo=expires_at.tzinfo) == expires_at
     assert not hasattr(purchase, "expires_at")
+    workspace = (await db_session.execute(select(WorkspaceRecord))).scalar_one()
+    assert workspace.agent_instance_id == instance.id
+    assert workspace.workspace_key == f"agent-instance:{instance.id}"
+    assert workspace.status == WorkspaceStatus.idle
     updated = await UserRepository.get(db_session, user.id)
     assert updated is not None
     assert updated.balance == Decimal("500.00")
@@ -93,8 +97,10 @@ async def test_purchase_rejects_insufficient_balance(db_session):
 
     instances = (await db_session.execute(select(AgentInstanceRecord))).scalars().all()
     purchases = (await db_session.execute(select(AgentPurchaseRecord))).scalars().all()
+    workspaces = (await db_session.execute(select(WorkspaceRecord))).scalars().all()
     assert instances == []
     assert purchases == []
+    assert workspaces == []
     updated = await UserRepository.get(db_session, user_id)
     assert updated is not None
     assert updated.balance == Decimal("0.00")

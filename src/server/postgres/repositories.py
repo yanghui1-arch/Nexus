@@ -1958,6 +1958,14 @@ class AgentPurchaseRepository:
             )
             session.add(agent_instance)
             await session.flush()
+            workspace = WorkspaceRecord(
+                agent_instance_id=agent_instance.id,
+                workspace_key=f"agent-instance:{agent_instance.id}",
+                github_repo=None,
+                project=None,
+                status=WorkspaceStatus.idle,
+            )
+            session.add(workspace)
 
             purchase = AgentPurchaseRecord(
                 user_id=user_id,
