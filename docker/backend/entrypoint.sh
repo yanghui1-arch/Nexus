@@ -6,7 +6,7 @@ shift || true
 
 case "$role" in
   api)
-    exec uvicorn src.server.api.main:app --host 0.0.0.0 --port "${NEXUS_API_PORT:-8000}" "$@"
+    exec uvicorn src.server.api.main:app --host 0.0.0.0 --port "${NEXUS_API_PORT:-6515}" "$@"
     ;;
   worker)
     exec celery -A src.server.celery.app:celery_app worker \

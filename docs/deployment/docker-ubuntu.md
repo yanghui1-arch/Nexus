@@ -5,7 +5,7 @@ This stack runs Nexus on one Ubuntu 22.04 server with Docker Compose:
 - `web`: nginx serving the React/Vite dashboard and proxying API calls.
 - `api`: FastAPI service.
 - `worker`: Celery worker for agent execution.
-- `postgres`: PostgreSQL with a named data volume.
+- `postgres`: PostgreSQL 18 with a named data volume.
 - `redis`: Redis broker/cache with append-only persistence.
 
 ## 1. Install Docker
@@ -28,7 +28,24 @@ sudo usermod -aG docker "$USER"
 
 Log out and back in so the Docker group is active.
 
-## 2. Configure Nexus
+## 2. Configure Docker registry mirror
+
+On Ubuntu servers in China, configure the 1ms Docker registry mirror before building images:
+
+```bash
+bash <(curl -sSL https://n3.ink/helper)
+```
+
+Choose the Docker image acceleration option in the helper. If you prefer to manage Docker manually, write the mirror configuration and restart Docker:
+
+```bash
+echo '{"registry-mirrors":["https://docker.1ms.run"],"dns":["8.8.8.8","114.114.114.114"]}' \
+  | sudo tee /etc/docker/daemon.json >/dev/null
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+```
+
+## 3. Configure Nexus
 
 ```bash
 git clone https://github.com/yanghui1-arch/Nexus.git
@@ -40,15 +57,15 @@ $EDITOR .env.production
 
 Set real OpenAI-compatible API credentials, GitHub tokens, repository name, and a strong `POSTGRES_PASSWORD`. Keep `NEXUS_DATABASE_URL` in sync with the Postgres credentials.
 
-## 3. Start or update production
+## 4. Start or update production
 
 ```bash
 ./scripts/deploy-production.sh
 ```
 
-Open `http://SERVER_IP/` for the dashboard. The API health endpoint is `http://SERVER_IP/health`.
+Open `http://SERVER_IP:6515/` for the dashboard. The API health endpoint is `http://SERVER_IP:6515/health`.
 
-## 4. Operations
+## 5. Operations
 
 ```bash
 docker compose --env-file .env.production -f docker-compose.production.yml ps
