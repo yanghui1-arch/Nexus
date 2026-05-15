@@ -37,6 +37,7 @@ class Settings:
     github_oauth_redirect_uri: str
     auth_session_cookie_name: str
     auth_session_ttl_seconds: int
+    frontend_base_url: str
     product_discovery_poll_interval_seconds: int
     product_discovery_poll_task_limit: int
 
@@ -103,6 +104,7 @@ def get_settings() -> Settings:
         ),
         auth_session_cookie_name=os.getenv("NEXUS_AUTH_SESSION_COOKIE_NAME", "nexus_session"),
         auth_session_ttl_seconds=int(os.getenv("NEXUS_AUTH_SESSION_TTL_SECONDS", "2592000")),
+        frontend_base_url=os.getenv("NEXUS_FRONTEND_BASE_URL", "http://localhost:5173"),
         product_discovery_poll_interval_seconds=int(
             os.getenv("NEXUS_PRODUCT_DISCOVERY_POLL_INTERVAL_SECONDS", "10"),
         ),

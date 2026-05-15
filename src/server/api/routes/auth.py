@@ -106,7 +106,7 @@ async def github_callback(request: Request, code: str) -> RedirectResponse:
             user_id=user.id,
             expires_at=expires_at,
         )
-    response = RedirectResponse("/task-board")
+    response = RedirectResponse(settings.frontend_base_url.rstrip('/') + '/task-board')
     response.set_cookie(
         settings.auth_session_cookie_name,
         session_token,
@@ -146,6 +146,7 @@ async def recharge_balance(
     user: UserRecord = Depends(get_current_user),
 ) -> UserResponse:
     database: Database = request.app.state.database
+    # TODO: Replace this demo recharge endpoint with real payment provider callbacks.
     async with database.session() as session:
         updated = await UserRepository.add_balance(session, user.id, payload.amount)
     if updated is None:
