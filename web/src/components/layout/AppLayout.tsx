@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { NavLink, Outlet, useMatch } from 'react-router-dom';
-import { LogOut, Sparkles, Wallet } from 'lucide-react';
+import { ChevronsUpDown, LogOut, Sparkles, Wallet } from 'lucide-react';
 import { SiGithub } from 'react-icons/si';
 import { getCurrentUser, logout } from '@/api/auth';
 import type { ApiUser } from '@/api/types';
@@ -88,6 +88,7 @@ function SidebarNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number] 
 function SidebarAccount() {
   const [user, setUser] = useState<ApiUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
     void getCurrentUser()
@@ -102,22 +103,37 @@ function SidebarAccount() {
   };
 
   return (
-    <div className="border-t p-2">
+    <div className="relative border-t p-2">
       {user ? (
-        <div className="flex items-center gap-2 rounded-lg p-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <SiGithub className="size-4" />
-          </div>
-          <div className="grid min-w-0 flex-1 text-left leading-tight">
-            <span className="truncate font-medium">{user.github_login}</span>
-            <span className="inline-flex items-center gap-1 truncate text-xs text-muted-foreground">
-              <Wallet className="size-3" /> {formatCny(user.balance)}
-            </span>
-          </div>
-          <Button variant="ghost" size="sm" className="size-8 p-0" onClick={handleLogout} aria-label="Logout">
-            <LogOut className="size-4" />
-          </Button>
-        </div>
+        <>
+          {isMenuOpen ? (
+            <div className="absolute bottom-full left-2 right-2 mb-2 rounded-lg border bg-popover p-1 text-popover-foreground shadow-md">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-destructive transition-colors hover:bg-accent"
+                onClick={handleLogout}
+              >
+                <LogOut className="size-4" /> Logout
+              </button>
+            </div>
+          ) : null}
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+            onClick={() => setIsMenuOpen(open => !open)}
+          >
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <SiGithub className="size-4" />
+            </div>
+            <div className="grid min-w-0 flex-1 leading-tight">
+              <span className="truncate font-medium">{user.github_login}</span>
+              <span className="inline-flex items-center gap-1 truncate text-xs text-muted-foreground">
+                <Wallet className="size-3" /> {formatCny(user.balance)}
+              </span>
+            </div>
+            <ChevronsUpDown className="size-4 text-muted-foreground" />
+          </button>
+        </>
       ) : (
         <Button asChild variant="ghost" className="h-auto w-full justify-start gap-2 p-2">
           <a href="/login">
