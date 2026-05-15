@@ -15,6 +15,7 @@ from src.server.postgres.models import (
     GithubPullRequestFeedbackKind,
     GithubPullRequestFeedbackStatus,
     TaskRecord,
+    TaskStatus,
 )
 from src.server.postgres.repositories import (
     GithubPullRequestFeedbackRepository,
@@ -159,7 +160,31 @@ class GithubFeedbackPoller:
             return 0
 
         pull_request = await self._fetch_pull_request(client, token, task.repo, pull_request_number)
-        if not pull_request or pull_request.get("state") != "open" or pull_request.get("merged_at"):
+        if not pull_request:
+            return 0
+
+        if task.status in {TaskStatus.waiting_for_review, TaskStatus.waiting_for_merge}:
+            # Once a reviewable task is backed by a real GitHub PR, GitHub becomes the
+            # source of truth for terminal PR outcomes:
+            # - merged PR -> merged task
+            # - closed but unmerged PR -> closed task
+            #
+            # We intentionally do not auto-manage intermediate review states here anymore.
+            if pull_request.get("merged_at"):
+                async with self._database.session() as session:
+                    updated = await TaskRepository.set_merged(session, task.id)
+                if updated is not None:
+                    logger.info("Synced task %s review status from %s to merged.", task.id, task.status.value)
+                return 0
+
+            if pull_request.get("state") == "closed":
+                async with self._database.session() as session:
+                    updated = await TaskRepository.set_closed(session, task.id)
+                if updated is not None:
+                    logger.info("Synced task %s review status from %s to closed.", task.id, task.status.value)
+                return 0
+
+        if pull_request.get("state") != "open" or pull_request.get("merged_at"):
             return 0
 
         viewer_login = await self._resolve_viewer_login(client, token)
@@ -221,7 +246,6 @@ class GithubFeedbackPoller:
                 )
 
         return discovered_count
-
     async def _resolve_viewer_login(
         self,
         client: httpx.AsyncClient,

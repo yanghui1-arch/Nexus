@@ -7,7 +7,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
-from src.server.postgres.models import Base, TASK_STATUS_VARCHAR_LENGTH
+from src.server.postgres.models import Base, TASK_CATEGORY_VARCHAR_LENGTH, TASK_STATUS_VARCHAR_LENGTH
 
 
 _REQUIRED_SCHEMA: dict[str, set[str]] = {
@@ -15,11 +15,19 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
     "auth_session": {"token_hash", "user_id", "expires_at"},
     "agent_purchase": {"id", "user_id", "agent", "price_cents", "expires_at"},
     "agent_instance": {"id", "agent", "client_id", "is_active"},
-    "workspace": {"id", "agent_instance_id", "workspace_key", "status"},
+    "workspace": {
+        "id",
+        "agent_instance_id",
+        "workspace_key",
+        "github_repo",
+        "project",
+        "status",
+    },
     "task": {
         "id",
         "agent",
         "agent_instance_id",
+        "category",
         "question",
         "external_issue_url",
         "external_pull_request_url",
@@ -28,6 +36,34 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
         "checkpoint",
         "dispatch_token",
         "lease_expires_at",
+    },
+    "product_proposal": {
+        "id",
+        "title",
+        "plan_type",
+        "summary",
+        "answer",
+        "project",
+        "repo",
+        "status",
+        "source_task_id",
+    },
+    "feature": {
+        "id",
+        "proposal_id",
+        "title",
+        "description",
+        "project",
+        "status",
+    },
+    "feature_item": {
+        "id",
+        "feature_id",
+        "order_index",
+        "title",
+        "description",
+        "status",
+        "task_id",
     },
     "task_work_item": {
         "id",
@@ -128,6 +164,15 @@ class Database:
 
         async with self._engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            await conn.execute(text("ALTER TABLE workspace ADD COLUMN IF NOT EXISTS github_repo VARCHAR(255)"))
+            await conn.execute(text("ALTER TABLE workspace ADD COLUMN IF NOT EXISTS project VARCHAR(255)"))
+            await conn.execute(
+                text(
+                    "ALTER TABLE task ADD COLUMN IF NOT EXISTS "
+                    f"category VARCHAR({TASK_CATEGORY_VARCHAR_LENGTH}) DEFAULT 'coding' NOT NULL"
+                )
+            )
+            await conn.execute(text("UPDATE task SET category = 'coding' WHERE category IS NULL"))
             await conn.execute(text("ALTER TABLE task ADD COLUMN IF NOT EXISTS checkpoint JSON"))
             await conn.execute(text("ALTER TABLE task ADD COLUMN IF NOT EXISTS dispatch_token VARCHAR(64)"))
             await conn.execute(text("ALTER TABLE task ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMPTZ"))

@@ -11,13 +11,19 @@ from src.logger import logger
 from src.server.celery.app import celery_app
 from src.server.config import Settings
 from src.server.postgres.database import Database
-from src.server.postgres.models import AgentName, TaskStatus
+from src.server.postgres.models import AgentName, TaskCategory, TaskStatus
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
     TaskRepository,
     WorkspaceRepository,
 )
 from src.server.schemas import TaskCreateRequest
+
+
+def _task_category_for_agent(agent: AgentName) -> TaskCategory:
+    if agent == AgentName.marc:
+        return TaskCategory.pm
+    return TaskCategory.coding
 
 
 class AgentTaskRunner:
@@ -44,10 +50,15 @@ class AgentTaskRunner:
                     f"agent type mismatch: task asks for {request.agent.value} but instance is {instance.agent.value}"
                 )
 
+            category = _task_category_for_agent(AgentName(request.agent.value))
+            if category == TaskCategory.coding and not request.repo:
+                raise ValueError("repo is required for coding agents")
+
             task = await TaskRepository.create(
                 session,
                 agent=AgentName(request.agent.value),
                 agent_instance_id=request.agent_instance_id,
+                category=category,
                 question=request.question,
                 repo=request.repo,
                 project=request.project,
@@ -114,7 +125,7 @@ class AgentTaskRunner:
                 if reset is None:
                     continue
 
-            if not task.repo:
+            if task.category == TaskCategory.coding and not task.repo:
                 async with self._database.session() as session:
                     await TaskRepository.set_failed(
                         session,

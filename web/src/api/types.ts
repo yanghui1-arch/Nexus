@@ -1,4 +1,6 @@
-export type ApiAgentKind = 'tela' | 'sophie';
+export type ApiAgentKind = 'tela' | 'sophie' | 'marc';
+
+export type ApiTaskCategory = 'coding' | 'product discovery';
 
 export type ApiTaskStatus =
   | 'queued'
@@ -15,7 +17,7 @@ export interface ApiTaskCreateRequest {
   agent_instance_id: string;
   agent: ApiAgentKind;
   question: string;
-  repo: string;
+  repo?: string | null;
   project?: string | null;
   external_issue_url?: string | null;
 }
@@ -27,6 +29,7 @@ export interface ApiTaskConsultRequest {
 export interface ApiTaskSubmitResponse {
   task_id: string;
   agent_instance_id: string;
+  category: ApiTaskCategory;
   status: ApiTaskStatus;
 }
 
@@ -41,6 +44,7 @@ export interface ApiTask {
   id: string;
   agent: ApiAgentKind;
   agent_instance_id: string;
+  category: ApiTaskCategory;
   question: string;
   repo: string | null;
   project: string | null;
@@ -63,11 +67,74 @@ export interface ApiTaskMessage {
   meta: Record<string, unknown> | null;
 }
 
+export type ApiProductProposalStatus =
+  | 'proposed'
+  | 'approved'
+  | 'rejected'
+  | 'planned';
+
+export type ApiFeatureStatus =
+  | 'planned'
+  | 'in_progress'
+  | 'completed'
+  | 'closed';
+
+export type ApiFeatureItemStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'completed'
+  | 'closed';
+
+export interface ApiProductProposalStatusUpdateRequest {
+  status: Extract<ApiProductProposalStatus, 'approved' | 'rejected' | 'planned'>;
+}
+
+export interface ApiProductProposal {
+  id: string;
+  title: string;
+  plan_type: string;
+  summary: string;
+  answer: string;
+  project: string | null;
+  repo: string | null;
+  status: ApiProductProposalStatus;
+  source_task_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApiFeatureItem {
+  id: string;
+  feature_id: string;
+  order_index: number;
+  title: string;
+  description: string;
+  status: ApiFeatureItemStatus;
+  task_id: string | null;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface ApiFeature {
+  id: string;
+  proposal_id: string | null;
+  title: string;
+  description: string;
+  project: string | null;
+  status: ApiFeatureStatus;
+  created_at: string;
+  updated_at: string;
+  items: ApiFeatureItem[] | null;
+}
+
 export interface ApiWorkspace {
   id: string;
   agent_instance_id: string;
   workspace_key: string;
   github_repo: string | null;
+  project: string | null;
   docker_container_id: string | null;
   docker_volume_name: string | null;
   status: ApiWorkspaceStatus;

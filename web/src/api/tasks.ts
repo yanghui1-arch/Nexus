@@ -5,6 +5,7 @@ import type {
   ApiTaskConsultResponse,
   ApiTaskCreateRequest,
   ApiTaskMessage,
+  ApiTaskCategory,
   ApiTaskStatus,
   ApiTaskSubmitResponse,
 } from '@/api/types';
@@ -12,6 +13,7 @@ import type {
 export type ListTasksParams = {
   agent_instance_id?: string;
   status?: ApiTaskStatus;
+  category?: ApiTaskCategory;
   repo?: string;
   project?: string;
   limit?: number;

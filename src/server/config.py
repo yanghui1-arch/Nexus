@@ -37,6 +37,8 @@ class Settings:
     github_oauth_redirect_uri: str
     auth_session_cookie_name: str
     auth_session_ttl_seconds: int
+    product_discovery_poll_interval_seconds: int
+    product_discovery_poll_task_limit: int
 
 
 @lru_cache(maxsize=1)
@@ -44,9 +46,11 @@ def get_settings() -> Settings:
     redis_url = os.getenv("NEXUS_REDIS_URL", "redis://localhost:6379/0")
     tela_github_token = os.getenv("NEXUS_GITHUB_TOKEN")
     sophie_github_token = os.getenv("NEXUS_SOPHIE_GITHUB_TOKEN")
+    marc_github_token = os.getenv("NEXUS_MARC_GITHUB_TOKEN")
     github_tokens = {
         "tela": tela_github_token,
         "sophie": sophie_github_token,
+        "marc": marc_github_token,
     }
 
     return Settings(
@@ -99,4 +103,10 @@ def get_settings() -> Settings:
         ),
         auth_session_cookie_name=os.getenv("NEXUS_AUTH_SESSION_COOKIE_NAME", "nexus_session"),
         auth_session_ttl_seconds=int(os.getenv("NEXUS_AUTH_SESSION_TTL_SECONDS", "2592000")),
+        product_discovery_poll_interval_seconds=int(
+            os.getenv("NEXUS_PRODUCT_DISCOVERY_POLL_INTERVAL_SECONDS", "10"),
+        ),
+        product_discovery_poll_task_limit=int(
+            os.getenv("NEXUS_PRODUCT_DISCOVERY_POLL_TASK_LIMIT", "100"),
+        ),
     )

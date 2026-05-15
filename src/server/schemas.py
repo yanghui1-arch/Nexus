@@ -9,6 +9,13 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 from src.server.postgres.models import (
     AgentInstanceRecord,
+    ProductProposalRecord,
+    ProductProposalStatus,
+    FeatureItemRecord,
+    FeatureItemStatus,
+    FeatureRecord,
+    FeatureStatus,
+    TaskCategory,
     TaskRecord,
     TaskStatus,
     TaskWorkItemRecord,
@@ -20,13 +27,188 @@ from src.server.postgres.models import (
 class AgentKind(str, Enum):
     tela = "tela"
     sophie = "sophie"
+    marc = "marc"
+
+
+class ProductProposalCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    plan_type: str = Field(min_length=1, max_length=32)
+    summary: str = Field(min_length=1)
+    answer: str = Field(min_length=1)
+    project: str | None = None
+    repo: str | None = None
+    source_task_id: uuid.UUID | None = None
+
+    @field_validator("title", "plan_type", "summary", "answer")
+    @classmethod
+    def validate_required_text(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("value cannot be empty")
+        return stripped
+
+    @field_validator("project", "repo")
+    @classmethod
+    def validate_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+
+class ProductProposalStatusUpdateRequest(BaseModel):
+    status: ProductProposalStatus
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: ProductProposalStatus) -> ProductProposalStatus:
+        if value not in {
+            ProductProposalStatus.approved,
+            ProductProposalStatus.rejected,
+            ProductProposalStatus.planned,
+        }:
+            raise ValueError("status must be approved, rejected, or planned")
+        return value
+
+
+class ProductProposalResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    title: str
+    plan_type: str
+    summary: str
+    answer: str
+    project: str | None
+    repo: str | None
+    status: ProductProposalStatus
+    source_task_id: uuid.UUID | None
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_record(cls, proposal: ProductProposalRecord) -> "ProductProposalResponse":
+        return cls(
+            id=proposal.id,
+            title=proposal.title,
+            plan_type=proposal.plan_type,
+            summary=proposal.summary,
+            answer=proposal.answer,
+            project=proposal.project,
+            repo=proposal.repo,
+            status=proposal.status,
+            source_task_id=proposal.source_task_id,
+            created_at=proposal.created_at,
+            updated_at=proposal.updated_at,
+        )
+
+
+class FeatureItemCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    description: str = Field(min_length=1)
+
+    @field_validator("title", "description")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("value cannot be empty")
+        return stripped
+
+
+class FeatureCreateRequest(BaseModel):
+    proposal_id: uuid.UUID | None = None
+    title: str = Field(min_length=1, max_length=255)
+    description: str = Field(min_length=1)
+    project: str | None = None
+    items: list[FeatureItemCreateRequest] = Field(min_length=1)
+
+    @field_validator("title", "description")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("value cannot be empty")
+        return stripped
+
+
+class FeatureStatusUpdateRequest(BaseModel):
+    status: FeatureStatus
+
+
+class FeatureItemStatusUpdateRequest(BaseModel):
+    status: FeatureItemStatus
+
+
+class FeatureItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    feature_id: uuid.UUID
+    order_index: int
+    title: str
+    description: str
+    status: FeatureItemStatus
+    task_id: uuid.UUID | None
+    created_at: datetime
+    updated_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+    @classmethod
+    def from_record(cls, item: FeatureItemRecord) -> "FeatureItemResponse":
+        return cls(
+            id=item.id,
+            feature_id=item.feature_id,
+            order_index=item.order_index,
+            title=item.title,
+            description=item.description,
+            status=item.status,
+            task_id=item.task_id,
+            created_at=item.created_at,
+            updated_at=item.updated_at,
+            started_at=item.started_at,
+            finished_at=item.finished_at,
+        )
+
+
+class FeatureResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    proposal_id: uuid.UUID | None
+    title: str
+    description: str
+    project: str | None
+    status: FeatureStatus
+    created_at: datetime
+    updated_at: datetime
+    items: list[FeatureItemResponse] | None = None
+
+    @classmethod
+    def from_record(
+        cls,
+        feature: FeatureRecord,
+        items: list[FeatureItemRecord] | None = None,
+    ) -> "FeatureResponse":
+        return cls(
+            id=feature.id,
+            proposal_id=feature.proposal_id,
+            title=feature.title,
+            description=feature.description,
+            project=feature.project,
+            status=feature.status,
+            created_at=feature.created_at,
+            updated_at=feature.updated_at,
+            items=[FeatureItemResponse.from_record(item) for item in items] if items is not None else None,
+        )
 
 
 class TaskCreateRequest(BaseModel):
     agent_instance_id: uuid.UUID
     agent: AgentKind
     question: str = Field(min_length=1)
-    repo: str = Field(min_length=1)
+    repo: str | None = None
     project: str | None = None
     external_issue_url: str | None = Field(default=None, max_length=1024)
 
@@ -40,11 +222,11 @@ class TaskCreateRequest(BaseModel):
 
     @field_validator("repo")
     @classmethod
-    def validate_repo(cls, value: str) -> str:
+    def validate_repo(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         stripped = value.strip()
-        if not stripped:
-            raise ValueError("repo cannot be empty")
-        return stripped
+        return stripped or None
 
     @field_validator("project")
     @classmethod
@@ -78,6 +260,7 @@ class TaskConsultRequest(BaseModel):
 class TaskSubmitResponse(BaseModel):
     task_id: uuid.UUID
     agent_instance_id: uuid.UUID
+    category: TaskCategory
     status: TaskStatus
 
 
@@ -201,6 +384,7 @@ class WorkspaceResponse(BaseModel):
     agent_instance_id: uuid.UUID
     workspace_key: str
     github_repo: str | None
+    project: str | None
     docker_container_id: str | None
     docker_volume_name: str | None
     status: str
@@ -215,6 +399,7 @@ class WorkspaceResponse(BaseModel):
             agent_instance_id=workspace.agent_instance_id,
             workspace_key=workspace.workspace_key,
             github_repo=workspace.github_repo,
+            project=workspace.project,
             docker_container_id=workspace.docker_container_id,
             docker_volume_name=workspace.docker_volume_name,
             status=workspace.status.value,

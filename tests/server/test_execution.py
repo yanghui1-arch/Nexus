@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 from src.agents.base.agent import BaseAgentResponse
 from src.server.celery import execution
-from src.server.postgres.models import GithubPullRequestFeedbackKind, TaskStatus, TaskWorkItemStatus
+from src.server.postgres.models import GithubPullRequestFeedbackKind, TaskCategory, TaskStatus, TaskWorkItemStatus
 from src.server.postgres.repositories import TaskWorkItemRepository, VirtualPullRequestRepository
 
 
@@ -37,11 +37,17 @@ class FakeAgent:
 def make_task(**overrides):
     values = {
         "id": "task-id",
+        "agent": SimpleNamespace(value="sophie"),
+        "category": TaskCategory.coding,
         "repo": "owner/repo",
+        "project": None,
         "question": "do the task",
         "checkpoint": None,
+        "resume_status": None,
     }
     values.update(overrides)
+    values.setdefault("category", SimpleNamespace(value="coding"))
+    values.setdefault("project", None)
     return SimpleNamespace(**values)
 
 
@@ -110,6 +116,46 @@ class FakeDatabase:
         return None
 
 
+def test_build_marc_agent_with_optional_repo_context(monkeypatch):
+    captured_agent = {}
+
+    class FakeMarc:
+        @classmethod
+        def create(cls, **kwargs):
+            captured_agent.update(kwargs)
+            return "marc-agent"
+
+    task = make_task(agent=SimpleNamespace(value="marc"), repo="owner/repo")
+    settings = SimpleNamespace(
+        api_key="api-key",
+        base_url="https://api.example.com/v1",
+        model="gpt-test",
+        max_context=4096,
+        max_attempts=8,
+        github_tokens={"marc": "marc-token"},
+    )
+
+    monkeypatch.setitem(execution._agents, "marc", FakeMarc)
+
+    agent = execution._build_agent(
+        task=task,
+        settings=settings,
+        workspace_key="workspace",
+        github_repo=None,
+    )
+
+    assert agent == "marc-agent"
+    assert captured_agent == {
+        "base_url": "https://api.example.com/v1",
+        "api_key": "api-key",
+        "model": "gpt-test",
+        "max_context": 4096,
+        "max_attempts": 8,
+        "github_repo": "owner/repo",
+        "github_token": "marc-token",
+    }
+
+
 def test_run_agent_uses_fresh_context_without_checkpoint(monkeypatch):
     fake_agent = FakeAgent()
 
@@ -128,7 +174,7 @@ def test_run_agent_uses_fresh_context_without_checkpoint(monkeypatch):
     )
 
 
-def test_run_agent_workflow_small_task_passthrough(monkeypatch):
+def test_run_code_agent_workflow_small_task_passthrough(monkeypatch):
     task = make_task()
     fake_agent = FakeAgent()
     calls = []
@@ -163,7 +209,7 @@ def test_run_agent_workflow_small_task_passthrough(monkeypatch):
     monkeypatch.setattr(execution, "_claim_pending_github_feedback", no_pending_feedback)
 
     result = asyncio.run(
-        execution._run_agent_workflow(
+        execution._run_code_agent_workflow(
             database=FakeDatabase(),
             task=task,
             on_progress=None,
@@ -256,7 +302,7 @@ def test_run_agent_workflow_pauses_when_work_item_is_ready(monkeypatch):
     monkeypatch.setattr(execution, "_claim_pending_github_feedback", no_pending_feedback)
 
     result = asyncio.run(
-        execution._run_agent_workflow(
+        execution._run_code_agent_workflow(
             database=FakeDatabase(),
             task=task,
             on_progress=None,
@@ -375,7 +421,7 @@ def test_run_agent_workflow_keeps_checkpoint_between_work_items(monkeypatch):
     monkeypatch.setattr(execution, "_claim_pending_github_feedback", no_pending_feedback)
 
     result = asyncio.run(
-        execution._run_agent_workflow(
+        execution._run_code_agent_workflow(
             database=FakeDatabase(),
             task=task,
             on_progress=None,
@@ -439,7 +485,7 @@ def test_run_agent_workflow_waits_when_all_work_items_review_ready(monkeypatch):
     monkeypatch.setattr(execution, "_claim_pending_github_feedback", no_pending_feedback)
 
     result = asyncio.run(
-        execution._run_agent_workflow(
+        execution._run_code_agent_workflow(
             database=FakeDatabase(),
             task=task,
             on_progress=None,
@@ -502,7 +548,7 @@ def test_run_agent_workflow_processes_github_feedback_from_checkpoint(monkeypatc
     monkeypatch.setattr(execution, "_run_agent", fake_run_agent)
 
     result = asyncio.run(
-        execution._run_agent_workflow(
+        execution._run_code_agent_workflow(
             database=FakeDatabase(),
             task=task,
             on_progress=None,
@@ -535,7 +581,7 @@ def test_mark_post_execution_wait_state_restores_waiting_for_merge(monkeypatch):
 
     async def fake_get(session, requested_task_id):
         assert requested_task_id == task_id
-        return SimpleNamespace(id=task_id, resume_status=TaskStatus.waiting_for_merge)
+        return SimpleNamespace(id=task_id, status=TaskStatus.waiting_for_review, resume_status=TaskStatus.waiting_for_merge)
 
     async def fake_waiting_for_merge(session, requested_task_id, *, result):
         captured["task_id"] = requested_task_id
@@ -557,3 +603,51 @@ def test_mark_post_execution_wait_state_restores_waiting_for_merge(monkeypatch):
     )
 
     assert captured == {"task_id": task_id, "result": "done"}
+
+
+def test_release_workspace_keeps_binding_for_active_instance(monkeypatch):
+    captured = {}
+
+    async def fake_get(session, agent_instance_id):
+        assert agent_instance_id == "agent-id"
+        return SimpleNamespace(is_active=True)
+
+    async def fake_set_idle(session, *, agent_instance_id):
+        captured["agent_instance_id"] = agent_instance_id
+
+    async def fail_set_inactive(session, *, agent_instance_id):
+        raise AssertionError("inactive workspace release should not run for active instances")
+
+    monkeypatch.setattr(execution.AgentInstanceRepository, "get", fake_get)
+    monkeypatch.setattr(execution.WorkspaceRepository, "set_idle", fake_set_idle)
+    monkeypatch.setattr(execution.WorkspaceRepository, "set_inactive", fail_set_inactive)
+
+    asyncio.run(execution._release_workspace(FakeDatabase(), "agent-id"))
+
+    assert captured == {
+        "agent_instance_id": "agent-id",
+    }
+
+
+def test_release_workspace_keeps_binding_for_inactive_instance(monkeypatch):
+    captured = {}
+
+    async def fake_get(session, agent_instance_id):
+        assert agent_instance_id == "agent-id"
+        return SimpleNamespace(is_active=False)
+
+    async def fail_set_idle(session, *, agent_instance_id):
+        raise AssertionError("active workspace release should not run for inactive instances")
+
+    async def fake_set_inactive(session, *, agent_instance_id):
+        captured["agent_instance_id"] = agent_instance_id
+
+    monkeypatch.setattr(execution.AgentInstanceRepository, "get", fake_get)
+    monkeypatch.setattr(execution.WorkspaceRepository, "set_idle", fail_set_idle)
+    monkeypatch.setattr(execution.WorkspaceRepository, "set_inactive", fake_set_inactive)
+
+    asyncio.run(execution._release_workspace(FakeDatabase(), "agent-id"))
+
+    assert captured == {
+        "agent_instance_id": "agent-id",
+    }

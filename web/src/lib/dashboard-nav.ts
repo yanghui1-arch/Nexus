@@ -18,6 +18,10 @@ export const WORKSPACE_NAV_ITEMS = [
     to: '/pricing',
   },
   {
+    label: 'Product Research',
+    to: '/product-research',
+  },
+  {
     label: 'Code Review',
     to: '/code-review',
     subItems: [

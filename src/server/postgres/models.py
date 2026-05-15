@@ -38,12 +38,19 @@ class TaskStatus(str, enum.Enum):
     failed = "failed"
 
 
+class TaskCategory(str, enum.Enum):
+    coding = "coding"
+    pm = "product discovery"
+
+
 TASK_STATUS_VARCHAR_LENGTH = 32
+TASK_CATEGORY_VARCHAR_LENGTH = 32
 
 
 class AgentName(str, enum.Enum):
     tela = "tela"
     sophie = "sophie"
+    marc = "marc"
 
 
 class WorkspaceStatus(str, enum.Enum):
@@ -57,6 +64,27 @@ class TaskWorkItemStatus(str, enum.Enum):
     running = "running"
     ready_for_review = "ready_for_review"
     approved = "approved"
+    closed = "closed"
+
+
+class ProductProposalStatus(str, enum.Enum):
+    proposed = "proposed"
+    approved = "approved"
+    rejected = "rejected"
+    planned = "planned"
+
+
+class FeatureStatus(str, enum.Enum):
+    planned = "planned"
+    in_progress = "in_progress"
+    completed = "completed"
+    closed = "closed"
+
+
+class FeatureItemStatus(str, enum.Enum):
+    pending = "pending"
+    in_progress = "in_progress"
+    completed = "completed"
     closed = "closed"
 
 
@@ -184,6 +212,7 @@ class WorkspaceRecord(Base):
     )
     workspace_key: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     github_repo: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    project: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     docker_container_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     docker_volume_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[WorkspaceStatus] = mapped_column(
@@ -216,6 +245,7 @@ class TaskRecord(Base):
     __tablename__ = "task"
     __table_args__ = (
         Index("ix_task_agent_instance_status", "agent_instance_id", "status"),
+        Index("ix_task_category_status", "category", "status"),
         Index(
             "uq_task_one_running_per_agent_instance",
             "agent_instance_id",
@@ -234,6 +264,18 @@ class TaskRecord(Base):
         ForeignKey("agent_instance.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
+    )
+    category: Mapped[TaskCategory] = mapped_column(
+        Enum(
+            TaskCategory,
+            native_enum=False,
+            length=TASK_CATEGORY_VARCHAR_LENGTH,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        nullable=False,
+        index=True,
+        default=TaskCategory.coding,
+        server_default=TaskCategory.coding.value,
     )
     question: Mapped[str] = mapped_column(Text, nullable=False)
     repo: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
@@ -256,6 +298,127 @@ class TaskRecord(Base):
     )
     result: Mapped[str | None] = mapped_column(Text, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+        server_default=func.now(),
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ProductProposalRecord(Base):
+    __tablename__ = "product_proposal"
+    __table_args__ = (
+        Index("ix_product_proposal_status_created_at", "status", "created_at"),
+        Index("ix_product_proposal_project_created_at", "project", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    plan_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    answer: Mapped[str] = mapped_column(Text, nullable=False)
+    project: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    repo: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    status: Mapped[ProductProposalStatus] = mapped_column(
+        Enum(ProductProposalStatus, native_enum=False, length=32),
+        nullable=False,
+        index=True,
+        default=ProductProposalStatus.proposed,
+    )
+    source_task_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("task.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+        server_default=func.now(),
+    )
+
+
+class FeatureRecord(Base):
+    __tablename__ = "feature"
+    __table_args__ = (
+        Index("ix_feature_status_created_at", "status", "created_at"),
+        Index("ix_feature_project_created_at", "project", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    proposal_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("product_proposal.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    project: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    status: Mapped[FeatureStatus] = mapped_column(
+        Enum(FeatureStatus, native_enum=False, length=32),
+        nullable=False,
+        index=True,
+        default=FeatureStatus.planned,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+        server_default=func.now(),
+    )
+
+
+class FeatureItemRecord(Base):
+    __tablename__ = "feature_item"
+    __table_args__ = (
+        UniqueConstraint("feature_id", "order_index", name="uq_feature_item_feature_order"),
+        Index("ix_feature_item_feature_status", "feature_id", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    feature_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("feature.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    order_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[FeatureItemStatus] = mapped_column(
+        Enum(FeatureItemStatus, native_enum=False, length=32),
+        nullable=False,
+        index=True,
+        default=FeatureItemStatus.pending,
+    )
+    task_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("task.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
