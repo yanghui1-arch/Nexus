@@ -232,9 +232,33 @@ class Database:
                 text("ALTER TABLE virtual_pull_request_comment ADD COLUMN IF NOT EXISTS parent_comment_id UUID")
             )
             await conn.execute(text("ALTER TABLE user_account ADD COLUMN IF NOT EXISTS balance NUMERIC(12, 2) DEFAULT 0.00 NOT NULL"))
-            await conn.execute(text("UPDATE user_account SET balance = balance_cents / 100.0 WHERE balance_cents IS NOT NULL"))
+            await conn.execute(
+                text(
+                    "DO $$ BEGIN "
+                    "IF EXISTS ("
+                    "SELECT 1 FROM information_schema.columns "
+                    "WHERE table_name = 'user_account' AND column_name = 'balance_cents'"
+                    ") THEN "
+                    "UPDATE user_account SET balance = balance_cents / 100.0 "
+                    "WHERE balance_cents IS NOT NULL; "
+                    "END IF; "
+                    "END $$;"
+                )
+            )
             await conn.execute(text("ALTER TABLE agent_purchase ADD COLUMN IF NOT EXISTS price NUMERIC(12, 2)"))
-            await conn.execute(text("UPDATE agent_purchase SET price = price_cents / 100.0 WHERE price_cents IS NOT NULL AND price IS NULL"))
+            await conn.execute(
+                text(
+                    "DO $$ BEGIN "
+                    "IF EXISTS ("
+                    "SELECT 1 FROM information_schema.columns "
+                    "WHERE table_name = 'agent_purchase' AND column_name = 'price_cents'"
+                    ") THEN "
+                    "UPDATE agent_purchase SET price = price_cents / 100.0 "
+                    "WHERE price_cents IS NOT NULL AND price IS NULL; "
+                    "END IF; "
+                    "END $$;"
+                )
+            )
             await conn.execute(text("ALTER TABLE agent_purchase ALTER COLUMN price SET NOT NULL"))
             await conn.execute(
                 text(
