@@ -2,14 +2,14 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { DEFAULT_WORKSPACE_PATH } from '@/lib/dashboard-nav';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Toaster } from '@/components/ui/toaster';
-import LoginPage from './pages/login';
-import { NexusReviewPage } from './pages/nexus-review';
-import PricingPage from './pages/pricing';
-import ProcessTrackingPage from './pages/process-tracking';
-import ProductResearchPage from './pages/product-research';
-import PublishTaskPage from './pages/publish-task';
-import TaskBoardPage from './pages/task-board';
-import TaskDetailPage from './pages/TaskDetailPage';
+import LoginPage from '@/pages/login';
+import { NexusReviewPage } from '@/pages/nexus-review';
+import PricingPage from '@/pages/pricing';
+import ProcessTrackingPage from '@/pages/process-tracking';
+import ProductResearchPage from '@/pages/product-research';
+import PublishTaskPage from '@/pages/publish-task';
+import TaskBoardPage from '@/pages/task-board';
+import TaskDetailPage from '@/pages/TaskDetailPage';
 
 function App() {
   return (

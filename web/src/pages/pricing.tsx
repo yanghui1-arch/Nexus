@@ -1,11 +1,12 @@
 import { startTransition, useEffect, useMemo, useState } from 'react';
-import { Bot, Check, Coins, Sparkles } from 'lucide-react';
+import { Bot, Check, Coins } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCurrentUser, purchaseAgent, rechargeBalance } from '@/api/auth';
 import { getErrorDetail } from '@/api/client';
 import type { ApiAgentKind, ApiUser } from '@/api/types';
 import { useAppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
@@ -40,8 +41,7 @@ export default function PricingPage() {
 
   useAppLayout({
     title: 'Pricing',
-    description: 'Recharge balance and buy monthly access for Tela or Sophie.',
-    mainClassName: 'gap-6',
+    mainClassName: 'gap-8',
   });
 
   useEffect(() => {
@@ -80,65 +80,60 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-3xl border bg-card p-6 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="max-w-2xl space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
-              <Sparkles className="size-4" /> Agent subscriptions
-            </div>
-            <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Choose an agent subscription.</h1>
-            <p className="text-muted-foreground">Recharge once, then activate Tela or Sophie monthly from a single GitHub-backed wallet.</p>
-          </div>
-          <div className="rounded-2xl border bg-muted/50 px-4 py-3 text-sm">
-            <p className="text-muted-foreground">Available balance</p>
-            <p className="mt-1 text-2xl font-semibold">{balance}</p>
-          </div>
+    <div className="space-y-8">
+      <section className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="text-sm text-muted-foreground">Available balance</p>
+          <p className="mt-1 text-3xl font-semibold tracking-tight">{balance}</p>
+        </div>
+        <div className="flex w-full flex-col gap-3 sm:flex-row md:w-auto">
+          <Input
+            className="md:w-56"
+            value={rechargeYuan}
+            onChange={event => setRechargeYuan(event.target.value)}
+            inputMode="decimal"
+            placeholder="Amount in CNY"
+          />
+          <Button onClick={handleRecharge} disabled={!user}>
+            <Coins /> Recharge
+          </Button>
         </div>
       </section>
 
-      <section className="rounded-3xl border bg-card p-5 shadow-sm">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">Recharge balance</h2>
-            <p className="text-sm text-muted-foreground">Demo recharge credits your wallet directly. Server stores money as Decimal.</p>
-          </div>
-          <div className="flex flex-col gap-3 sm:w-[360px] sm:flex-row">
-            <Input value={rechargeYuan} onChange={event => setRechargeYuan(event.target.value)} inputMode="decimal" placeholder="Amount in CNY" />
-            <Button onClick={handleRecharge} disabled={!user}><Coins /> Recharge</Button>
-          </div>
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold">Buy agent</h2>
+        <div className="grid gap-5 lg:grid-cols-2">
+          {PLANS.map(plan => (
+            <Card
+              key={plan.name}
+              className={cn(
+                'group relative overflow-hidden transition-all duration-200',
+                'hover:border-primary hover:shadow-xl hover:shadow-primary/10',
+              )}
+            >
+              <div className="absolute right-4 top-4 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
+                Select
+              </div>
+              <CardHeader>
+                <div className="mb-3 flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <Bot className="size-5" />
+                </div>
+                <CardTitle>{plan.name}</CardTitle>
+                <CardDescription>{plan.description}</CardDescription>
+                <div className="pt-4"><span className="text-4xl font-semibold">{plan.price}</span><span className="text-muted-foreground"> / month</span></div>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <ul className="space-y-3 text-sm">
+                  {plan.features.map(feature => <li key={feature} className="flex gap-2"><Check className="mt-0.5 size-4 text-primary" />{feature}</li>)}
+                </ul>
+                <Button className="w-full" onClick={() => handlePurchase(plan.agent)} disabled={!user || isLoadingUser || busyAgent === plan.agent}>
+                  Buy {plan.name}
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </section>
-
-      <div className="grid gap-5 lg:grid-cols-2">
-        {PLANS.map(plan => (
-          <section
-            key={plan.name}
-            className={cn(
-              'group relative overflow-hidden rounded-3xl border bg-card p-6 shadow-sm transition-all duration-200',
-              'hover:border-primary hover:shadow-xl hover:shadow-primary/10',
-            )}
-          >
-            <div className="absolute right-4 top-4 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
-              Select
-            </div>
-            <div className="mb-4 flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-              <Bot className="size-5" />
-            </div>
-            <div className="space-y-2">
-              <h2 className="text-2xl font-semibold">{plan.name}</h2>
-              <p className="text-sm text-muted-foreground">{plan.description}</p>
-              <div className="pt-3"><span className="text-4xl font-semibold">{plan.price}</span><span className="text-muted-foreground"> / month</span></div>
-            </div>
-            <ul className="mt-6 space-y-3 text-sm">
-              {plan.features.map(feature => <li key={feature} className="flex gap-2"><Check className="mt-0.5 size-4 text-primary" />{feature}</li>)}
-            </ul>
-            <Button className="mt-6 w-full" onClick={() => handlePurchase(plan.agent)} disabled={!user || isLoadingUser || busyAgent === plan.agent}>
-              Buy {plan.name}
-            </Button>
-          </section>
-        ))}
-      </div>
     </div>
   );
 }
