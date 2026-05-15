@@ -13,8 +13,8 @@ from src.server.postgres.models import Base, TASK_CATEGORY_VARCHAR_LENGTH, TASK_
 _REQUIRED_SCHEMA: dict[str, set[str]] = {
     "user_account": {"id", "github_id", "github_login", "balance"},
     "auth_session": {"token_hash", "user_id", "expires_at"},
-    "agent_purchase": {"id", "user_id", "agent", "price", "expires_at"},
-    "agent_instance": {"id", "agent", "client_id", "is_active"},
+    "agent_purchase": {"id", "user_id", "agent", "price", "expires_at", "agent_instance_id"},
+    "agent_instance": {"id", "agent", "client_id", "is_active", "expires_at"},
     "workspace": {
         "id",
         "agent_instance_id",
@@ -260,6 +260,8 @@ class Database:
                 )
             )
             await conn.execute(text("ALTER TABLE agent_purchase ALTER COLUMN price SET NOT NULL"))
+            await conn.execute(text("ALTER TABLE agent_instance ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ"))
+            await conn.execute(text("ALTER TABLE agent_purchase ADD COLUMN IF NOT EXISTS agent_instance_id UUID REFERENCES agent_instance(id) ON DELETE SET NULL"))
             await conn.execute(
                 text(
                     "CREATE UNIQUE INDEX IF NOT EXISTS uq_task_work_item_one_running_per_task "

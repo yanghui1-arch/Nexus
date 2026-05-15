@@ -11,7 +11,9 @@ import pytest
 from fastapi import FastAPI
 
 from src.server.api.routes.auth import get_current_user, router as auth_router
-from src.server.postgres.models import AgentName
+from sqlalchemy import select
+
+from src.server.postgres.models import AgentInstanceRecord, AgentName, AgentPurchaseRecord
 from src.server.postgres.repositories import (
     AgentPurchaseRepository,
     AuthSessionRepository,
@@ -58,6 +60,11 @@ async def test_session_lookup_recharge_and_purchase(db_session):
         expires_at=utc_now() + timedelta(days=30),
     )
     assert purchase.price == Decimal("5500.00")
+    assert purchase.agent_instance_id is not None
+    instance = await db_session.get(AgentInstanceRecord, purchase.agent_instance_id)
+    assert instance is not None
+    assert instance.agent == AgentName.tela
+    assert instance.expires_at == purchase.expires_at
     updated = await UserRepository.get(db_session, user.id)
     assert updated is not None
     assert updated.balance == Decimal("500.00")
@@ -72,14 +79,23 @@ async def test_purchase_rejects_insufficient_balance(db_session):
         email=None,
     )
 
+    user_id = user.id
     with pytest.raises(ValueError, match="Insufficient balance"):
         await AgentPurchaseRepository.create_purchase(
             db_session,
-            user_id=user.id,
+            user_id=user_id,
             agent=AgentName.sophie,
             price=AGENT_PRICES["sophie"],
             expires_at=utc_now() + timedelta(days=30),
         )
+
+    instances = (await db_session.execute(select(AgentInstanceRecord))).scalars().all()
+    purchases = (await db_session.execute(select(AgentPurchaseRecord))).scalars().all()
+    assert instances == []
+    assert purchases == []
+    updated = await UserRepository.get(db_session, user_id)
+    assert updated is not None
+    assert updated.balance == Decimal("0.00")
 
 
 class _AsyncSessionContext:

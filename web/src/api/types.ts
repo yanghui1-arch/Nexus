@@ -182,6 +182,7 @@ export interface ApiPurchaseAgentRequest {
 
 export interface ApiPurchaseAgentResponse {
   id: string;
+  agent_instance_id: string;
   agent: ApiAgentKind;
   price: string;
   balance: string;

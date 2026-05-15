@@ -162,6 +162,7 @@ class AgentPurchaseRecord(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user_account.id", ondelete="CASCADE"), nullable=False, index=True)
+    agent_instance_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("agent_instance.id", ondelete="SET NULL"), nullable=True, index=True)
     agent: Mapped[AgentName] = mapped_column(Enum(AgentName, native_enum=False), nullable=False)
     price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     purchased_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, server_default=func.now())
@@ -182,6 +183,7 @@ class AgentInstanceRecord(Base):
     )
     display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     client_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

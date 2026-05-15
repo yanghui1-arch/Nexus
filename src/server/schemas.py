@@ -457,6 +457,7 @@ class PurchaseAgentRequest(BaseModel):
 
 class PurchaseAgentResponse(BaseModel):
     id: uuid.UUID
+    agent_instance_id: uuid.UUID
     agent: str
     price: Decimal
     balance: Decimal

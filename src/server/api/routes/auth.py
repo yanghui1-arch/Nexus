@@ -183,6 +183,7 @@ async def purchase_agent(
     assert updated_user is not None
     return PurchaseAgentResponse(
         id=purchase.id,
+        agent_instance_id=purchase.agent_instance_id,
         agent=purchase.agent.value,
         price=purchase.price,
         balance=updated_user.balance,

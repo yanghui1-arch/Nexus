@@ -1940,20 +1940,36 @@ class AgentPurchaseRepository:
         price: Decimal,
         expires_at: datetime,
     ) -> AgentPurchaseRecord:
-        user = await session.get(UserRecord, user_id, with_for_update=True)
-        if user is None:
-            raise ValueError("User not found")
-        if user.balance < price:
-            raise ValueError("Insufficient balance")
-        user.balance -= price
-        user.updated_at = utc_now()
-        purchase = AgentPurchaseRecord(
-            user_id=user_id,
-            agent=agent,
-            price=price,
-            expires_at=expires_at,
-        )
-        session.add(purchase)
-        await session.commit()
-        await session.refresh(purchase)
-        return purchase
+        try:
+            user = await session.get(UserRecord, user_id, with_for_update=True)
+            if user is None:
+                raise ValueError("User not found")
+            if user.balance < price:
+                raise ValueError("Insufficient balance")
+
+            user.balance -= price
+            user.updated_at = utc_now()
+            agent_instance = AgentInstanceRecord(
+                agent=agent,
+                client_id=f"purchase-{user_id.hex[:8]}-{uuid.uuid4().hex[:8]}",
+                display_name=f"{agent.value.title()} subscription",
+                expires_at=expires_at,
+                is_active=True,
+            )
+            session.add(agent_instance)
+            await session.flush()
+
+            purchase = AgentPurchaseRecord(
+                user_id=user_id,
+                agent_instance_id=agent_instance.id,
+                agent=agent,
+                price=price,
+                expires_at=expires_at,
+            )
+            session.add(purchase)
+            await session.commit()
+            await session.refresh(purchase)
+            return purchase
+        except Exception:
+            await session.rollback()
+            raise
