@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
@@ -1886,11 +1887,11 @@ class UserRepository:
         return user
 
     @staticmethod
-    async def add_balance(session: AsyncSession, user_id: uuid.UUID, amount_cents: int) -> UserRecord | None:
+    async def add_balance(session: AsyncSession, user_id: uuid.UUID, amount: Decimal) -> UserRecord | None:
         user = await session.get(UserRecord, user_id)
         if user is None:
             return None
-        user.balance_cents += amount_cents
+        user.balance += amount
         user.updated_at = utc_now()
         await session.commit()
         await session.refresh(user)
@@ -1936,20 +1937,20 @@ class AgentPurchaseRepository:
         *,
         user_id: uuid.UUID,
         agent: AgentName,
-        price_cents: int,
+        price: Decimal,
         expires_at: datetime,
     ) -> AgentPurchaseRecord:
         user = await session.get(UserRecord, user_id, with_for_update=True)
         if user is None:
             raise ValueError("User not found")
-        if user.balance_cents < price_cents:
+        if user.balance < price:
             raise ValueError("Insufficient balance")
-        user.balance_cents -= price_cents
+        user.balance -= price
         user.updated_at = utc_now()
         purchase = AgentPurchaseRecord(
             user_id=user_id,
             agent=agent,
-            price_cents=price_cents,
+            price=price,
             expires_at=expires_at,
         )
         session.add(purchase)

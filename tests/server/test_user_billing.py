@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from decimal import Decimal
 from datetime import timedelta
 from types import SimpleNamespace
 
@@ -18,7 +19,7 @@ from src.server.postgres.repositories import (
     utc_now,
 )
 
-AGENT_PRICES_CENTS = {"tela": 550_000, "sophie": 600_000}
+AGENT_PRICES = {"tela": Decimal("5500.00"), "sophie": Decimal("6000.00")}
 
 
 def _hash_token(token: str) -> str:
@@ -45,21 +46,21 @@ async def test_session_lookup_recharge_and_purchase(db_session):
     assert session_user is not None
     assert session_user.github_login == "octocat"
 
-    recharged = await UserRepository.add_balance(db_session, user.id, 600_000)
+    recharged = await UserRepository.add_balance(db_session, user.id, Decimal("6000.00"))
     assert recharged is not None
-    assert recharged.balance_cents == 600_000
+    assert recharged.balance == Decimal("6000.00")
 
     purchase = await AgentPurchaseRepository.create_purchase(
         db_session,
         user_id=user.id,
         agent=AgentName.tela,
-        price_cents=AGENT_PRICES_CENTS["tela"],
+        price=AGENT_PRICES["tela"],
         expires_at=utc_now() + timedelta(days=30),
     )
-    assert purchase.price_cents == 550_000
+    assert purchase.price == Decimal("5500.00")
     updated = await UserRepository.get(db_session, user.id)
     assert updated is not None
-    assert updated.balance_cents == 50_000
+    assert updated.balance == Decimal("500.00")
 
 
 @pytest.mark.asyncio
@@ -76,7 +77,7 @@ async def test_purchase_rejects_insufficient_balance(db_session):
             db_session,
             user_id=user.id,
             agent=AgentName.sophie,
-            price_cents=AGENT_PRICES_CENTS["sophie"],
+            price=AGENT_PRICES["sophie"],
             expires_at=utc_now() + timedelta(days=30),
         )
 
@@ -99,7 +100,7 @@ async def test_purchase_route_hides_repository_error(monkeypatch):
     app = FastAPI()
     app.include_router(auth_router)
     app.state.database = _FakeDatabase()
-    user = SimpleNamespace(id=uuid.uuid4(), balance_cents=0)
+    user = SimpleNamespace(id=uuid.uuid4(), balance=0)
 
     app.dependency_overrides[get_current_user] = lambda: user
 

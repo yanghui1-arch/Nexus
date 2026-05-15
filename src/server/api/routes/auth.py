@@ -6,6 +6,7 @@ import hashlib
 import secrets
 import uuid
 from datetime import timedelta
+from decimal import Decimal
 from typing import Any
 from urllib.parse import urlencode
 
@@ -30,7 +31,7 @@ from src.server.schemas import (
 )
 
 router = APIRouter(prefix="/v1", tags=["auth"])
-AGENT_PRICES_CENTS = {AgentName.tela: 550_000, AgentName.sophie: 600_000}
+AGENT_PRICES = {AgentName.tela: Decimal("5500.00"), AgentName.sophie: Decimal("6000.00")}
 
 
 def _hash_token(token: str) -> str:
@@ -123,7 +124,7 @@ async def get_me(user: UserRecord = Depends(get_current_user)) -> UserResponse:
         id=user.id,
         github_login=user.github_login,
         email=user.email,
-        balance_cents=user.balance_cents,
+        balance=user.balance,
     )
 
 
@@ -146,14 +147,14 @@ async def recharge_balance(
 ) -> UserResponse:
     database: Database = request.app.state.database
     async with database.session() as session:
-        updated = await UserRepository.add_balance(session, user.id, payload.amount_cents)
+        updated = await UserRepository.add_balance(session, user.id, payload.amount)
     if updated is None:
         raise HTTPException(status_code=404, detail="User not found")
     return UserResponse(
         id=updated.id,
         github_login=updated.github_login,
         email=updated.email,
-        balance_cents=updated.balance_cents,
+        balance=updated.balance,
     )
 
 
@@ -164,7 +165,7 @@ async def purchase_agent(
     user: UserRecord = Depends(get_current_user),
 ) -> PurchaseAgentResponse:
     agent = AgentName(payload.agent.value)
-    price_cents = AGENT_PRICES_CENTS[agent]
+    price = AGENT_PRICES[agent]
     database: Database = request.app.state.database
     async with database.session() as session:
         try:
@@ -172,7 +173,7 @@ async def purchase_agent(
                 session,
                 user_id=user.id,
                 agent=agent,
-                price_cents=price_cents,
+                price=price,
                 expires_at=utc_now() + timedelta(days=30),
             )
         except ValueError:
@@ -182,8 +183,8 @@ async def purchase_agent(
     return PurchaseAgentResponse(
         id=purchase.id,
         agent=purchase.agent.value,
-        price_cents=purchase.price_cents,
-        balance_cents=updated_user.balance_cents,
+        price=purchase.price,
+        balance=updated_user.balance,
         purchased_at=purchase.purchased_at,
         expires_at=purchase.expires_at,
     )

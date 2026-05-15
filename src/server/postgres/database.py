@@ -11,9 +11,9 @@ from src.server.postgres.models import Base, TASK_CATEGORY_VARCHAR_LENGTH, TASK_
 
 
 _REQUIRED_SCHEMA: dict[str, set[str]] = {
-    "user_account": {"id", "github_id", "github_login", "balance_cents"},
+    "user_account": {"id", "github_id", "github_login", "balance"},
     "auth_session": {"token_hash", "user_id", "expires_at"},
-    "agent_purchase": {"id", "user_id", "agent", "price_cents", "expires_at"},
+    "agent_purchase": {"id", "user_id", "agent", "price", "expires_at"},
     "agent_instance": {"id", "agent", "client_id", "is_active"},
     "workspace": {
         "id",
@@ -231,6 +231,11 @@ class Database:
             await conn.execute(
                 text("ALTER TABLE virtual_pull_request_comment ADD COLUMN IF NOT EXISTS parent_comment_id UUID")
             )
+            await conn.execute(text("ALTER TABLE user_account ADD COLUMN IF NOT EXISTS balance NUMERIC(12, 2) DEFAULT 0.00 NOT NULL"))
+            await conn.execute(text("UPDATE user_account SET balance = balance_cents / 100.0 WHERE balance_cents IS NOT NULL"))
+            await conn.execute(text("ALTER TABLE agent_purchase ADD COLUMN IF NOT EXISTS price NUMERIC(12, 2)"))
+            await conn.execute(text("UPDATE agent_purchase SET price = price_cents / 100.0 WHERE price_cents IS NOT NULL AND price IS NULL"))
+            await conn.execute(text("ALTER TABLE agent_purchase ALTER COLUMN price SET NOT NULL"))
             await conn.execute(
                 text(
                     "CREATE UNIQUE INDEX IF NOT EXISTS uq_task_work_item_one_running_per_task "

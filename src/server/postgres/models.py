@@ -3,6 +3,7 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 from sqlalchemy import (
     BigInteger,
@@ -12,8 +13,8 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    BigInteger,
     JSON,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -141,7 +142,7 @@ class UserRecord(Base):
     github_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     github_login: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
-    balance_cents: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    balance: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"), server_default="0.00")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now, server_default=func.now())
 
@@ -162,7 +163,7 @@ class AgentPurchaseRecord(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user_account.id", ondelete="CASCADE"), nullable=False, index=True)
     agent: Mapped[AgentName] = mapped_column(Enum(AgentName, native_enum=False), nullable=False)
-    price_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     purchased_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

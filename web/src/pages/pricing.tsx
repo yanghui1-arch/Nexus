@@ -33,8 +33,8 @@ const PLANS = [
   },
 ];
 
-function formatCny(cents: number): string {
-  return new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY' }).format(cents / 100);
+function formatCny(amount: string): string {
+  return new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY' }).format(Number(amount));
 }
 
 export default function PricingPage() {
@@ -43,7 +43,7 @@ export default function PricingPage() {
   const [rechargeYuan, setRechargeYuan] = useState('1000');
   const [busyAgent, setBusyAgent] = useState<ApiAgentKind | null>(null);
 
-  const balance = useMemo(() => (user ? formatCny(user.balance_cents) : '—'), [user]);
+  const balance = useMemo(() => (user ? formatCny(user.balance) : '—'), [user]);
 
   useAppLayout({
     title: 'Pricing',
@@ -59,15 +59,15 @@ export default function PricingPage() {
   }, []);
 
   const handleRecharge = async () => {
-    const amountCents = Math.round(Number(rechargeYuan) * 100);
-    if (!Number.isSafeInteger(amountCents) || amountCents <= 0) {
+    const amount = Number(rechargeYuan);
+    if (!Number.isFinite(amount) || amount <= 0) {
       toast.error('Please enter a valid recharge amount.');
       return;
     }
     try {
-      const nextUser = await rechargeBalance({ amount_cents: amountCents });
+      const nextUser = await rechargeBalance({ amount: amount.toFixed(2) });
       setUser(nextUser);
-      toast.success('Balance recharged', { description: `Current balance: ${formatCny(nextUser.balance_cents)}` });
+      toast.success('Balance recharged', { description: `Current balance: ${formatCny(nextUser.balance)}` });
     } catch (error) {
       toast.error('Recharge failed', { description: getErrorDetail(error) });
     }
@@ -77,7 +77,7 @@ export default function PricingPage() {
     setBusyAgent(agent);
     try {
       const purchase = await purchaseAgent({ agent });
-      setUser(current => current ? { ...current, balance_cents: purchase.balance_cents } : current);
+      setUser(current => current ? { ...current, balance: purchase.balance } : current);
       toast.success(`${agent} purchased`, { description: `Valid until ${new Date(purchase.expires_at).toLocaleDateString()}` });
     } catch (error) {
       toast.error('Purchase failed', { description: getErrorDetail(error) });
@@ -132,7 +132,7 @@ export default function PricingPage() {
       <Card className="border-0 bg-card/90 shadow-lg shadow-primary/5">
         <CardHeader>
           <CardTitle>Recharge balance</CardTitle>
-          <CardDescription>Demo recharge credits your wallet directly. Server stores money as integer cents.</CardDescription>
+          <CardDescription>Demo recharge credits your wallet directly. Server stores money as Decimal.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 sm:flex-row">
           <Input value={rechargeYuan} onChange={event => setRechargeYuan(event.target.value)} inputMode="decimal" placeholder="Amount in CNY" />

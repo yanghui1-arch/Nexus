@@ -169,11 +169,11 @@ export interface ApiUser {
   id: string;
   github_login: string;
   email: string | null;
-  balance_cents: number;
+  balance: string;
 }
 
 export interface ApiRechargeRequest {
-  amount_cents: number;
+  amount: string;
 }
 
 export interface ApiPurchaseAgentRequest {
@@ -183,8 +183,8 @@ export interface ApiPurchaseAgentRequest {
 export interface ApiPurchaseAgentResponse {
   id: string;
   agent: ApiAgentKind;
-  price_cents: number;
-  balance_cents: number;
+  price: string;
+  balance: string;
   purchased_at: string;
   expires_at: string;
 }
