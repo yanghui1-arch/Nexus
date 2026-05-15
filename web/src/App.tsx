@@ -18,7 +18,7 @@ function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route element={<AppLayout />}>
-          <Route path="/" element={<Navigate to={DEFAULT_WORKSPACE_PATH} replace />} />
+          <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/publish-task" element={<PublishTaskPage />} />
           <Route path="/process-tracking" element={<ProcessTrackingPage />} />
