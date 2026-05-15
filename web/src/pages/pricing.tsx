@@ -1,22 +1,15 @@
 import { startTransition, useEffect, useMemo, useState } from 'react';
-import { Bot, Check, Coins, Github, LogOut, Sparkles, Wallet } from 'lucide-react';
+import { Bot, Check, Coins, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { getCurrentUser, logout, purchaseAgent, rechargeBalance } from '@/api/auth';
+import { getCurrentUser, purchaseAgent, rechargeBalance } from '@/api/auth';
 import { getErrorDetail } from '@/api/client';
 import type { ApiAgentKind, ApiUser } from '@/api/types';
 import { useAppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 const PLANS = [
-  {
-    agent: null,
-    name: 'Starter',
-    price: '¥0',
-    description: 'Explore Nexus and review existing task flow.',
-    features: ['GitHub login', 'User profile', 'Balance wallet'],
-  },
   {
     agent: 'tela' as const,
     name: 'Tela',
@@ -48,7 +41,7 @@ export default function PricingPage() {
   useAppLayout({
     title: 'Pricing',
     description: 'Recharge balance and buy monthly access for Tela or Sophie.',
-    mainClassName: 'gap-7 bg-[radial-gradient(circle_at_top_right,hsl(var(--primary)/0.10),transparent_34%)]',
+    mainClassName: 'gap-6',
   });
 
   useEffect(() => {
@@ -86,83 +79,64 @@ export default function PricingPage() {
     }
   };
 
-  const handleLogout = async () => {
-    await logout();
-    window.location.href = '/login';
-  };
-
   return (
-    <div className="space-y-7">
-      <section className="overflow-hidden rounded-[2rem] border bg-primary p-8 text-primary-foreground shadow-xl shadow-primary/15">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-sm font-medium text-primary-foreground/90">
+    <div className="space-y-6">
+      <section className="rounded-3xl border bg-card p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="max-w-2xl space-y-3">
+            <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
               <Sparkles className="size-4" /> Agent subscriptions
             </div>
-            <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">Choose the right Nexus agent for your next sprint.</h1>
-            <p className="text-lg text-primary-foreground/80">Recharge once, then activate Tela or Sophie monthly from a single GitHub-backed wallet.</p>
+            <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Choose an agent subscription.</h1>
+            <p className="text-muted-foreground">Recharge once, then activate Tela or Sophie monthly from a single GitHub-backed wallet.</p>
           </div>
-          <div className="rounded-2xl border border-white/15 bg-white/10 p-5 text-sm backdrop-blur">
-            <p className="text-primary-foreground/70">Available balance</p>
-            <p className="mt-2 text-3xl font-semibold">{balance}</p>
+          <div className="rounded-2xl border bg-muted/50 px-4 py-3 text-sm">
+            <p className="text-muted-foreground">Available balance</p>
+            <p className="mt-1 text-2xl font-semibold">{balance}</p>
           </div>
         </div>
       </section>
 
-      <Card className="border-0 bg-card/90 shadow-lg shadow-primary/5">
-        <CardContent className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <Github className="size-5" />
-            </div>
-            <div>
-              <p className="font-medium">{user?.github_login ?? (isLoadingUser ? 'Loading user…' : 'Not signed in')}</p>
-              <p className="text-sm text-muted-foreground">{user?.email ?? 'GitHub email is unavailable or private'}</p>
-            </div>
+      <section className="rounded-3xl border bg-card p-5 shadow-sm">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">Recharge balance</h2>
+            <p className="text-sm text-muted-foreground">Demo recharge credits your wallet directly. Server stores money as Decimal.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm">
-              <Wallet className="size-4 text-primary" /> Balance {balance}
-            </div>
-            {user ? <Button variant="outline" onClick={handleLogout}><LogOut /> Logout</Button> : <Button asChild><a href="/login">Login</a></Button>}
+          <div className="flex flex-col gap-3 sm:w-[360px] sm:flex-row">
+            <Input value={rechargeYuan} onChange={event => setRechargeYuan(event.target.value)} inputMode="decimal" placeholder="Amount in CNY" />
+            <Button onClick={handleRecharge} disabled={!user}><Coins /> Recharge</Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      <Card className="border-0 bg-card/90 shadow-lg shadow-primary/5">
-        <CardHeader>
-          <CardTitle>Recharge balance</CardTitle>
-          <CardDescription>Demo recharge credits your wallet directly. Server stores money as Decimal.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3 sm:flex-row">
-          <Input value={rechargeYuan} onChange={event => setRechargeYuan(event.target.value)} inputMode="decimal" placeholder="Amount in CNY" />
-          <Button onClick={handleRecharge} disabled={!user}><Coins /> Recharge</Button>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid gap-5 lg:grid-cols-2">
         {PLANS.map(plan => (
-          <Card key={plan.name} className={plan.agent === 'tela' ? 'relative overflow-hidden border-primary shadow-xl shadow-primary/10' : 'border-0 shadow-lg shadow-primary/5'}>
-            {plan.agent === 'tela' ? <div className="absolute right-4 top-4 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">Popular</div> : null}
-            <CardHeader>
-              <div className="mb-3 flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <Bot className="size-5" />
-              </div>
-              <CardTitle>{plan.name}</CardTitle>
-              <CardDescription>{plan.description}</CardDescription>
-              <div className="pt-4"><span className="text-4xl font-semibold">{plan.price}</span><span className="text-muted-foreground"> / month</span></div>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <ul className="space-y-3 text-sm">
-                {plan.features.map(feature => <li key={feature} className="flex gap-2"><Check className="mt-0.5 size-4 text-primary" />{feature}</li>)}
-              </ul>
-              {plan.agent ? (
-                <Button className="w-full" onClick={() => handlePurchase(plan.agent)} disabled={!user || busyAgent === plan.agent}>
-                  Buy {plan.name}
-                </Button>
-              ) : <Button asChild variant="outline" className="w-full"><a href="/login">Start with GitHub</a></Button>}
-            </CardContent>
-          </Card>
+          <section
+            key={plan.name}
+            className={cn(
+              'group relative overflow-hidden rounded-3xl border bg-card p-6 shadow-sm transition-all duration-200',
+              'hover:border-primary hover:shadow-xl hover:shadow-primary/10',
+            )}
+          >
+            <div className="absolute right-4 top-4 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
+              Select
+            </div>
+            <div className="mb-4 flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <Bot className="size-5" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold">{plan.name}</h2>
+              <p className="text-sm text-muted-foreground">{plan.description}</p>
+              <div className="pt-3"><span className="text-4xl font-semibold">{plan.price}</span><span className="text-muted-foreground"> / month</span></div>
+            </div>
+            <ul className="mt-6 space-y-3 text-sm">
+              {plan.features.map(feature => <li key={feature} className="flex gap-2"><Check className="mt-0.5 size-4 text-primary" />{feature}</li>)}
+            </ul>
+            <Button className="mt-6 w-full" onClick={() => handlePurchase(plan.agent)} disabled={!user || isLoadingUser || busyAgent === plan.agent}>
+              Buy {plan.name}
+            </Button>
+          </section>
         ))}
       </div>
     </div>

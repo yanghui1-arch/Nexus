@@ -14,10 +14,6 @@ export const WORKSPACE_NAV_ITEMS = [
     to: '/process-tracking',
   },
   {
-    label: 'Pricing',
-    to: '/pricing',
-  },
-  {
     label: 'Product Research',
     to: '/product-research',
   },
@@ -30,5 +26,9 @@ export const WORKSPACE_NAV_ITEMS = [
         to: '/code-review/nexus',
       },
     ],
+  },
+  {
+    label: 'Pricing',
+    to: '/pricing',
   },
 ] as const;

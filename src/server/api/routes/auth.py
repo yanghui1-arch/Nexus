@@ -106,7 +106,7 @@ async def github_callback(request: Request, code: str) -> RedirectResponse:
             user_id=user.id,
             expires_at=expires_at,
         )
-    response = RedirectResponse("/pricing")
+    response = RedirectResponse("/task-board")
     response.set_cookie(
         settings.auth_session_cookie_name,
         session_token,

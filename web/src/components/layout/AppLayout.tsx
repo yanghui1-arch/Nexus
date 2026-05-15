@@ -1,15 +1,20 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react';
 import { NavLink, Outlet, useMatch } from 'react-router-dom';
-import { Sparkles } from 'lucide-react';
+import { LogOut, Sparkles, Wallet } from 'lucide-react';
+import { SiGithub } from 'react-icons/si';
+import { getCurrentUser, logout } from '@/api/auth';
+import type { ApiUser } from '@/api/types';
 import { WORKSPACE_NAV_ITEMS } from '@/lib/dashboard-nav';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 type AppLayoutState = {
   title?: string;
@@ -31,6 +36,10 @@ const DEFAULT_LAYOUT_STATE: AppLayoutState = {
 };
 
 const AppLayoutContext = createContext<AppLayoutContextValue | null>(null);
+
+function formatCny(amount: string): string {
+  return new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY' }).format(Number(amount));
+}
 
 function SidebarNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number] }) {
   const isParentActive = useMatch({ path: item.to, end: false });
@@ -76,6 +85,59 @@ function SidebarNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number] 
   );
 }
 
+function SidebarAccount() {
+  const [user, setUser] = useState<ApiUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    void getCurrentUser()
+      .then(setUser)
+      .catch(() => setUser(null))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  const handleLogout = async () => {
+    await logout();
+    window.location.href = '/login';
+  };
+
+  return (
+    <div className="border-t p-3">
+      {user ? (
+        <div className="space-y-3 rounded-xl bg-muted/60 p-3">
+          <div className="flex items-center gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-background text-foreground shadow-sm">
+              <SiGithub className="size-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{user.github_login}</p>
+              <p className="truncate text-xs text-muted-foreground">{user.email ?? 'GitHub email unavailable'}</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between rounded-lg border bg-background/70 px-3 py-2 text-xs">
+            <span className="inline-flex items-center gap-1 text-muted-foreground">
+              <Wallet className="size-3.5" /> Balance
+            </span>
+            <span className="font-medium">{formatCny(user.balance)}</span>
+          </div>
+          <Button variant="outline" size="sm" className="w-full justify-start" onClick={handleLogout}>
+            <LogOut className="size-4" /> Logout
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-3 rounded-xl bg-muted/60 p-3">
+          <p className="text-sm font-medium">{isLoading ? 'Loading account…' : 'Not signed in'}</p>
+          <Button asChild size="sm" className="w-full justify-start">
+            <a href="/login">
+              <SiGithub className="size-4" /> Login with GitHub
+            </a>
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function useAppLayout(state: AppLayoutState) {
   const context = useContext(AppLayoutContext);
 
@@ -115,7 +177,6 @@ export function AppLayout() {
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,hsl(var(--background)),hsl(var(--muted)/0.55))] lg:h-screen lg:overflow-hidden">
       <div className="grid min-h-screen lg:h-screen lg:grid-cols-[280px_minmax(0,1fr)]">
-        {/* Sidebar — fixed height, never grows with page content */}
         <aside className="border-r bg-card/75 backdrop-blur-sm lg:overflow-hidden">
           <div className="flex h-full flex-col">
             <div className="flex items-center gap-3 border-b px-5 py-4">
@@ -133,6 +194,7 @@ export function AppLayout() {
                 <SidebarNavEntry key={item.to} item={item} />
               ))}
             </nav>
+            <SidebarAccount />
           </div>
         </aside>
 
