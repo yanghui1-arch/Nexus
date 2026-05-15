@@ -52,19 +52,21 @@ async def test_session_lookup_recharge_and_purchase(db_session):
     assert recharged is not None
     assert recharged.balance == Decimal("6000.00")
 
+    expires_at = utc_now() + timedelta(days=30)
     purchase = await AgentPurchaseRepository.create_purchase(
         db_session,
         user_id=user.id,
         agent=AgentName.tela,
         price=AGENT_PRICES["tela"],
-        expires_at=utc_now() + timedelta(days=30),
+        expires_at=expires_at,
     )
     assert purchase.price == Decimal("5500.00")
     assert purchase.agent_instance_id is not None
     instance = await db_session.get(AgentInstanceRecord, purchase.agent_instance_id)
     assert instance is not None
     assert instance.agent == AgentName.tela
-    assert instance.expires_at == purchase.expires_at
+    assert instance.expires_at.replace(tzinfo=expires_at.tzinfo) == expires_at
+    assert not hasattr(purchase, "expires_at")
     updated = await UserRepository.get(db_session, user.id)
     assert updated is not None
     assert updated.balance == Decimal("500.00")

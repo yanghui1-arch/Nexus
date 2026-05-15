@@ -166,7 +166,6 @@ class AgentPurchaseRecord(Base):
     agent: Mapped[AgentName] = mapped_column(Enum(AgentName, native_enum=False), nullable=False)
     price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     purchased_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, server_default=func.now())
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class AgentInstanceRecord(Base):

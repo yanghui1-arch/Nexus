@@ -1964,7 +1964,6 @@ class AgentPurchaseRepository:
                 agent_instance_id=agent_instance.id,
                 agent=agent,
                 price=price,
-                expires_at=expires_at,
             )
             session.add(purchase)
             await session.commit()

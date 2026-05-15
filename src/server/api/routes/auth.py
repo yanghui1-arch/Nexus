@@ -167,6 +167,7 @@ async def purchase_agent(
 ) -> PurchaseAgentResponse:
     agent = AgentName(payload.agent.value)
     price = AGENT_PRICES[agent]
+    expires_at = utc_now() + timedelta(days=30)
     database: Database = request.app.state.database
     async with database.session() as session:
         try:
@@ -175,7 +176,7 @@ async def purchase_agent(
                 user_id=user.id,
                 agent=agent,
                 price=price,
-                expires_at=utc_now() + timedelta(days=30),
+                expires_at=expires_at,
             )
         except ValueError:
             raise HTTPException(status_code=400, detail="Purchase failed") from None
@@ -188,5 +189,5 @@ async def purchase_agent(
         price=purchase.price,
         balance=updated_user.balance,
         purchased_at=purchase.purchased_at,
-        expires_at=purchase.expires_at,
+        expires_at=expires_at,
     )
