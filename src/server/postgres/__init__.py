@@ -1,5 +1,7 @@
 from src.server.postgres.database import Database
 from src.server.postgres.models import (
+    AccountRecord,
+    AgentEntitlementRecord,
     AgentInstanceRecord,
     AgentName,
     Base,
@@ -9,6 +11,7 @@ from src.server.postgres.models import (
     WorkspaceStatus,
 )
 from src.server.postgres.repositories import (
+    AccountRepository,
     AgentInstanceRepository,
     TaskRepository,
     WorkspaceRepository,
@@ -16,6 +19,8 @@ from src.server.postgres.repositories import (
 
 __all__ = [
     "Database",
+    "AccountRecord",
+    "AgentEntitlementRecord",
     "AgentInstanceRecord",
     "AgentName",
     "Base",
@@ -23,6 +28,7 @@ __all__ = [
     "TaskStatus",
     "WorkspaceRecord",
     "WorkspaceStatus",
+    "AccountRepository",
     "AgentInstanceRepository",
     "TaskRepository",
     "WorkspaceRepository",

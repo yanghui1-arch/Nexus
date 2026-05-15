@@ -3,11 +3,13 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 from src.server.postgres.models import (
+    AccountRecord,
+    AgentEntitlementRecord,
     AgentInstanceRecord,
     ProductProposalRecord,
     ProductProposalStatus,
@@ -28,6 +30,58 @@ class AgentKind(str, Enum):
     tela = "tela"
     sophie = "sophie"
     marc = "marc"
+
+
+class AccountEntitlementResponse(BaseModel):
+    agent: AgentKind
+    purchased_at: datetime
+    expires_at: datetime
+    status: Literal["active", "inactive"]
+
+    @classmethod
+    def from_record(
+        cls,
+        entitlement: AgentEntitlementRecord,
+        *,
+        now: datetime,
+    ) -> "AccountEntitlementResponse":
+        return cls(
+            agent=AgentKind(entitlement.agent.value),
+            purchased_at=entitlement.purchased_at,
+            expires_at=entitlement.expires_at,
+            status="active" if entitlement.expires_at > now else "inactive",
+        )
+
+
+class AccountOverviewResponse(BaseModel):
+    github_id: int
+    github_login: str
+    github_name: str | None
+    github_avatar_url: str | None
+    github_html_url: str | None
+    balance_cents: int
+    entitlements: list[AccountEntitlementResponse]
+
+    @classmethod
+    def from_record(
+        cls,
+        account: AccountRecord,
+        entitlements: list[AgentEntitlementRecord],
+        *,
+        now: datetime,
+    ) -> "AccountOverviewResponse":
+        return cls(
+            github_id=account.github_id,
+            github_login=account.github_login,
+            github_name=account.github_name,
+            github_avatar_url=account.github_avatar_url,
+            github_html_url=account.github_html_url,
+            balance_cents=account.balance_cents,
+            entitlements=[
+                AccountEntitlementResponse.from_record(entitlement, now=now)
+                for entitlement in entitlements
+            ],
+        )
 
 
 class ProductProposalCreateRequest(BaseModel):
