@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from datetime import timedelta
-
-import pytest
-
 import hashlib
+import uuid
+from datetime import timedelta
+from types import SimpleNamespace
 
-AGENT_PRICES_CENTS = {"tela": 550_000, "sophie": 600_000}
+import httpx
+import pytest
+from fastapi import FastAPI
 
-def _hash_token(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+from src.server.api.routes.auth import get_current_user, router as auth_router
 from src.server.postgres.models import AgentName
 from src.server.postgres.repositories import (
     AgentPurchaseRepository,
@@ -17,6 +17,12 @@ from src.server.postgres.repositories import (
     UserRepository,
     utc_now,
 )
+
+AGENT_PRICES_CENTS = {"tela": 550_000, "sophie": 600_000}
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 @pytest.mark.asyncio
@@ -73,3 +79,40 @@ async def test_purchase_rejects_insufficient_balance(db_session):
             price_cents=AGENT_PRICES_CENTS["sophie"],
             expires_at=utc_now() + timedelta(days=30),
         )
+
+
+class _AsyncSessionContext:
+    async def __aenter__(self):
+        return SimpleNamespace()
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+
+class _FakeDatabase:
+    def session(self):
+        return _AsyncSessionContext()
+
+
+@pytest.mark.asyncio
+async def test_purchase_route_hides_repository_error(monkeypatch):
+    app = FastAPI()
+    app.include_router(auth_router)
+    app.state.database = _FakeDatabase()
+    user = SimpleNamespace(id=uuid.uuid4(), balance_cents=0)
+
+    app.dependency_overrides[get_current_user] = lambda: user
+
+    async def fake_create_purchase(*args, **kwargs):
+        raise ValueError("Insufficient balance")
+
+    monkeypatch.setattr(AgentPurchaseRepository, "create_purchase", fake_create_purchase)
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post("/v1/billing/purchases", json={"agent": "tela"})
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Purchase failed"}
+
+    app.dependency_overrides.clear()

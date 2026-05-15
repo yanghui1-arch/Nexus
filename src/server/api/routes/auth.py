@@ -175,8 +175,8 @@ async def purchase_agent(
                 price_cents=price_cents,
                 expires_at=utc_now() + timedelta(days=30),
             )
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Purchase failed") from None
         updated_user = await UserRepository.get(session, user.id)
     assert updated_user is not None
     return PurchaseAgentResponse(
