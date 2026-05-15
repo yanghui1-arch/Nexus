@@ -102,37 +102,31 @@ function SidebarAccount() {
   };
 
   return (
-    <div className="border-t p-3">
+    <div className="border-t p-2">
       {user ? (
-        <div className="space-y-3 rounded-xl bg-muted/60 p-3">
-          <div className="flex items-center gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-background text-foreground shadow-sm">
-              <SiGithub className="size-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{user.github_login}</p>
-              <p className="truncate text-xs text-muted-foreground">{user.email ?? 'GitHub email unavailable'}</p>
-            </div>
+        <div className="flex items-center gap-2 rounded-lg p-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <SiGithub className="size-4" />
           </div>
-          <div className="flex items-center justify-between rounded-lg border bg-background/70 px-3 py-2 text-xs">
-            <span className="inline-flex items-center gap-1 text-muted-foreground">
-              <Wallet className="size-3.5" /> Balance
+          <div className="grid min-w-0 flex-1 text-left leading-tight">
+            <span className="truncate font-medium">{user.github_login}</span>
+            <span className="inline-flex items-center gap-1 truncate text-xs text-muted-foreground">
+              <Wallet className="size-3" /> {formatCny(user.balance)}
             </span>
-            <span className="font-medium">{formatCny(user.balance)}</span>
           </div>
-          <Button variant="outline" size="sm" className="w-full justify-start" onClick={handleLogout}>
-            <LogOut className="size-4" /> Logout
+          <Button variant="ghost" size="sm" className="size-8 p-0" onClick={handleLogout} aria-label="Logout">
+            <LogOut className="size-4" />
           </Button>
         </div>
       ) : (
-        <div className="space-y-3 rounded-xl bg-muted/60 p-3">
-          <p className="text-sm font-medium">{isLoading ? 'Loading account…' : 'Not signed in'}</p>
-          <Button asChild size="sm" className="w-full justify-start">
-            <a href="/login">
-              <SiGithub className="size-4" /> Login with GitHub
-            </a>
-          </Button>
-        </div>
+        <Button asChild variant="ghost" className="h-auto w-full justify-start gap-2 p-2">
+          <a href="/login">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
+              <SiGithub className="size-4" />
+            </div>
+            <span className="truncate text-sm font-medium">{isLoading ? 'Loading account…' : 'Login with GitHub'}</span>
+          </a>
+        </Button>
       )}
     </div>
   );

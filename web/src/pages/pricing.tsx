@@ -16,7 +16,7 @@ const PLANS = [
     name: 'Tela',
     price: '¥5,500',
     description: 'Backend, infra, tests, and reliability work.',
-    features: ['30 days access', 'Virtual PR workflow', 'Repository automation'],
+    features: ['30 days access', 'Repository automation', 'Backend delivery support'],
   },
   {
     agent: 'sophie' as const,

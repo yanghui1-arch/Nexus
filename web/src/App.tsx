@@ -35,7 +35,7 @@ function App() {
           <Route path="/code-review/nexus/tasks/:taskId" element={<NexusReviewPage />} />
           <Route
             path="/code-review/nexus/tasks/:taskId/pull-requests/:virtualPrId"
-            element={<NexusReviewPage mode="pull-request" />}
+            element={<NexusReviewPage />}
           />
           <Route path="/workspace" element={<Navigate to={DEFAULT_WORKSPACE_PATH} replace />} />
           <Route path="/workspace/publish-task" element={<Navigate to="/publish-task" replace />} />
@@ -68,7 +68,7 @@ function App() {
           />
           <Route
             path="/workspace/code-review/nexus/tasks/:taskId/pull-requests/:virtualPrId"
-            element={<NexusReviewPage mode="pull-request" />}
+            element={<NexusReviewPage />}
           />
           <Route path="/overview" element={<Navigate to={DEFAULT_WORKSPACE_PATH} replace />} />
           <Route
