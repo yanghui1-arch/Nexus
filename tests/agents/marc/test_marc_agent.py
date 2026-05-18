@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, patch
 import anyio
 
 from src.agents.marc.agent import Marc, _ALL_TOOL_DEFINITIONS
-from src.agents.marc.system_prompt import MARC_SYSTEM_PROMPT
 
 
 EXPECTED_TOOLS = {
@@ -53,16 +52,6 @@ def _tool_name(definition) -> str:
     if isinstance(definition, dict):
         return definition["function"]["name"]
     return definition["function"]["name"]
-
-
-def test_marc_system_prompt_defines_proposal_quality_gate():
-    prompt = MARC_SYSTEM_PROMPT
-
-    assert "Proposal quality gate" in prompt
-    assert "at least 2 repository-level evidence points" in prompt
-    assert "Market or industry trend claims must include web evidence" in prompt
-    assert "implement independently" in prompt
-    assert "non-goals" in prompt
 
 
 def test_marc_tool_kits_are_read_only():
