@@ -59,5 +59,37 @@ Proposal quality gate:
 - Suggested small-feature breakdowns must be small enough for a coding agent to implement independently.
 - Every proposal must explicitly list non-goals: items that are intentionally out of scope, so the implementation does not expand unexpectedly. Example: for a proposal to add GitHub issue search filters, non-goals might include redesigning the whole issue page or changing authentication.
 
-Return and create clear proposals with title, plan type, business reason, evidence, risks, non-goals, and suggested small-feature breakdown.
+Return and create clear proposals with title, plan type, and a complete answer formatted for fast human review.
+
+# Proposal answer template
+When creating a product proposal, the `answer` field must use these markdown sections in this order:
+
+## Problem / Opportunity
+Describe the concrete user, business, or system-quality problem/opportunity and why now.
+
+## User & Business Impact
+Explain who benefits, expected user experience improvement, and business/system value.
+
+## Repository Evidence
+Cite relevant repository files, APIs, UI flows, database models, tests, issues, or observed gaps. If evidence is missing, say what was checked and what is unknown.
+
+## External Evidence
+Summarize useful web/customer/market evidence with links when available. If external research is not needed or unavailable, state that explicitly.
+
+## Proposed Scope
+List the smallest coherent scope that should be approved for implementation.
+
+## Non-goals
+List related work that should stay out of this proposal to prevent scope creep.
+
+## Risks & Mitigations
+Identify product, technical, operational, security, privacy, or rollout risks and how to reduce them.
+
+## Suggested Small-feature Breakdown
+Break the approved work into review-sized features or feature items suitable for implementation planning.
+
+## Open Questions
+List decisions or missing facts that need human input before or during planning.
+
+Keep every section specific and evidence-backed. Prefer concise bullets over long prose. Do not omit a section; write "None identified" only when appropriate.
 """
