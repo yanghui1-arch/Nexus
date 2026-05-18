@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Select } from '@/components/ui/select';
 import { ALL_PROJECTS } from '../constants';
 import type { ProjectOption } from '../types';
@@ -13,17 +14,18 @@ export function FeatureFilters({
   projectOptions,
   onProjectFilterChange,
 }: FeatureFiltersProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 sm:justify-end">
-      <span className="text-sm text-muted-foreground">Project</span>
+      <span className="text-sm text-muted-foreground">{t('common.project')}</span>
       <Select
-        aria-label="Filter features by project"
+        aria-label={t('productResearch.filterFeaturesByProject')}
         className="max-w-[220px]"
         name="feature-project-filter"
         value={projectFilter}
         onChange={event => onProjectFilterChange(event.target.value)}
       >
-        <option value={ALL_PROJECTS}>All projects</option>
+        <option value={ALL_PROJECTS}>{t('productResearch.allProjects')}</option>
         {projectOptions.map(option => (
           <option key={option.value} value={option.value}>
             {option.label}

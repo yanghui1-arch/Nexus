@@ -1,4 +1,5 @@
 import type { FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { WorkspaceAgentOption } from '@/lib/workspace-task-view';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
@@ -22,6 +23,7 @@ export function PublishTaskComposerCard({
   onValueChange,
   onSubmit,
 }: PublishTaskComposerCardProps) {
+  const { t } = useTranslation();
   const updateField = <K extends keyof WorkspaceComposerValues>(
     key: K,
     nextValue: WorkspaceComposerValues[K],
@@ -50,14 +52,14 @@ export function PublishTaskComposerCard({
         >
           <div className="flex flex-col gap-2">
             <label htmlFor="publish-question" className="text-sm font-medium">
-              Question
+              {t('publishTask.question')}
             </label>
             <Textarea
               id="publish-question"
               rows={6}
               value={value.question}
               onChange={event => updateField('question', event.target.value)}
-              placeholder="Describe the task the agent should execute."
+              placeholder={t('publishTask.questionPlaceholder')}
               className="bg-background"
             />
           </div>
@@ -65,17 +67,17 @@ export function PublishTaskComposerCard({
           <div className="rounded-xl bg-muted/30 p-4">
             <div className="mb-3 flex flex-col gap-1">
               <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                Routing
+                {t('publishTask.routing')}
               </p>
               <p className="text-sm text-muted-foreground">
-                Choose the repository, optional project, outer issue link, and target agent.
+                {t('publishTask.routingDescription')}
               </p>
             </div>
 
             <div className="grid gap-4 xl:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="publish-repo" className="text-sm font-medium">
-                  Repository
+                  {t('common.repository')}
                 </label>
                 <Input
                   id="publish-repo"
@@ -88,7 +90,7 @@ export function PublishTaskComposerCard({
 
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="publish-project" className="text-sm font-medium">
-                  Project (optional)
+                  {t('publishTask.projectOptional')}
                 </label>
                 <Input
                   id="publish-project"
@@ -101,7 +103,7 @@ export function PublishTaskComposerCard({
 
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="publish-issue-url" className="text-sm font-medium">
-                  Outer issue URL (optional)
+                  {t('publishTask.outerIssueUrlOptional')}
                 </label>
                 <Input
                   id="publish-issue-url"
@@ -114,7 +116,7 @@ export function PublishTaskComposerCard({
 
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="publish-agent-instance" className="text-sm font-medium">
-                  Agent instance
+                  {t('publishTask.agentInstance')}
                 </label>
                 <Select
                   id="publish-agent-instance"
@@ -124,9 +126,9 @@ export function PublishTaskComposerCard({
                   className="bg-background"
                 >
                   {!hasAgents ? (
-                    <option value="">No active agent instances available</option>
+                    <option value="">{t('publishTask.noActiveAgents')}</option>
                   ) : null}
-                  {hasAgents ? <option value="">Select an agent instance</option> : null}
+                  {hasAgents ? <option value="">{t('publishTask.selectAgent')}</option> : null}
                   {agents.map(agent => (
                     <option key={agent.id} value={agent.id}>
                       {agent.label} - {agent.subtitle}
@@ -135,7 +137,7 @@ export function PublishTaskComposerCard({
                 </Select>
                 {!hasAgents ? (
                   <p className="text-xs text-muted-foreground">
-                    Create or activate an agent instance before publishing a task.
+                    {t('publishTask.activateAgentHint')}
                   </p>
                 ) : null}
               </div>
@@ -146,14 +148,14 @@ export function PublishTaskComposerCard({
 
       <CardFooter className="flex flex-col items-stretch gap-3 px-0 pt-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-muted-foreground">
-          Published tasks are submitted directly to the backend queue.
+          {t('publishTask.footerHint')}
         </p>
         <Button
           type="submit"
           form="workspace-publish-task-form"
           disabled={!canSubmit}
         >
-          {isSubmitting ? 'Publishing...' : 'Publish Task'}
+          {isSubmitting ? t('publishTask.publishing') : t('publishTask.publish')}
         </Button>
       </CardFooter>
     </Card>

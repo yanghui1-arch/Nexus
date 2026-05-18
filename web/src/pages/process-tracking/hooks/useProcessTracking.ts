@@ -1,4 +1,5 @@
 import { startTransition, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { getErrorDetail } from '@/api/client';
 import { consultTask } from '@/api/tasks';
@@ -32,6 +33,7 @@ export function useProcessTracking({
   agentOptions,
   taskViews,
 }: UseProcessTrackingInput): ProcessTracking {
+  const { t } = useTranslation();
   const [selectedAgentId, setSelectedAgentId] = useState<string>('');
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');
   const [trackingInput, setTrackingInput] = useState<string>('');
@@ -140,8 +142,8 @@ export function useProcessTracking({
         }));
       });
     } catch (error) {
-      toast.error('Failed to consult agent', {
-        description: getErrorDetail(error, 'Failed to consult the selected task.'),
+      toast.error(t('processTracking.consultFailed'), {
+        description: getErrorDetail(error, t('processTracking.consultFailedDescription')),
       });
     } finally {
       startTransition(() => {

@@ -1,4 +1,5 @@
 import { startTransition, useEffect, useState, type FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { getErrorDetail } from '@/api/client';
 import { createTask } from '@/api/tasks';
@@ -30,6 +31,7 @@ export function usePublishTask({
   agentOptions,
   reload,
 }: UsePublishTaskInput): PublishTask {
+  const { t } = useTranslation();
   const [composerValues, setComposerValues] =
     useState<WorkspaceComposerValues>(EMPTY_COMPOSER_VALUES);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -89,12 +91,12 @@ export function usePublishTask({
 
       await reload();
 
-      toast.success('Task published', {
-        description: 'The task has been submitted to the backend queue.',
+      toast.success(t('publishTask.toastPublished'), {
+        description: t('publishTask.toastPublishedDescription'),
       });
     } catch (error) {
-      toast.error('Failed to publish task', {
-        description: getErrorDetail(error, 'Failed to publish task.'),
+      toast.error(t('publishTask.toastPublishFailed'), {
+        description: getErrorDetail(error, t('publishTask.toastPublishFailed')),
       });
     } finally {
       startTransition(() => {

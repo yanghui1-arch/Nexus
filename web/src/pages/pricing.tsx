@@ -1,4 +1,5 @@
 import { startTransition, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Check, Coins } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCurrentUser, purchaseAgent, rechargeBalance } from '@/api/auth';
@@ -15,15 +16,15 @@ const PLANS = [
     agent: 'tela' as const,
     name: 'Tela',
     price: '¥5,500',
-    description: 'Backend, infra, tests, and reliability work.',
-    features: ['30 days access', 'Repository automation', 'Backend delivery support'],
+    descriptionKey: 'pricing.plans.tela.description',
+    featureKeys: ['pricing.plans.common.access', 'pricing.plans.tela.automation', 'pricing.plans.tela.backendSupport'],
   },
   {
     agent: 'sophie' as const,
     name: 'Sophie',
     price: '¥6,000',
-    description: 'Frontend delivery, UI polish, and product pages.',
-    features: ['30 days access', 'React implementation', 'Design-system fit'],
+    descriptionKey: 'pricing.plans.sophie.description',
+    featureKeys: ['pricing.plans.common.access', 'pricing.plans.sophie.reactImplementation', 'pricing.plans.sophie.designSystemFit'],
   },
 ];
 
@@ -32,6 +33,7 @@ function formatCny(amount: string): string {
 }
 
 export default function PricingPage() {
+  const { t } = useTranslation();
   const [user, setUser] = useState<ApiUser | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [rechargeYuan, setRechargeYuan] = useState('1000');
@@ -40,7 +42,7 @@ export default function PricingPage() {
   const balance = useMemo(() => (user ? formatCny(user.balance) : '—'), [user]);
 
   useAppLayout({
-    title: 'Pricing',
+    title: t('pricing.title'),
     mainClassName: 'gap-8',
   });
 
@@ -54,15 +56,15 @@ export default function PricingPage() {
   const handleRecharge = async () => {
     const amount = Number(rechargeYuan);
     if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error('Please enter a valid recharge amount.');
+      toast.error(t('pricing.invalidRechargeAmount'));
       return;
     }
     try {
       const nextUser = await rechargeBalance({ amount: amount.toFixed(2) });
       setUser(nextUser);
-      toast.success('Balance recharged', { description: `Current balance: ${formatCny(nextUser.balance)}` });
+      toast.success(t('pricing.balanceRecharged'), { description: t('pricing.currentBalance', { balance: formatCny(nextUser.balance) }) });
     } catch (error) {
-      toast.error('Recharge failed', { description: getErrorDetail(error) });
+      toast.error(t('pricing.rechargeFailed'), { description: getErrorDetail(error) });
     }
   };
 
@@ -71,9 +73,9 @@ export default function PricingPage() {
     try {
       const purchase = await purchaseAgent({ agent });
       setUser(current => current ? { ...current, balance: purchase.balance } : current);
-      toast.success(`${agent} purchased`, { description: `Valid until ${new Date(purchase.expires_at).toLocaleDateString()}` });
+      toast.success(t('pricing.agentPurchased', { agent }), { description: t('pricing.validUntil', { date: new Date(purchase.expires_at).toLocaleDateString() }) });
     } catch (error) {
-      toast.error('Purchase failed', { description: getErrorDetail(error) });
+      toast.error(t('pricing.purchaseFailed'), { description: getErrorDetail(error) });
     } finally {
       setBusyAgent(null);
     }
@@ -83,7 +85,7 @@ export default function PricingPage() {
     <div className="space-y-8">
       <section className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-sm text-muted-foreground">Available balance</p>
+          <p className="text-sm text-muted-foreground">{t('pricing.availableBalance')}</p>
           <p className="mt-1 text-3xl font-semibold tracking-tight">{balance}</p>
         </div>
         <div className="flex w-full flex-col gap-3 sm:flex-row md:w-auto">
@@ -92,16 +94,16 @@ export default function PricingPage() {
             value={rechargeYuan}
             onChange={event => setRechargeYuan(event.target.value)}
             inputMode="decimal"
-            placeholder="Amount in CNY"
+            placeholder={t('pricing.amountPlaceholder')}
           />
           <Button onClick={handleRecharge} disabled={!user}>
-            <Coins /> Recharge
+            <Coins /> {t('pricing.recharge')}
           </Button>
         </div>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Buy agent</h2>
+        <h2 className="text-lg font-semibold">{t('pricing.buyAgent')}</h2>
         <div className="grid gap-5 lg:grid-cols-2">
           {PLANS.map(plan => (
             <Card
@@ -113,15 +115,15 @@ export default function PricingPage() {
             >
               <CardHeader>
                 <CardTitle>{plan.name}</CardTitle>
-                <CardDescription>{plan.description}</CardDescription>
-                <div className="pt-4"><span className="text-4xl font-semibold">{plan.price}</span><span className="text-muted-foreground"> / month</span></div>
+                <CardDescription>{t(plan.descriptionKey)}</CardDescription>
+                <div className="pt-4"><span className="text-4xl font-semibold">{plan.price}</span><span className="text-muted-foreground"> {t('pricing.perMonth')}</span></div>
               </CardHeader>
               <CardContent className="space-y-5">
                 <ul className="space-y-3 text-sm">
-                  {plan.features.map(feature => <li key={feature} className="flex gap-2"><Check className="mt-0.5 size-4 text-primary" />{feature}</li>)}
+                  {plan.featureKeys.map(featureKey => <li key={featureKey} className="flex gap-2"><Check className="mt-0.5 size-4 text-primary" />{t(featureKey)}</li>)}
                 </ul>
                 <Button className="w-full" onClick={() => handlePurchase(plan.agent)} disabled={!user || isLoadingUser || busyAgent === plan.agent}>
-                  Buy {plan.name}
+                  {t('pricing.buyPlan', { plan: plan.name })}
                 </Button>
               </CardContent>
             </Card>

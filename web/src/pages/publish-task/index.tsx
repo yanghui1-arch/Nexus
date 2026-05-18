@@ -1,12 +1,15 @@
+import { useTranslation } from 'react-i18next';
 import { useAppLayout } from '@/components/layout/AppLayout';
 import { useWorkspaceRecords } from '@/lib/useWorkspaceRecords';
 import { PublishTaskComposerCard } from './components/PublishTaskComposerCard';
 import { usePublishTask } from './hooks/usePublishTask';
 
 export default function PublishTaskPage() {
+  const { t } = useTranslation();
+
   useAppLayout({
-    title: 'Publish Task',
-    description: 'Create and assign new work items for agents.',
+    title: t('publishTask.title'),
+    description: t('publishTask.description'),
     mainClassName: 'pt-3 pb-6',
   });
 

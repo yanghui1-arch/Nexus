@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next';
 import { getProductFeature, listProductFeatures, listProductProposals } from '@/api/product';
 import type { ApiFeatureItem, ApiTask } from '@/api/types';
 import { ALL_PROJECTS, NO_PROJECT, PAGE_SIZE } from './constants';
@@ -103,18 +104,19 @@ export function getProjectFilterValue(project: string | null | undefined): strin
   return normalizedProject ? normalizedProject : NO_PROJECT;
 }
 
-export function getProjectLabel(project: string | null | undefined): string {
+export function getProjectLabel(project: string | null | undefined, t?: TFunction): string {
   const normalizedProject = project?.trim();
-  return normalizedProject ? normalizedProject : 'No project';
+  return normalizedProject ? normalizedProject : t ? t('common.noProject') : 'No project';
 }
 
 export function getProjectOptions<T extends { project: string | null | undefined }>(
   records: T[],
+  t?: TFunction,
 ): ProjectOption[] {
   return [...new Set(records.map(record => getProjectFilterValue(record.project)))]
     .map(value => ({
       value,
-      label: value === NO_PROJECT ? 'No project' : value,
+      label: value === NO_PROJECT ? (t ? t('common.noProject') : 'No project') : value,
     }))
     .sort((left, right) => left.label.localeCompare(right.label));
 }
@@ -139,46 +141,50 @@ export function getProposalEmptyMessage({
   loadError,
   proposalFilter,
   activeProjectFilter,
+  t,
 }: {
   loadError: string | null;
   proposalFilter: ProposalFilter;
   activeProjectFilter: string;
+  t: TFunction;
 }): string {
   if (loadError) {
     return loadError;
   }
 
   if (activeProjectFilter !== ALL_PROJECTS) {
-    return 'No requirements match the selected project.';
+    return t('productResearch.emptyRequirementsProject');
   }
 
   if (proposalFilter === 'proposed') {
-    return 'No requirements are waiting for review.';
+    return t('productResearch.emptyRequirementsPending');
   }
   if (proposalFilter === 'accepted') {
-    return 'No accepted requirements yet.';
+    return t('productResearch.emptyRequirementsAccepted');
   }
   if (proposalFilter === 'rejected') {
-    return 'No rejected requirements yet.';
+    return t('productResearch.emptyRequirementsRejected');
   }
 
-  return 'No requirements yet.';
+  return t('productResearch.emptyRequirements');
 }
 
 export function getFeatureEmptyMessage({
   loadError,
   activeProjectFilter,
+  t,
 }: {
   loadError: string | null;
   activeProjectFilter: string;
+  t: TFunction;
 }): string {
   if (loadError) {
     return loadError;
   }
 
   if (activeProjectFilter !== ALL_PROJECTS) {
-    return 'No features match the selected project.';
+    return t('productResearch.emptyFeaturesProject');
   }
 
-  return 'No implementation features are being tracked yet.';
+  return t('productResearch.emptyFeatures');
 }

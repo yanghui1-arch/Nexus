@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import type { ApiFeature } from '@/api/types';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -33,26 +34,18 @@ type FeatureTableProps = {
   onPageChange: (page: number) => void;
 };
 
-export function FeatureTable({
-  features,
-  page,
-  pageCount,
-  totalCount,
-  onSelect,
-  onPageChange,
-}: FeatureTableProps) {
+export function FeatureTable({ features, page, pageCount, totalCount, onSelect, onPageChange }: FeatureTableProps) {
+  const { t } = useTranslation();
   return (
     <div className={TABLE_CARD_CLASS}>
       <Table className="table-fixed">
         <TableHeader>
           <TableRow className={TABLE_HEADER_ROW_CLASS}>
-            <TableHead className={`w-[38%] ${TABLE_HEAD_CLASS}`}>Title</TableHead>
-            <TableHead className={`w-[18%] ${TABLE_HEAD_CLASS}`}>Project</TableHead>
-            <TableHead className={`w-[18%] ${TABLE_HEAD_CLASS}`}>Status</TableHead>
-            <TableHead className={`w-[18%] ${TABLE_HEAD_CLASS}`}>Progress</TableHead>
-            <TableHead className={`w-[8%] text-right ${TABLE_HEAD_CLASS}`}>
-              Updated
-            </TableHead>
+            <TableHead className={`w-[38%] ${TABLE_HEAD_CLASS}`}>{t('common.title')}</TableHead>
+            <TableHead className={`w-[18%] ${TABLE_HEAD_CLASS}`}>{t('common.project')}</TableHead>
+            <TableHead className={`w-[18%] ${TABLE_HEAD_CLASS}`}>{t('common.status')}</TableHead>
+            <TableHead className={`w-[18%] ${TABLE_HEAD_CLASS}`}>{t('productResearch.progress')}</TableHead>
+            <TableHead className={`w-[8%] text-right ${TABLE_HEAD_CLASS}`}>{t('common.updated')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody className={TABLE_BODY_CLASS}>
@@ -62,67 +55,29 @@ export function FeatureTable({
             const itemCount = feature.items?.length ?? 0;
 
             return (
-              <TableRow
-                key={feature.id}
-                tabIndex={0}
-                className={TABLE_ROW_CLASS}
-                onClick={() => onSelect(feature.id)}
-                onKeyDown={event => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    onSelect(feature.id);
-                  }
-                }}
-              >
+              <TableRow key={feature.id} tabIndex={0} className={TABLE_ROW_CLASS} onClick={() => onSelect(feature.id)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(feature.id); } }}>
                 <TableCell>
                   <div className="flex min-w-0 flex-col gap-1">
-                    <Link
-                      to={`/product-research/features/${feature.id}`}
-                      className="truncate font-medium text-black hover:underline"
-                      onClick={event => event.stopPropagation()}
-                    >
-                      {feature.title}
-                    </Link>
-                    <span className="text-xs text-black/45">
-                      {itemCount} feature items
-                    </span>
+                    <Link to={`/product-research/features/${feature.id}`} className="truncate font-medium text-black hover:underline" onClick={event => event.stopPropagation()}>{feature.title}</Link>
+                    <span className="text-xs text-black/45">{t('productResearch.featureItemsCount', { count: itemCount })}</span>
                   </div>
                 </TableCell>
-                <TableCell className="truncate text-sm text-black/55">
-                  {getProjectLabel(feature.project)}
-                </TableCell>
+                <TableCell className="truncate text-sm text-black/55">{getProjectLabel(feature.project, t)}</TableCell>
                 <TableCell>
-                  <Badge variant={featureMeta.variant} className={featureMeta.className}>
-                    {featureMeta.label}
-                  </Badge>
+                  <Badge variant={featureMeta.variant} className={featureMeta.className}>{t(`productResearch.featureStatus.${feature.status}`)}</Badge>
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <div className="h-2 flex-1 rounded-full bg-black/[0.08]">
-                      <div
-                        className="h-2 rounded-full bg-black transition-[width]"
-                        style={{ width: `${completion}%` }}
-                      />
-                    </div>
-                    <span className="w-11 text-right text-xs text-black/45">
-                      {completion}%
-                    </span>
+                    <div className="h-2 flex-1 rounded-full bg-black/[0.08]"><div className="h-2 rounded-full bg-black transition-[width]" style={{ width: `${completion}%` }} /></div>
+                    <span className="w-11 text-right text-xs text-black/45">{completion}%</span>
                   </div>
                 </TableCell>
-                <TableCell className="text-right text-sm text-black/45">
-                  {formatRelativeTime(feature.updated_at)}
-                </TableCell>
+                <TableCell className="text-right text-sm text-black/45">{formatRelativeTime(feature.updated_at)}</TableCell>
               </TableRow>
             );
           })}
         </TableBody>
-        <TablePaginationFooter
-          columnCount={5}
-          page={page}
-          pageCount={pageCount}
-          total={totalCount}
-          onPageChange={onPageChange}
-        />
+        <TablePaginationFooter columnCount={5} page={page} pageCount={pageCount} total={totalCount} onPageChange={onPageChange} />
       </Table>
     </div>
   );
