@@ -70,12 +70,16 @@ class Marc(Agent):
             )
             self.tool_kits.update(product_tools.all_tools)
 
-        if self.github_repo or repo_url:
+        if self.github_repo or repo_url or self.github_token:
             repo_lines = ["\n## Your GitHub Context"]
             if self.github_repo:
                 repo_lines.append(f"- GitHub repo: {self.github_repo}")
             if repo_url:
                 repo_lines.append(f"- GitHub repo URL: {repo_url}")
+            if self.github_token:
+                repo_lines.append(
+                    "- GitHub token: configured for tool authentication when needed; value intentionally omitted."
+                )
             self.system_prompt = self.system_prompt + "\n".join(repo_lines) + "\n"
         return self
 

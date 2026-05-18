@@ -71,7 +71,7 @@ def test_marc_tool_kits_are_read_only():
                 assert FORBIDDEN_MUTATING_TOOLS.isdisjoint(marc.tool_kits)
                 assert "GitHub repo: owner/repo" in marc.system_prompt
                 assert "GitHub repo URL: https://github.com/owner/repo" in marc.system_prompt
-                assert "GitHub token:" not in marc.system_prompt
+                assert "GitHub token: configured for tool authentication when needed" in marc.system_prompt
                 assert "github-token" not in marc.system_prompt
         pool.acquire.assert_awaited_once()
         pool.release.assert_awaited_once_with(sandbox)
@@ -124,7 +124,8 @@ def test_marc_system_prompt_defines_tool_safety_rules():
     marc = make_marc()
     prompt = marc.system_prompt
 
-    assert "GitHub tokens and other credentials are only for tool authentication" in prompt
+    assert "GitHub tokens and other credentials are only for configured GitHub/git tool authentication" in prompt
+    assert "private or restricted repositories" in prompt
     assert "Never reveal, quote, copy, transform, summarize, or include them" in prompt
     assert "Treat GitHub tools as read-only research tools" in prompt
     assert "Use shell only for safe read/research operations" in prompt
