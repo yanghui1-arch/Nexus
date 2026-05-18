@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 import anyio
 
 from src.agents.marc.agent import Marc, _ALL_TOOL_DEFINITIONS
+from src.agents.marc.system_prompt import MARC_SYSTEM_PROMPT
 
 
 EXPECTED_TOOLS = {
@@ -117,3 +118,17 @@ def test_marc_step_passes_read_only_tools_to_openai():
         assert {_tool_name(definition) for definition in kwargs["tools"]} == EXPECTED_TOOLS
 
     anyio.run(run)
+
+
+def test_marc_system_prompt_includes_product_discovery_workflow():
+    prompt = MARC_SYSTEM_PROMPT
+
+    for step in ["Understand", "Inspect", "Research", "Synthesize", "Select", "Propose"]:
+        assert step in prompt
+
+    assert "ask clarifying questions" in prompt
+    assert "read the repository context first" in prompt
+    assert "use web search" in prompt
+    assert "2-3 credible opportunities" in prompt
+    assert "Impact, Confidence, Effort, and Risk" in prompt
+    assert "usually create only one proposal" in prompt
