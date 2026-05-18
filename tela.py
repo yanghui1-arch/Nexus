@@ -84,8 +84,6 @@ async def run(task: str) -> None:
         )
 
     logger.info(f"Result:\n{result.response}")
-    if result.sop:
-        logger.info(f"SOP:\n{result.sop}")
 
 
 def main() -> None:

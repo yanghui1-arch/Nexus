@@ -37,7 +37,6 @@ class BaseAgentStepResult:
 @dataclass
 class BaseAgentResponse:
     response: str
-    sop: str | None
 
 
 @dataclass
@@ -107,7 +106,7 @@ class Agent(BaseModel):
 
         terminate = False
         tries = 0
-        base_agent_response = BaseAgentResponse(response="", sop=None)
+        base_agent_response = BaseAgentResponse(response="")
 
         if from_checkpoint:
             assert checkpoint is not None, "Checkpoint is required when from_checkpoint=True"
@@ -169,12 +168,6 @@ class Agent(BaseModel):
                         current_use_tool_args=None,
                     ),
                 )
-                try:
-                    sop = self.SOP(work_history=current_turn_ctx)
-                    base_agent_response.sop = sop
-                except NotImplementedError as nie:
-                    logger.warning(Warning, f"Agent `{self.name}` doesn't do SOP: {str(nie)}")
-                    pass
                 base_agent_response.response = step_response.completion_content
 
             else:
@@ -247,11 +240,6 @@ class Agent(BaseModel):
                     current_use_tool_args=None,
                 )
             )
-            try:
-                sop = self.SOP(work_history=current_turn_ctx)
-                base_agent_response.sop = sop
-            except NotImplementedError:
-                pass
             base_agent_response.response = agent_content
         # save the final assistant message into checkpoint
         else:
@@ -342,11 +330,6 @@ class Agent(BaseModel):
         
         raise NotImplementedError(f"Agent `{self.name}` doesn't implement step function.")
 
-
-    def SOP(self, work_history: List[ChatCompletionMessageParam]) -> str:
-        
-        raise NotImplementedError(f"Agent `{self.name}` doesn't implement sop function.")
-    
     def last_report_current_process(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> str:
 
         raise NotImplementedError(f"Agent `{self.name}` doesn't implement last_report_current_process function.")

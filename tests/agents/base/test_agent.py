@@ -72,9 +72,6 @@ class ConcreteAgent(Agent):
     async def step(self, current_turn_ctx: list) -> BaseAgentStepResult:
         raise NotImplementedError("patch me")
 
-    def SOP(self, work_history: list) -> str:
-        return "SOP string"
-
     def last_report_current_process(self, current_turn_ctx: list) -> str:
         return "partial progress"
 
@@ -182,14 +179,6 @@ class TestWorkStop:
         processes = [e["process"] for e in events]
         assert processes[0] == "START"
         assert "COMPLETED" in processes
-
-    async def test_sop_set_on_stop(self):
-        agent = make_agent()
-        set_step(agent, MagicMock(return_value=make_stop_result("done")))
-
-        result = await agent.work(question="q", from_checkpoint=False)
-
-        assert result.sop == "SOP string"
 
     async def test_no_callback_does_not_raise(self):
         agent = make_agent()

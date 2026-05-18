@@ -10,7 +10,7 @@ from src.server.postgres.repositories import TaskWorkItemRepository, VirtualPull
 
 class FakeAgent:
     def __init__(self) -> None:
-        self.work = AsyncMock(return_value=BaseAgentResponse(response="done", sop=None))
+        self.work = AsyncMock(return_value=BaseAgentResponse(response="done"))
         self.closed = False
         self.enter_count = 0
         self.exit_count = 0
@@ -190,7 +190,7 @@ def test_run_code_agent_workflow_small_task_passthrough(monkeypatch):
 
     async def fake_run_agent(**kwargs):
         calls.append(kwargs)
-        return BaseAgentResponse(response="final pr opened", sop=None)
+        return BaseAgentResponse(response="final pr opened")
 
     async def empty_checkpoint(database, task_id):
         assert task_id == task.id
@@ -279,7 +279,7 @@ def test_run_agent_workflow_pauses_when_work_item_is_ready(monkeypatch):
         assert "finish_current_task_work_item" in kwargs["question"]
         assert "final executable work item" in kwargs["question"]
         state["ready"] = True
-        return BaseAgentResponse(response="ready", sop=None)
+        return BaseAgentResponse(response="ready")
 
     async def empty_checkpoint(database, task_id):
         assert task_id == task.id
@@ -398,7 +398,7 @@ def test_run_agent_workflow_keeps_checkpoint_between_work_items(monkeypatch):
         ready_ids.add(work_item_id)
         if work_item_id == "item-1":
             task.checkpoint = [{"role": "assistant", "content": "first item finished"}]
-        return BaseAgentResponse(response=f"{work_item_id} ready", sop=None)
+        return BaseAgentResponse(response=f"{work_item_id} ready")
 
     async def latest_checkpoint(database, task_id):
         assert task_id == task.id
@@ -539,7 +539,7 @@ def test_run_agent_workflow_processes_github_feedback_from_checkpoint(monkeypatc
 
     async def fake_run_agent(**kwargs):
         captured["run"] = kwargs
-        return BaseAgentResponse(response="replied", sop=None)
+        return BaseAgentResponse(response="replied")
 
     monkeypatch.setattr(execution, "_claim_pending_github_feedback", claim_feedback)
     monkeypatch.setattr(execution, "_mark_github_feedback_processed", mark_processed)

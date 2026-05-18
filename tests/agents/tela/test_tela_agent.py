@@ -402,20 +402,7 @@ class TestGithubTools:
         assert "Closes #7" in captured_body[0]
 
 
-class TestSopAndReport:
-    def test_sop_not_implemented(self):
-        tela = make_tela()
-        history = [
-            {"role": "assistant", "content": None, "tool_calls": [
-                {"id": "c1", "type": "function", "function": {"name": "RunCode", "arguments": '{"code":"x"}'}}
-            ]},
-            {"role": "tool", "tool_call_id": "c1", "content": "42"},
-            {"role": "assistant", "content": "The answer is 42."},
-        ]
-        with pytest.raises(NotImplementedError):
-            tela.SOP(history)
-
-
+class TestReport:
     def test_last_report_returns_last_assistant_content(self):
         tela = make_tela()
         ctx = [
@@ -497,7 +484,6 @@ class TestFactory:
             )
         assert tela.llm_config.model == "gpt-4o-mini"
         assert tela.github_token == "ghp_abc"
-
 
 
 
