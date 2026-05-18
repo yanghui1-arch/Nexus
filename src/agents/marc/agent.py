@@ -13,12 +13,11 @@ from src.sandbox import PYTHON_312, Sandbox, SandboxConfig, SandboxPoolManager, 
 from src.tools.code.github.readonly import GITHUB_READONLY_TOOL_DEFINITIONS, GithubReadOnlyTools
 from src.tools.nexus import NexusTaskContext
 from src.tools.product import PRODUCT_TOOL_DEFINITIONS, ProductTools
-from src.tools.sandbox import CLONE_OR_UPDATE_REPO, RUN_SHELL, SandboxToolKit
+from src.tools.sandbox import RUN_SHELL, SandboxToolKit
 from src.tools.web_search import web_search, TOOL_DEFINITION as WEB_SEARCH
 
 
 _ALL_TOOL_DEFINITIONS = [
-    CLONE_OR_UPDATE_REPO,
     RUN_SHELL,
     WEB_SEARCH,
     *GITHUB_READONLY_TOOL_DEFINITIONS,
@@ -61,7 +60,6 @@ class Marc(Agent):
             token=self.github_token,
         )
         self.tool_kits = {
-            "CloneOrUpdateRepo": sandbox_tools.all_tools["CloneOrUpdateRepo"],
             "RunCommand": sandbox_tools.all_tools["RunCommand"],
             "WebSearch": web_search,
             **github_readonly_tools.all_tools,
@@ -83,8 +81,8 @@ class Marc(Agent):
             if self.github_token:
                 repo_lines.append(
                     "- GitHub token: configured for tool authentication when needed; value intentionally omitted. "
-                    "GitHub tools use it automatically. Use CloneOrUpdateRepo for private or restricted repository "
-                    "clones/updates; it uses configured git authentication without requiring the token value."
+                    "GitHub tools use it automatically. For repository clone/fetch/pull, use normal git commands "
+                    "against HTTPS GitHub URLs; the sandbox is preconfigured with non-interactive git authentication."
                 )
             self.system_prompt = self.system_prompt + "\n".join(repo_lines) + "\n"
         return self
