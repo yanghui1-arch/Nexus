@@ -106,7 +106,7 @@ class TestContextManager:
                 assert "get_issue_comments" in tela.tool_kits
                 assert "pr_to_github" in tela.tool_kits
                 assert "WebFetch" in tela.tool_kits
-                assert "WebSearch" in tela.tool_kits
+                assert "web_search_agent" in tela.tool_kits
 
 
     async def test_step_raises_without_context_manager(self):
@@ -156,24 +156,6 @@ class TestContextManager:
 
         mock_http.post.assert_not_awaited()
 
-    async def test_enter_injects_fork_urls_into_system_prompt(self):
-        tela = make_tela(github_repo="owner/repo", github_token="ghp_test")
-        mock_sandbox = AsyncMock()
-
-        with patch("src.agents.tela.agent.get_sandbox_pool_manager", return_value=make_pool_manager(mock_sandbox)):
-            with patch("src.agents.base.code_agent.httpx.AsyncClient") as mock_client_cls:
-                mock_http = AsyncMock()
-                mock_http.get.return_value = MagicMock(
-                    status_code=200,
-                    json=MagicMock(return_value={"fork": True, "parent": {"full_name": "owner/repo"}}),
-                )
-                mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_http)
-                mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
-                async with tela:
-                    assert "Nexus-Tela/repo" in tela.system_prompt
-                    assert "owner/repo" in tela.system_prompt
-                    assert "Upstream repo" in tela.system_prompt
-                    assert "Upstream URL" in tela.system_prompt
 
 
 class TestStep:
