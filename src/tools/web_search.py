@@ -10,13 +10,13 @@ from src.server.config import get_settings
 
 
 class WebSearch(BaseModel):
-    """Search the web using OpenAI's official web_search tool and return the collected answer."""
+    """Web search agent that researches the live web and returns a concise, cited answer."""
 
-    query: str = Field(description="Search query string")
-    max_results: int = Field(default=5, description="Maximum number of cited search results to ask for")
+    query: str = Field(description="Research question or web search query for the agent")
+    max_results: int = Field(default=5, description="Maximum number of cited web results the agent should include")
 
 
-TOOL_DEFINITION = pydantic_function_tool(WebSearch)
+TOOL_DEFINITION = pydantic_function_tool(WebSearch, name="web_search_agent")
 
 
 @track(step_type="tool")
