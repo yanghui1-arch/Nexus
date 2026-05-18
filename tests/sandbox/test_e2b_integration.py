@@ -214,3 +214,15 @@ async def test_state_persists_across_calls(sandbox):
 
     assert result["success"] is True
     assert "99" in result["stdout"]
+
+
+@pytest.mark.integration
+async def test_github_token_configures_git_askpass():
+    async with Sandbox(PYTHON_312, env={"GITHUB_TOKEN": "test-token"}) as sandbox:
+        env_result = await sandbox.run_shell("printf '%s|%s' \"$GIT_ASKPASS\" \"$GIT_TERMINAL_PROMPT\"")
+        askpass_result = await sandbox.run_shell("/usr/local/bin/nexus-github-askpass Username && /usr/local/bin/nexus-github-askpass Password")
+
+    assert env_result["success"] is True
+    assert env_result["stdout"] == "/usr/local/bin/nexus-github-askpass|0"
+    assert askpass_result["success"] is True
+    assert askpass_result["stdout"] == "x-access-token\ntest-token\n"
