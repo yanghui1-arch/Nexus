@@ -43,16 +43,17 @@ function formatCny(amount: string): string {
 
 function SidebarNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number] }) {
   const isParentActive = useMatch({ path: item.to, end: false });
+  const subItems = 'subItems' in item ? item.subItems : undefined;
 
   return (
     <>
       <NavLink
         to={item.to}
-        end={!item.subItems}
+        end={!subItems}
         className={({ isActive }) =>
           cn(
             'inline-flex items-center rounded-md px-3 py-2 text-sm transition-colors',
-            isActive || (item.subItems && isParentActive)
+            isActive || (subItems && isParentActive)
               ? 'bg-primary text-primary-foreground font-medium shadow-sm'
               : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
           )
@@ -60,9 +61,9 @@ function SidebarNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number] 
       >
         {item.label}
       </NavLink>
-      {item.subItems && isParentActive ? (
+      {subItems && isParentActive ? (
         <div className="ml-3 flex flex-col gap-1 border-l pl-3">
-          {item.subItems.map(subItem => (
+          {subItems.map(subItem => (
             <NavLink
               key={subItem.to}
               to={subItem.to}

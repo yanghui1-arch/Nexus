@@ -21,6 +21,7 @@ export type WorkspaceAgentOption = {
 export type WorkspaceTaskView = {
   id: string;
   question: string;
+  category: ApiTask['category'];
   repo: string | null;
   project: string | null;
   externalIssueUrl: string | null;
@@ -149,6 +150,7 @@ export function toWorkspaceTaskView(
   return {
     id: task.id,
     question: task.question,
+    category: task.category,
     repo: task.repo,
     project: task.project,
     externalIssueUrl: task.external_issue_url,
