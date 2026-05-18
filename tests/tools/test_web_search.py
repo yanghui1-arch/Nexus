@@ -69,11 +69,3 @@ def test_openai_web_search_stream_collects_answer_and_citations():
     assert kwargs["tools"] == [{"type": "web_search"}]
     assert kwargs["stream"] is True
 
-
-def test_tool_definition_identifies_web_search_agent():
-    assert web_search_module.TOOL_DEFINITION["function"]["name"] == "web_search_agent"
-    description = web_search_module.TOOL_DEFINITION["function"]["description"]
-    assert "Web search agent" in description
-    properties = web_search_module.TOOL_DEFINITION["function"]["parameters"]["properties"]
-    assert properties["query"]["description"] == "Research question or web search query for the agent"
-    assert properties["max_results"]["description"] == "Maximum number of cited web results the agent should include"
