@@ -12,12 +12,14 @@ from src.logger import logger
 from src.server.config import Settings
 from src.server.postgres.database import Database
 from src.server.postgres.models import (
+    FeatureItemStatus,
     GithubPullRequestFeedbackKind,
     GithubPullRequestFeedbackStatus,
     TaskRecord,
     TaskStatus,
 )
 from src.server.postgres.repositories import (
+    FeatureItemRepository,
     GithubPullRequestFeedbackRepository,
     TaskRepository,
 )
@@ -173,6 +175,15 @@ class GithubFeedbackPoller:
             if pull_request.get("merged_at"):
                 async with self._database.session() as session:
                     updated = await TaskRepository.set_merged(session, task.id)
+                    if updated is not None:
+                        # The poller owns the GitHub PR -> product workflow mapping. Once a PR is
+                        # merged, any linked feature item should be persisted as completed too.
+                        await FeatureItemRepository.set_status_by_task_id(
+                            session,
+                            task.id,
+                            status=FeatureItemStatus.completed,
+                            updated_at=updated.updated_at,
+                        )
                 if updated is not None:
                     logger.info("Synced task %s review status from %s to merged.", task.id, task.status.value)
                 return 0
@@ -180,6 +191,14 @@ class GithubFeedbackPoller:
             if pull_request.get("state") == "closed":
                 async with self._database.session() as session:
                     updated = await TaskRepository.set_closed(session, task.id)
+                    if updated is not None:
+                        # A closed-but-unmerged PR is a terminal outcome for the linked feature item too.
+                        await FeatureItemRepository.set_status_by_task_id(
+                            session,
+                            task.id,
+                            status=FeatureItemStatus.closed,
+                            updated_at=updated.updated_at,
+                        )
                 if updated is not None:
                     logger.info("Synced task %s review status from %s to closed.", task.id, task.status.value)
                 return 0

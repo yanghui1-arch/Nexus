@@ -608,6 +608,28 @@ class FeatureItemRepository:
         await session.refresh(item)
         return item
 
+    @staticmethod
+    async def set_status_by_task_id(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+        *,
+        status: FeatureItemStatus,
+        updated_at: datetime,
+    ) -> list[FeatureItemRecord]:
+        result = await session.execute(
+            select(FeatureItemRecord).where(FeatureItemRecord.task_id == task_id)
+        )
+        items = list(result.scalars().all())
+        for item in items:
+            item.status = status
+            item.updated_at = updated_at
+            if item.started_at is None:
+                item.started_at = updated_at
+            if status in {FeatureItemStatus.completed, FeatureItemStatus.closed}:
+                item.finished_at = updated_at
+        await session.commit()
+        return items
+
 
 class TaskRepository:
     @staticmethod

@@ -11,6 +11,7 @@ import httpx
 
 from src.server.github_feedback import GithubFeedbackPoller
 from src.server.postgres.models import (
+    FeatureItemStatus,
     GithubPullRequestFeedbackStatus,
     TaskStatus,
 )
@@ -21,9 +22,12 @@ from src.server.postgres.repositories import (
 
 
 class FakeDatabase:
+    def __init__(self, session_obj: object | None = None) -> None:
+        self._session_obj = session_obj if session_obj is not None else object()
+
     @asynccontextmanager
     async def session(self):
-        yield object()
+        yield self._session_obj
 
 
 class FakeResponse:
@@ -35,6 +39,35 @@ class FakeResponse:
 
     def json(self):
         return self._payload
+
+
+class _ScalarResult:
+    def __init__(self, items):
+        self._items = items
+
+    def all(self):
+        return list(self._items)
+
+
+class _ExecuteResult:
+    def __init__(self, items):
+        self._items = items
+
+    def scalars(self):
+        return _ScalarResult(self._items)
+
+
+class FakeFeatureItemSession:
+    def __init__(self, items):
+        self._items = items
+        self.commit_count = 0
+
+    async def execute(self, statement):
+        del statement
+        return _ExecuteResult(self._items)
+
+    async def commit(self) -> None:
+        self.commit_count += 1
 
 
 def _make_settings():
@@ -252,6 +285,15 @@ def test_poll_once_marks_merged_task_when_pull_request_is_merged(monkeypatch):
     )
     runner = SimpleNamespace(dispatch_github_feedback=AsyncMock(return_value=True))
     captured = {}
+    item = SimpleNamespace(
+        id=uuid.uuid4(),
+        task_id=task.id,
+        status=FeatureItemStatus.in_progress,
+        updated_at=datetime.fromisoformat("2024-01-09T00:00:00+00:00"),
+        started_at=datetime.fromisoformat("2024-01-09T00:00:00+00:00"),
+        finished_at=None,
+    )
+    session = FakeFeatureItemSession([item])
 
     async def fake_list_candidates(session, *, limit):
         return [task]
@@ -261,7 +303,11 @@ def test_poll_once_marks_merged_task_when_pull_request_is_merged(monkeypatch):
 
     async def fake_set_merged(session, task_id):
         captured["task_id"] = task_id
-        return SimpleNamespace(status=TaskStatus.merged)
+        return SimpleNamespace(
+            id=task_id,
+            status=TaskStatus.merged,
+            updated_at=datetime.fromisoformat("2024-01-11T00:00:00+00:00"),
+        )
 
     monkeypatch.setattr(TaskRepository, "list_external_pull_request_candidates", fake_list_candidates)
     monkeypatch.setattr(GithubFeedbackPoller, "_fetch_pull_request", fake_fetch_pull_request)
@@ -269,13 +315,16 @@ def test_poll_once_marks_merged_task_when_pull_request_is_merged(monkeypatch):
 
     poller = GithubFeedbackPoller(
         settings=_make_settings(),
-        database=FakeDatabase(),
+        database=FakeDatabase(session),
         runner=runner,
     )
     discovered = asyncio.run(poller.poll_once())
 
     assert discovered == 0
     assert captured == {"task_id": task.id}
+    assert item.status == FeatureItemStatus.completed
+    assert item.finished_at == datetime.fromisoformat("2024-01-11T00:00:00+00:00")
+    assert session.commit_count == 1
     runner.dispatch_github_feedback.assert_not_awaited()
 
 
@@ -291,6 +340,15 @@ def test_poll_once_marks_task_closed_when_pull_request_is_closed_unmerged(monkey
     )
     runner = SimpleNamespace(dispatch_github_feedback=AsyncMock(return_value=True))
     captured = {}
+    item = SimpleNamespace(
+        id=uuid.uuid4(),
+        task_id=task.id,
+        status=FeatureItemStatus.in_progress,
+        updated_at=datetime.fromisoformat("2024-01-09T00:00:00+00:00"),
+        started_at=datetime.fromisoformat("2024-01-09T00:00:00+00:00"),
+        finished_at=None,
+    )
+    session = FakeFeatureItemSession([item])
 
     async def fake_list_candidates(session, *, limit):
         return [task]
@@ -300,7 +358,11 @@ def test_poll_once_marks_task_closed_when_pull_request_is_closed_unmerged(monkey
 
     async def fake_set_closed(session, task_id):
         captured["task_id"] = task_id
-        return SimpleNamespace(status=TaskStatus.closed)
+        return SimpleNamespace(
+            id=task_id,
+            status=TaskStatus.closed,
+            updated_at=datetime.fromisoformat("2024-01-11T00:00:00+00:00"),
+        )
 
     monkeypatch.setattr(TaskRepository, "list_external_pull_request_candidates", fake_list_candidates)
     monkeypatch.setattr(GithubFeedbackPoller, "_fetch_pull_request", fake_fetch_pull_request)
@@ -308,13 +370,16 @@ def test_poll_once_marks_task_closed_when_pull_request_is_closed_unmerged(monkey
 
     poller = GithubFeedbackPoller(
         settings=_make_settings(),
-        database=FakeDatabase(),
+        database=FakeDatabase(session),
         runner=runner,
     )
     discovered = asyncio.run(poller.poll_once())
 
     assert discovered == 0
     assert captured == {"task_id": task.id}
+    assert item.status == FeatureItemStatus.closed
+    assert item.finished_at == datetime.fromisoformat("2024-01-11T00:00:00+00:00")
+    assert session.commit_count == 1
     runner.dispatch_github_feedback.assert_not_awaited()
 
 
