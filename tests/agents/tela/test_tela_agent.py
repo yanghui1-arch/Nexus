@@ -174,6 +174,8 @@ class TestContextManager:
                     assert "owner/repo" in tela.system_prompt
                     assert "Upstream repo" in tela.system_prompt
                     assert "Upstream URL" in tela.system_prompt
+                    assert "ghp_test" not in tela.system_prompt
+                    assert "x-access-token" not in tela.system_prompt
 
 
 class TestStep:
@@ -305,13 +307,14 @@ class TestGithubTools:
             {"success": True, "stdout": "", "stderr": ""},
         ])
         kit = GithubTools(sandbox)
-        authenticated_url = "https://x-access-token:ghp_secret@github.com/owner/repo"
+        repo_url = "https://github.com/owner/repo"
         await kit.fetch_from_github(
-            repo_url=authenticated_url,
+            repo_url=repo_url,
             local_path="/workspace/myproject",
         )
         clone_call = sandbox.run_shell.call_args_list[1][0][0]
-        assert authenticated_url in clone_call
+        assert repo_url in clone_call
+        assert "x-access-token" not in clone_call
 
     async def test_fetch_recreates_sandbox_when_origin_remote_missing(self):
         sandbox = AsyncMock()
@@ -354,7 +357,7 @@ class TestGithubTools:
     async def test_pr_pushes_via_sandbox(self):
         sandbox = AsyncMock()
         sandbox.run_shell = AsyncMock(return_value={"success": True, "stdout": "", "stderr": ""})
-        kit = GithubTools(sandbox)
+        kit = GithubTools(sandbox, token="tok")
         with patch("src.tools.code.github.client.httpx.AsyncClient") as mock_client_cls:
             mock_resp = MagicMock()
             mock_resp.json.return_value = {"html_url": "https://github.com/owner/repo/pull/1", "number": 1}
@@ -362,7 +365,6 @@ class TestGithubTools:
             mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=AsyncMock(return_value=mock_resp)))
             mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
             await kit.pr_to_github(
-                token="tok",
                 repo="owner/repo",
                 branch="feature",
                 title="feat: x",
@@ -376,7 +378,7 @@ class TestGithubTools:
     async def test_pr_appends_closes_issues(self):
         sandbox = AsyncMock()
         sandbox.run_shell = AsyncMock(return_value={"success": True, "stdout": "", "stderr": ""})
-        kit = GithubTools(sandbox)
+        kit = GithubTools(sandbox, token="tok")
         captured_body: list[str] = []
         with patch("src.tools.code.github.client.httpx.AsyncClient") as mock_client_cls:
             async def fake_post(*args, **kwargs):
@@ -390,7 +392,6 @@ class TestGithubTools:
             mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_http)
             mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
             await kit.pr_to_github(
-                token="tok",
                 repo="owner/repo",
                 branch="feature",
                 title="feat",
