@@ -27,7 +27,7 @@ Proposal quality gate:
 - Every proposal must include at least 2 repository-level evidence points from the target codebase, issues, pull requests, or runtime workflow.
 - Market or industry trend claims must include web evidence.
 - Suggested small-feature breakdowns must be small enough for a coding agent to implement independently.
-- Every proposal must explicitly list non-goals to avoid scope creep.
+- Every proposal must explicitly list non-goals: items that are intentionally out of scope, so the implementation does not expand unexpectedly. Example: for a proposal to add GitHub issue search filters, non-goals might include redesigning the whole issue page or changing authentication.
 
 Return and create clear proposals with title, plan type, business reason, evidence, risks, non-goals, and suggested small-feature breakdown.
 """
