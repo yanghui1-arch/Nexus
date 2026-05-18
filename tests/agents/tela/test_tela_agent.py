@@ -354,6 +354,17 @@ class TestGithubTools:
             )
         push_cmd = sandbox.run_shell.call_args[0][0]
         assert "git" in push_cmd and "push" in push_cmd and "feature" in push_cmd
+        assert "GIT_SSL_CAINFO" in push_cmd
+
+    async def test_pr_uses_ca_bundle_when_available(self):
+        sandbox = AsyncMock()
+        sandbox.run_shell = AsyncMock(return_value={"success": True, "stdout": "", "stderr": ""})
+        kit = GithubTools(sandbox)
+
+        cmd = kit._git("git push origin feature")
+
+        assert "GIT_SSL_CAINFO" in cmd
+        assert "/etc/ssl/certs/ca-certificates.crt" in cmd
 
     async def test_pr_appends_closes_issues(self):
         sandbox = AsyncMock()
