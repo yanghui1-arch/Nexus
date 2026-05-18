@@ -62,14 +62,20 @@ class Tela(CodeAgent):
     async def __aenter__(self) -> "Tela":
         repo_url = f"https://github.com/{self.github_repo}" if self.github_repo else None
         self._sandbox_pool_manager = get_sandbox_pool_manager()
+        sandbox_env = {"GITHUB_TOKEN": self.github_token} if self.github_token else None
         self._sandbox = await self._sandbox_pool_manager.acquire(
             config=self.sandbox_config,
             repo_url=repo_url,
             workspace_key=self.sandbox_workspace_key,
+            env=sandbox_env,
         )
 
         sandbox_tools = SandboxToolKit(self._sandbox)
-        github_kit = GithubTools(self._sandbox, self._nexus_task_context)
+        github_kit = GithubTools(
+            self._sandbox,
+            self._nexus_task_context,
+            token=self.github_token,
+        )
         nexus_kit = NexusReviewTools(self._sandbox, self._nexus_task_context)
 
         kits = {}
@@ -85,7 +91,9 @@ class Tela(CodeAgent):
             repo_lines = ["\n## Your Repository"]
             if self.github_token:
                 repo_lines.append(
-                    f"- Token: {self.github_token}  (use for git auth and all GitHub API calls)"
+                    "- GitHub token: configured for tool authentication; value intentionally omitted. "
+                    "GitHub tools use it automatically. For git clone/fetch/pull/push, use normal "
+                    "HTTPS GitHub URLs; the sandbox is preconfigured with non-interactive git authentication."
                 )
             if self.github_repo:
                 upstream_url = f"https://github.com/{self.github_repo}"
@@ -95,7 +103,7 @@ class Tela(CodeAgent):
                 repo_lines.append(f"- Upstream URL: {upstream_url}")
                 if self.github_token:
                     fork_repo = await self._ensure_fork(self.github_token, self.github_repo)
-                    fork_clone_url = f"https://x-access-token:{self.github_token}@github.com/{fork_repo}"
+                    fork_clone_url = f"https://github.com/{fork_repo}"
                     repo_lines.append(
                         f"- Your fork: {fork_repo}  (clone this as `origin`, push here frequently)"
                     )
