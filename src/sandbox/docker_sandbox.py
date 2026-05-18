@@ -92,7 +92,10 @@ class Sandbox:
 
     def __init__(self, config: SandboxConfig, env: dict[str, str] | None = None) -> None:
         self._config = config
-        self._env = env or {}
+        self._env = dict(env or {})
+        if self._env.get("GITHUB_TOKEN"):
+            self._env.setdefault("GIT_ASKPASS", "/usr/local/bin/nexus-github-askpass")
+            self._env.setdefault("GIT_TERMINAL_PROMPT", "0")
         self._client: docker.DockerClient | None = None
         self._container = None
 
@@ -116,6 +119,7 @@ class Sandbox:
             else:
                 logger.info(f"Initializing {cmd.name}")
             await self.run_shell(cmd.command)
+        await self._configure_git_authentication()
         return self
 
 
@@ -130,6 +134,22 @@ class Sandbox:
         await self.__aexit__(None, None, None)
         await self.__aenter__()
         return self
+
+
+    async def _configure_git_authentication(self) -> None:
+        """Configure non-interactive git auth without exposing token in commands."""
+        if not self._env.get("GITHUB_TOKEN"):
+            return
+        await self.write_file(
+            "/usr/local/bin/nexus-github-askpass",
+            "#!/bin/sh\n"
+            "case \"$1\" in\n"
+            "  *Username*) printf '%s\\n' x-access-token ;;\n"
+            "  *Password*) printf '%s\\n' \"$GITHUB_TOKEN\" ;;\n"
+            "  *) printf '\\n' ;;\n"
+            "esac\n",
+        )
+        await self._exec(["/bin/sh", "-c", "chmod 700 /usr/local/bin/nexus-github-askpass"])
 
 
     async def run_code(self, code: str) -> dict:
