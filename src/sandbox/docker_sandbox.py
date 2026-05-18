@@ -90,8 +90,9 @@ class Sandbox:
             await sandbox.run_code("console.log('hello from ts')")
     """
 
-    def __init__(self, config: SandboxConfig) -> None:
+    def __init__(self, config: SandboxConfig, env: dict[str, str] | None = None) -> None:
         self._config = config
+        self._env = env or {}
         self._client: docker.DockerClient | None = None
         self._container = None
 
@@ -107,6 +108,7 @@ class Sandbox:
             mem_limit=self._config.mem_limit,
             security_opt=["no-new-privileges"],
             working_dir="/workspace",
+            environment=self._env,
         )
         for cmd in self._config.init_commands:
             if cmd.type == "install":

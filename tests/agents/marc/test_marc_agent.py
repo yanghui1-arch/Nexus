@@ -72,8 +72,14 @@ def test_marc_tool_kits_are_read_only():
                 assert "GitHub repo: owner/repo" in marc.system_prompt
                 assert "GitHub repo URL: https://github.com/owner/repo" in marc.system_prompt
                 assert "GitHub token: configured for tool authentication when needed" in marc.system_prompt
+                assert "GITHUB_TOKEN environment variable" in marc.system_prompt
                 assert "github-token" not in marc.system_prompt
-        pool.acquire.assert_awaited_once()
+        pool.acquire.assert_awaited_once_with(
+            config=marc.sandbox_config,
+            repo_url="https://github.com/owner/repo",
+            workspace_key=None,
+            env={"GITHUB_TOKEN": "github-token"},
+        )
         pool.release.assert_awaited_once_with(sandbox)
 
     anyio.run(run)
