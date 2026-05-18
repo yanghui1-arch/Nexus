@@ -61,7 +61,7 @@ class Marc(Agent):
         )
         self.tool_kits = {
             "RunCommand": sandbox_tools.all_tools["RunCommand"],
-            "WebSearch": web_search,
+            "web_search_agent": web_search,
             **github_readonly_tools.all_tools,
         }
 

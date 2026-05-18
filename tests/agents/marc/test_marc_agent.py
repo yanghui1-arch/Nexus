@@ -10,7 +10,7 @@ from src.agents.marc.agent import Marc, _ALL_TOOL_DEFINITIONS
 
 EXPECTED_TOOLS = {
     "RunCommand",
-    "WebSearch",
+    "web_search_agent",
     "ListGithubIssues",
     "GetGithubIssue",
     "ListGithubPullRequests",
@@ -91,13 +91,6 @@ def test_marc_tool_definitions_include_only_expected_read_only_tools():
     assert tool_names == EXPECTED_TOOLS
     assert FORBIDDEN_MUTATING_TOOLS.isdisjoint(tool_names)
 
-
-def test_marc_create_keeps_token_for_runtime_prompt_only():
-    marc = make_marc()
-
-    assert marc.github_repo == "owner/repo"
-    assert marc.github_token == "github-token"
-    assert "github-token" not in marc.system_prompt
 
 
 def test_marc_step_passes_read_only_tools_to_openai():

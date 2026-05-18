@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 from src.agents.base.agent import BaseAgentResponse
 from src.server.celery import execution
 from src.server.postgres.models import GithubPullRequestFeedbackKind, TaskCategory, TaskStatus, TaskWorkItemStatus
-from src.server.postgres.repositories import TaskWorkItemRepository, VirtualPullRequestRepository
+from src.server.postgres.repositories import TaskWorkItemRepository
 
 
 class FakeAgent:
@@ -269,12 +269,6 @@ def test_run_agent_workflow_pauses_when_work_item_is_ready(monkeypatch):
     async def get_item(session, work_item_id):
         return ready_item
 
-    async def get_virtual_pr(session, work_item_id):
-        return SimpleNamespace(id="virtual-pr-id")
-
-    async def list_reviews(session, virtual_pr_id):
-        return []
-
     async def fake_run_agent(**kwargs):
         assert "finish_current_task_work_item" in kwargs["question"]
         assert "final executable work item" in kwargs["question"]
@@ -294,8 +288,6 @@ def test_run_agent_workflow_pauses_when_work_item_is_ready(monkeypatch):
     monkeypatch.setattr(TaskWorkItemRepository, "get_next_for_execution", next_item)
     monkeypatch.setattr(TaskWorkItemRepository, "set_running", set_running)
     monkeypatch.setattr(TaskWorkItemRepository, "get", get_item)
-    monkeypatch.setattr(VirtualPullRequestRepository, "get_by_work_item", get_virtual_pr)
-    monkeypatch.setattr(VirtualPullRequestRepository, "list_reviews_by_virtual_pr", list_reviews)
     monkeypatch.setattr(execution, "_build_agent", lambda **_: fake_agent)
     monkeypatch.setattr(execution, "_run_agent", fake_run_agent)
     monkeypatch.setattr(execution, "_get_latest_checkpoint", empty_checkpoint)
@@ -379,12 +371,6 @@ def test_run_agent_workflow_keeps_checkpoint_between_work_items(monkeypatch):
     async def get_item(session, work_item_id):
         return _ready_item(next(item for item in pending_items if item.id == work_item_id))
 
-    async def get_virtual_pr(session, work_item_id):
-        return SimpleNamespace(id=f"virtual-pr-{work_item_id}")
-
-    async def list_reviews(session, virtual_pr_id):
-        return []
-
     async def fake_run_agent(**kwargs):
         work_item_id = kwargs["agent"].nexus_task_context.current_work_item_id
         calls.append(
@@ -413,8 +399,6 @@ def test_run_agent_workflow_keeps_checkpoint_between_work_items(monkeypatch):
     monkeypatch.setattr(TaskWorkItemRepository, "get_next_for_execution", next_item)
     monkeypatch.setattr(TaskWorkItemRepository, "set_running", set_running)
     monkeypatch.setattr(TaskWorkItemRepository, "get", get_item)
-    monkeypatch.setattr(VirtualPullRequestRepository, "get_by_work_item", get_virtual_pr)
-    monkeypatch.setattr(VirtualPullRequestRepository, "list_reviews_by_virtual_pr", list_reviews)
     monkeypatch.setattr(execution, "_build_agent", lambda **_: fake_agent)
     monkeypatch.setattr(execution, "_run_agent", fake_run_agent)
     monkeypatch.setattr(execution, "_get_latest_checkpoint", latest_checkpoint)

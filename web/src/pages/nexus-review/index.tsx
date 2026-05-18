@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { GitPullRequest, Loader2 } from 'lucide-react';
 import { FaGithub } from 'react-icons/fa';
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useParams } from 'react-router-dom';
 import { useAppLayout } from '@/components/layout/AppLayout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -94,8 +94,7 @@ export function NexusReviewPage() {
     description: 'View Nexus review tasks and jump to GitHub for review actions.',
   });
 
-  const navigate = useNavigate();
-  const { taskId, virtualPrId } = useParams<{ taskId?: string; virtualPrId?: string }>();
+  const { taskId } = useParams<{ taskId?: string }>();
   const { taskViews, isLoading } = useWorkspaceRecords();
   const [repoFilter, setRepoFilter] = useState(ALL_REPOSITORIES);
   const [activeTab, setActiveTab] = useState<QueueTab['id']>('review');
@@ -137,14 +136,6 @@ export function NexusReviewPage() {
     () => reviewTasks.find(task => task.id === taskId) ?? null,
     [reviewTasks, taskId],
   );
-
-  useEffect(() => {
-    if (!taskId || !virtualPrId) {
-      return;
-    }
-
-    navigate(`/code-review/nexus/tasks/${taskId}`, { replace: true });
-  }, [navigate, taskId, virtualPrId]);
 
   if (taskId && !isLoading && !selectedTask) {
     return <Navigate to="/code-review/nexus" replace />;

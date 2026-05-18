@@ -34,12 +34,10 @@ from src.server.postgres.models import (
     TaskCategory,
     TaskStatus,
     TaskWorkItemStatus,
-    VirtualPullRequestLineSide,
 )
 from src.server.postgres.repositories import (
     TaskRepository,
     TaskWorkItemRepository,
-    _extract_code_snapshot,
 )
 
 
@@ -59,30 +57,6 @@ def _build_app(session_obj: object | None = None, runner_obj: object | None = No
         app.state.runner = runner_obj
     app.include_router(tasks_router)
     return app
-
-
-def test_extract_code_snapshot_from_virtual_pr_diff() -> None:
-    raw_diff = (
-        'diff --git a/src/file.py b/src/file.py\n'
-        '--- a/src/file.py\n'
-        '+++ b/src/file.py\n'
-        '@@ -1,3 +1,4 @@\n'
-        ' keep old\n'
-        '-remove me\n'
-        '+add me\n'
-        '+add also\n'
-        ' keep tail\n'
-    )
-
-    snapshot = _extract_code_snapshot(
-        raw_diff,
-        file_path='src/file.py',
-        start_line=2,
-        end_line=3,
-        line_side=VirtualPullRequestLineSide.new,
-    )
-
-    assert snapshot == '+add me\n+add also'
 
 
 def _make_task(

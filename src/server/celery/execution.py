@@ -27,7 +27,6 @@ from src.server.postgres.repositories import (
     GithubPullRequestFeedbackRepository,
     TaskRepository,
     TaskWorkItemRepository,
-    VirtualPullRequestRepository,
     WorkspaceRepository,
 )
 from src.tools.nexus import NexusTaskContext
@@ -364,11 +363,10 @@ async def _run_code_agent_workflow(
 
             async with database.session() as session:
                 refreshed = await TaskWorkItemRepository.get(session, work_item.id)
-                virtual_pr = await VirtualPullRequestRepository.get_by_work_item(session, work_item.id)
 
             if refreshed is None:
                 raise RuntimeError(f"Work item {work_item.id} of task {task.id} disappeared during execution.")
-            if virtual_pr is None or refreshed.status.value != "ready_for_review":
+            if refreshed.status.value != "ready_for_review":
                 raise RuntimeError(
                     "Agent finished a work item without calling finish_current_task_work_item."
                 )
@@ -526,7 +524,7 @@ def _build_work_item_prompt(
 
     return (
         f"Implement only this work item {work_item.title}. Commit this work item's scoped changes before finishing; "
-        "the Nexus virtual PR is built from base_commit..head_commit."
+        "Nexus records this work item's review scope from base_commit..head_commit. "
         f"{external_pr_instruction}"
         "When the scoped implementation is complete, call finish_current_task_work_item"
     )

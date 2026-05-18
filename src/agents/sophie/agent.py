@@ -82,7 +82,7 @@ class Sophie(CodeAgent):
         kits.update(nexus_kit.all_tools)
 
         kits["WebFetch"] = web_fetch
-        kits["WebSearch"] = web_search
+        kits["web_search_agent"] = web_search
         self.tool_kits = kits
 
         if self.github_repo or self.github_token:

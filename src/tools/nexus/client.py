@@ -13,7 +13,6 @@ from src.server.postgres.database import Database
 from src.server.postgres.models import TaskWorkItemStatus
 from src.server.postgres.repositories import (
     TaskWorkItemRepository,
-    VirtualPullRequestRepository,
 )
 
 
@@ -42,26 +41,6 @@ async def _git_stdout(sandbox: Sandbox, local_path: str, *args: str) -> str:
         detail = stderr or stdout or "git command failed"
         raise RuntimeError(detail.strip())
     return result.get("stdout", "").strip()
-
-
-def parse_numstat(numstat: str) -> tuple[list[str], int, int]:
-    changed_files: list[str] = []
-    additions = 0
-    deletions = 0
-
-    for line in numstat.splitlines():
-        parts = line.split("\t")
-        if len(parts) < 3:
-            continue
-
-        added, deleted, path = parts[0], parts[1], parts[-1]
-        changed_files.append(path)
-        if added.isdigit():
-            additions += int(added)
-        if deleted.isdigit():
-            deletions += int(deleted)
-
-    return changed_files, additions, deletions
 
 
 class NexusReviewTools:
@@ -131,27 +110,10 @@ class NexusReviewTools:
 
             head_commit = await _git_stdout(self._sandbox, repo_path, "rev-parse", "HEAD")
             base_commit = work_item.base_commit or await _infer_base_commit(self._sandbox, repo_path)
-            revision_range = f"{base_commit}..{head_commit}"
-            numstat = await _git_stdout(self._sandbox, repo_path, "diff", "--numstat", revision_range)
-            diff = await _git_stdout(self._sandbox, repo_path, "diff", revision_range)
         except RuntimeError as exc:
-            return {"success": False, "message": f"Failed to capture virtual PR diff: {exc}"}
-
-        changed_files, additions, deletions = parse_numstat(numstat)
+            return {"success": False, "message": f"Failed to capture work item review scope: {exc}"}
 
         async with self._context.database.session() as session:
-            virtual_pr = await VirtualPullRequestRepository.upsert_for_work_item(
-                session,
-                task_id=self._context.task_id,
-                work_item_id=work_item.id,
-                base_commit=base_commit,
-                head_commit=head_commit,
-                summary=summary,
-                changed_files=changed_files,
-                additions=additions,
-                deletions=deletions,
-                diff=diff,
-            )
             await TaskWorkItemRepository.mark_ready_for_review(
                 session,
                 work_item.id,
@@ -162,15 +124,14 @@ class NexusReviewTools:
             )
 
         logger.info(
-            "Task %s work item %s produced virtual PR %s.",
+            "Task %s work item %s is ready for review.",
             self._context.task_id,
             work_item.order_index,
-            virtual_pr.id,
         )
         return {
             "success": True,
             "status": "ready_for_review",
-            "message": "Nexus created the virtual PR.",
+            "message": "Nexus marked the work item ready for review.",
         }
 
     @property
@@ -191,4 +152,4 @@ async def _infer_base_commit(sandbox: Sandbox, local_path: str) -> str:
             return await _git_stdout(sandbox, local_path, *args)
         except RuntimeError:
             continue
-    raise RuntimeError("Unable to infer base commit for virtual PR.")
+    raise RuntimeError("Unable to infer base commit for the work item review scope.")

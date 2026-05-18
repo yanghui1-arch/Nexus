@@ -19,7 +19,7 @@ class CreateTaskWorkItems(BaseModel):
 
 
 class FinishCurrentTaskWorkItem(BaseModel):
-    """Finish the current work item and create its virtual PR. Call it after you have finished one task work item."""
+    """Finish the current work item and mark it ready for review. Call it after you have finished one task work item."""
 
     summary: str = Field(description="Reviewer-facing summary of the implemented work item")
     local_path: str | None = Field(

@@ -33,10 +33,6 @@ function App() {
           <Route path="/code-review" element={<Navigate to="/code-review/nexus" replace />} />
           <Route path="/code-review/nexus" element={<NexusReviewPage />} />
           <Route path="/code-review/nexus/tasks/:taskId" element={<NexusReviewPage />} />
-          <Route
-            path="/code-review/nexus/tasks/:taskId/pull-requests/:virtualPrId"
-            element={<NexusReviewPage />}
-          />
           <Route path="/workspace" element={<Navigate to={DEFAULT_WORKSPACE_PATH} replace />} />
           <Route path="/workspace/publish-task" element={<Navigate to="/publish-task" replace />} />
           <Route
@@ -64,10 +60,6 @@ function App() {
           <Route path="/workspace/code-review/nexus" element={<NexusReviewPage />} />
           <Route
             path="/workspace/code-review/nexus/tasks/:taskId"
-            element={<NexusReviewPage />}
-          />
-          <Route
-            path="/workspace/code-review/nexus/tasks/:taskId/pull-requests/:virtualPrId"
             element={<NexusReviewPage />}
           />
           <Route path="/overview" element={<Navigate to={DEFAULT_WORKSPACE_PATH} replace />} />

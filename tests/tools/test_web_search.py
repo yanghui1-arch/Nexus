@@ -68,3 +68,4 @@ def test_openai_web_search_stream_collects_answer_and_citations():
     assert kwargs["model"] == "gpt-test"
     assert kwargs["tools"] == [{"type": "web_search"}]
     assert kwargs["stream"] is True
+

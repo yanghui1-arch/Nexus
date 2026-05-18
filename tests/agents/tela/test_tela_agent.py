@@ -106,7 +106,7 @@ class TestContextManager:
                 assert "get_issue_comments" in tela.tool_kits
                 assert "pr_to_github" in tela.tool_kits
                 assert "WebFetch" in tela.tool_kits
-                assert "WebSearch" in tela.tool_kits
+                assert "web_search_agent" in tela.tool_kits
 
 
     async def test_step_raises_without_context_manager(self):

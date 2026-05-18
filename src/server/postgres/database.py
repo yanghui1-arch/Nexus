@@ -77,48 +77,6 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
         "head_commit",
         "local_path",
     },
-    "virtual_pull_request": {
-        "id",
-        "task_id",
-        "work_item_id",
-        "status",
-        "base_commit",
-        "head_commit",
-        "summary",
-        "changed_files",
-        "additions",
-        "deletions",
-        "diff",
-    },
-    "virtual_pull_request_review": {
-        "id",
-        "task_id",
-        "virtual_pr_id",
-        "decision",
-        "reviewer",
-        "comment",
-    },
-    "virtual_pull_request_thread": {
-        "id",
-        "task_id",
-        "virtual_pr_id",
-        "kind",
-        "status",
-        "file_path",
-        "start_line",
-        "end_line",
-        "line_side",
-        "diff_hunk",
-        "code_snapshot",
-        "created_by",
-    },
-    "virtual_pull_request_comment": {
-        "id",
-        "thread_id",
-        "parent_comment_id",
-        "author",
-        "body",
-    },
     "github_pull_request_feedback": {
         "id",
         "task_id",
@@ -212,24 +170,6 @@ class Database:
                     "UPDATE task_work_item SET status = 'ready_for_review' "
                     "WHERE status = 'changes_requested'"
                 )
-            )
-            await conn.execute(
-                text(
-                    "UPDATE virtual_pull_request SET status = 'ready_for_review' "
-                    "WHERE status = 'changes_requested'"
-                )
-            )
-            await conn.execute(
-                text(
-                    "UPDATE virtual_pull_request_review SET decision = 'commented' "
-                    "WHERE decision = 'changes_requested'"
-                )
-            )
-            await conn.execute(
-                text("ALTER TABLE virtual_pull_request_thread ADD COLUMN IF NOT EXISTS code_snapshot TEXT")
-            )
-            await conn.execute(
-                text("ALTER TABLE virtual_pull_request_comment ADD COLUMN IF NOT EXISTS parent_comment_id UUID")
             )
             await conn.execute(text("ALTER TABLE user_account ADD COLUMN IF NOT EXISTS balance NUMERIC(12, 2) DEFAULT 0.00 NOT NULL"))
             await conn.execute(
