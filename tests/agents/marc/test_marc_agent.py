@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 import anyio
 
 from src.agents.marc.agent import Marc, _ALL_TOOL_DEFINITIONS
+from src.agents.marc.system_prompt import MARC_SYSTEM_PROMPT
 
 
 EXPECTED_TOOLS = {
@@ -117,3 +118,15 @@ def test_marc_step_passes_read_only_tools_to_openai():
         assert {_tool_name(definition) for definition in kwargs["tools"]} == EXPECTED_TOOLS
 
     anyio.run(run)
+
+
+def test_marc_system_prompt_defines_discovery_and_planning_modes():
+    assert "## Discovery mode" in MARC_SYSTEM_PROMPT
+    assert "Trigger Discovery mode" in MARC_SYSTEM_PROMPT
+    assert "create_proposal" in MARC_SYSTEM_PROMPT
+    assert "Do not call create_feature_for_product_proposal or create_feature_item" in MARC_SYSTEM_PROMPT
+
+    assert "## Planning mode" in MARC_SYSTEM_PROMPT
+    assert "Trigger Planning mode only" in MARC_SYSTEM_PROMPT
+    assert "approved proposal id" in MARC_SYSTEM_PROMPT
+    assert "Do not enter Planning mode without an approved proposal id" in MARC_SYSTEM_PROMPT
