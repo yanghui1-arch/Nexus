@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -18,6 +19,7 @@ export function TaskBoardColumn({
   isLoading,
   onOpenReview,
 }: TaskBoardColumnProps) {
+  const { t } = useTranslation();
   const statusMeta = STATUS_META[status];
   const StatusIcon = statusMeta.icon;
 
@@ -33,7 +35,7 @@ export function TaskBoardColumn({
                   : 'size-4 shrink-0'
               }
             />
-            <span className="truncate">{statusMeta.label}</span>
+            <span className="truncate">{t(`status.${status}`)}</span>
           </div>
           <Badge variant="secondary" className="shrink-0">
             {tasks.length}
@@ -45,7 +47,7 @@ export function TaskBoardColumn({
         <ScrollArea className="h-full w-full">
           {tasks.length === 0 ? (
             <p className="mr-2 rounded-md border bg-muted/30 px-3 py-4 text-sm text-muted-foreground">
-              {isLoading ? 'Loading tasks...' : 'No tasks in this column.'}
+              {isLoading ? t('taskBoard.loadingTasks') : t('taskBoard.emptyColumn')}
             </p>
           ) : (
             <div className="mr-2 flex flex-col gap-3">

@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAppLayout } from '@/components/layout/AppLayout';
 import { TaskBoardColumn } from './components/TaskBoardColumn';
 import { TaskBoardRepoSelect } from './components/TaskBoardRepoSelect';
@@ -6,9 +7,11 @@ import { useTaskBoardData } from './hooks/useTaskBoardData';
 import { TASK_BOARD_STATUS_ORDER } from './utils';
 
 export default function TaskBoardPage() {
+  const { t } = useTranslation();
+
   useAppLayout({
-    title: 'Task Board',
-    description: 'Live task board grouped by backend task status.',
+    title: t('taskBoard.title'),
+    description: t('taskBoard.description'),
   });
 
   const navigate = useNavigate();

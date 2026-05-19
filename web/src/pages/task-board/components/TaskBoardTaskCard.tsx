@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { timeAgo, type WorkspaceTaskView } from '@/lib/workspace-task-view';
 
@@ -11,6 +12,7 @@ export function TaskBoardTaskCard({
   task,
   onOpenReview,
 }: TaskBoardTaskCardProps) {
+  const { t } = useTranslation();
   const canOpenReview =
     task.status === 'waiting_for_review' ||
     task.status === 'merged' ||
@@ -23,7 +25,7 @@ export function TaskBoardTaskCard({
 
       <div className="mt-2 flex flex-col gap-0.5 text-xs text-muted-foreground">
         <span className="truncate" title={task.repo ?? '-'}>
-          {task.repo ?? 'No repo'}
+          {task.repo ?? t('common.noRepository')}
         </span>
         <span className="truncate" title={task.agentLabel}>
           {task.agentLabel}
@@ -41,7 +43,7 @@ export function TaskBoardTaskCard({
 
       <div className="mt-2 flex flex-col gap-0.5 text-xs text-muted-foreground">
         <span>{timeAgo(task.createdAt)}</span>
-        <span>Updated {timeAgo(task.updatedAt)}</span>
+        <span>{t('common.updatedRelative', { time: timeAgo(task.updatedAt) })}</span>
       </div>
 
       <div className="mt-2 flex justify-end">
@@ -54,11 +56,11 @@ export function TaskBoardTaskCard({
               className="h-7 px-2 text-xs"
               onClick={() => onOpenReview(task.id)}
             >
-              Open Review
+              {t('taskBoard.openReview')}
             </Button>
           ) : null}
           <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
-            <Link to={`/task/${task.id}`}>Details</Link>
+            <Link to={`/task/${task.id}`}>{t('common.details')}</Link>
           </Button>
         </div>
       </div>
