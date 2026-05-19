@@ -187,7 +187,11 @@ async def execute_agent_task(
             await _mark_post_execution_wait_state(database, task_id, None)
             logger.info("Task %s returned to its waiting state.", task_id)
 
-    except Exception as exc:
+    except BaseException as exc:
+        if _is_worker_shutdown_exception(exc):
+            logger.warning("Task %s was interrupted by worker shutdown; queueing it for redispatch.", task_id)
+            await _mark_queued_for_redispatch(database, task_id)
+            return
         logger.exception("Task %s failed in worker", task_id)
         await _mark_failed(database, task_id, str(exc))
         raise
@@ -798,3 +802,17 @@ def _format_github_feedback_message(item: GithubPullRequestFeedbackRecord) -> st
 async def _mark_failed(database: Database, task_id: uuid.UUID, error: str) -> None:
     async with database.session() as session:
         await TaskRepository.set_failed(session, task_id, error=error)
+
+
+async def _mark_queued_for_redispatch(database: Database, task_id: uuid.UUID) -> None:
+    async with database.session() as session:
+        task = await TaskRepository.get(session, task_id)
+        if task is None:
+            return
+        if task.status == TaskStatus.failed:
+            return
+        await TaskRepository.set_queued(session, task_id)
+
+
+def _is_worker_shutdown_exception(exc: BaseException) -> bool:
+    return isinstance(exc, asyncio.CancelledError | KeyboardInterrupt | SystemExit)
