@@ -30,6 +30,7 @@ class ProductDiscoveryPoller:
         self._task: asyncio.Task[Any] | None = None
 
     def start(self) -> None:
+        # Marc proposal discovery runs hourly by default so the team remembers to ask for a new proposal each hour.
         if self._settings.product_discovery_poll_interval_seconds <= 0:
             logger.info("Product discovery poller is disabled.")
             return

@@ -29,7 +29,7 @@ class FakeRunner:
 
 def _settings(**overrides):
     values = {
-        "product_discovery_poll_interval_seconds": 60,
+        "product_discovery_poll_interval_seconds": 3600,
         "product_discovery_poll_task_limit": 20,
     }
     values.update(overrides)

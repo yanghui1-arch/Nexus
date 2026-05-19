@@ -106,7 +106,7 @@ def get_settings() -> Settings:
         auth_session_ttl_seconds=int(os.getenv("NEXUS_AUTH_SESSION_TTL_SECONDS", "2592000")),
         frontend_base_url=os.getenv("NEXUS_FRONTEND_BASE_URL", "http://localhost:5174"),
         product_discovery_poll_interval_seconds=int(
-            os.getenv("NEXUS_PRODUCT_DISCOVERY_POLL_INTERVAL_SECONDS", "10"),
+            os.getenv("NEXUS_PRODUCT_DISCOVERY_POLL_INTERVAL_SECONDS", "3600"),
         ),
         product_discovery_poll_task_limit=int(
             os.getenv("NEXUS_PRODUCT_DISCOVERY_POLL_TASK_LIMIT", "100"),
