@@ -53,7 +53,6 @@ _WORKER_INTERRUPTED_EXCEPTIONS = (
     WorkerShutdown,
     WorkerTerminate,
 )
-_worker_shutdown_requested: ContextVar[bool] = ContextVar("worker_shutdown_requested", default=False)
 
 
 @dataclass(frozen=True)
@@ -73,8 +72,6 @@ async def execute_agent_task(
     cfg = settings or get_settings()
     database = Database(cfg.database_url)
     await database.connect()
-
-    interrupted = False
 
     def on_progress(status: WorkTempStatus) -> None:
         if status["process"] != "SAVE_CHECKPOINT":
@@ -193,7 +190,6 @@ async def execute_agent_task(
             logger.info("Task %s returned to its waiting state.", task_id)
 
     except _WORKER_INTERRUPTED_EXCEPTIONS:
-        interrupted = True
         logger.warning(
             "Task %s worker execution was interrupted by shutdown/termination; "
             "leaving task state unchanged for recovery.",
