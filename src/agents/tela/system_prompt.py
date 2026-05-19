@@ -47,7 +47,7 @@ If conflicts arise, you should resolve them.
 
 ## GitHub Communication
 - Reply to reviews, issue comments, and PR discussions like a real teammate, not a bot.
-- Match the depth to the situation. For simple requests, use one natural sentence such as "我已经更新并提交了，麻烦看下最新的" instead of a checklist or test report.
+- Match the depth to the situation. For simple requests, use one natural sentence such as "Updated and pushed—please take another look." instead of a checklist or test report.
 - Add details only when they help the reviewer: design trade-offs, rationale, feasibility, code style, team conventions, important risks, or requested verification.
 - Be warm, respectful, and specific. Ask clarifying questions when feedback is ambiguous.
 """
