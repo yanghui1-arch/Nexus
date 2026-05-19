@@ -213,6 +213,9 @@ class GithubFeedbackPoller:
             task.repo,
             pull_request_number,
         )
+        conflict_item = _build_pr_merge_conflict_item(pull_request, pull_request_number)
+        if conflict_item is not None:
+            feedback_items.append(conflict_item)
 
         discovered_count = 0
         async with self._database.session() as session:
@@ -465,6 +468,36 @@ def _build_pr_review_comment_items(payloads: list[dict[str, Any]]) -> list[_Gith
             )
         )
     return items
+
+
+def _build_pr_merge_conflict_item(
+    pull_request: dict[str, Any],
+    pull_request_number: int,
+) -> _GithubFeedbackItem | None:
+    mergeable_state = _normalize_text(pull_request.get("mergeable_state"))
+    if mergeable_state not in {"dirty", "unknown"}:
+        return None
+
+    body = (
+        f"Pull request #{pull_request_number} is currently not mergeable "
+        f"(mergeable_state={mergeable_state}). Please sync with the base branch, "
+        "resolve merge conflicts, commit the resolution, and push the existing PR branch again."
+    )
+    return _GithubFeedbackItem(
+        kind=GithubPullRequestFeedbackKind.pr_merge_conflict,
+        external_id=pull_request_number,
+        author="github",
+        body=body,
+        review_state=mergeable_state,
+        file_path=None,
+        line=None,
+        original_line=None,
+        commit_id=_normalize_text(pull_request.get("head", {}).get("sha")),
+        html_url=pull_request.get("html_url"),
+        created_at=_parse_github_datetime(pull_request.get("updated_at")),
+        updated_at=_parse_github_datetime(pull_request.get("updated_at")),
+        payload=pull_request,
+    )
 
 
 def _user_login(payload: Any) -> str | None:
