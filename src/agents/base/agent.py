@@ -15,6 +15,8 @@ from openai.types.chat.chat_completion_message_param import (
     ChatCompletionToolMessageParam
 )
 from openai.types.chat.chat_completion_message_tool_call import ChatCompletionMessageToolCall
+from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
+from openai.types.chat.chat_completion_message_tool_call import Function
 from mwin import track
 from src.logger import logger
 from src.exception import ToolNotFoundError
@@ -37,6 +39,14 @@ class BaseAgentStepResult:
 @dataclass
 class BaseAgentResponse:
     response: str
+
+
+@dataclass
+class StreamCompletionResult:
+    message: ChatCompletionMessage
+    finish_reason: str | None
+    reasoning: str | None
+    usage_tokens: int
 
 
 @dataclass
@@ -314,6 +324,85 @@ class Agent(BaseModel):
     ):
         if callback:
             callback(work_temp_status)
+
+    async def _create_chat_completion_stream(self, kwargs: Dict[str, Any]) -> StreamCompletionResult:
+        if self.openai_client is None:
+            raise RuntimeError(f"Agent `{self.name}` is missing an initialized OpenAI client.")
+
+        stream_kwargs: Dict[str, Any] = dict(kwargs)
+        stream_kwargs["stream"] = True
+        stream_kwargs["stream_options"] = {"include_usage": True}
+
+        content_parts: list[str] = []
+        reasoning_parts: list[str] = []
+        finish_reason: str | None = None
+        usage_tokens = 0
+        tool_calls_state: dict[int, dict[str, str]] = {}
+
+        stream = await self.openai_client.chat.completions.create(**stream_kwargs)
+        async for chunk in stream:
+            if getattr(chunk, "usage", None) is not None:
+                usage_tokens = chunk.usage.total_tokens or usage_tokens
+
+            if not chunk.choices:
+                continue
+            choice = chunk.choices[0]
+            if choice.finish_reason is not None:
+                finish_reason = choice.finish_reason
+
+            delta = choice.delta
+            if delta.content:
+                content_parts.append(delta.content)
+
+            reasoning_content = getattr(delta, "reasoning_content", None)
+            if reasoning_content:
+                reasoning_parts.append(reasoning_content)
+
+            if delta.tool_calls:
+                for tc in delta.tool_calls:
+                    tool_calls_state = self._merge_tool_call_delta(tool_calls_state, tc)
+
+        tool_calls = self._build_tool_calls(tool_calls_state)
+        message = ChatCompletionMessage(
+            role="assistant",
+            content="".join(content_parts) or None,
+            tool_calls=tool_calls or None,
+        )
+        reasoning = "".join(reasoning_parts) if reasoning_parts else None
+        return StreamCompletionResult(
+            message=message,
+            finish_reason=finish_reason,
+            reasoning=reasoning,
+            usage_tokens=usage_tokens if usage_tokens else 0,
+        )
+
+    def _merge_tool_call_delta(
+        self,
+        tool_calls_state: dict[int, dict[str, str]],
+        tc: ChoiceDeltaToolCall,
+    ) -> dict[int, dict[str, str]]:
+        if tc.index not in tool_calls_state:
+            tool_calls_state[tc.index] = {"id": "", "name": "", "arguments": ""}
+        state = tool_calls_state[tc.index]
+        if tc.id:
+            state["id"] = tc.id
+        if tc.function:
+            if tc.function.name:
+                state["name"] = tc.function.name
+            if tc.function.arguments:
+                state["arguments"] += tc.function.arguments
+        return tool_calls_state
+
+    def _build_tool_calls(self, tool_calls_state: dict[int, dict[str, str]]) -> list[ChatCompletionMessageToolCall]:
+        return [
+            ChatCompletionMessageToolCall(
+                id=state["id"],
+                type="function",
+                function=Function(name=state["name"], arguments=state["arguments"]),
+            )
+            for _, state in sorted(tool_calls_state.items(), key=lambda item: item[0])
+            if state["name"]
+        ]
 
     async def close(self) -> None:
         if self.openai_client is None:
