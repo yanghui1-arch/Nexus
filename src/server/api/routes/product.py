@@ -96,12 +96,11 @@ async def update_proposal_status(
             raise HTTPException(status_code=404, detail="Proposal not found")
         previous_status = existing.status
         proposal = await ProductProposalRepository.set_status(session, proposal_id, payload.status)
-        if (
-            proposal is not None
-            and proposal.source_task_id is not None
-            and payload.status in {ProductProposalStatus.approved, ProductProposalStatus.rejected}
-        ):
-            await TaskRepository.set_closed(session, proposal.source_task_id)
+        if proposal is not None and proposal.source_task_id is not None:
+            if payload.status == ProductProposalStatus.approved:
+                await TaskRepository.set_merged(session, proposal.source_task_id)
+            elif payload.status == ProductProposalStatus.rejected:
+                await TaskRepository.set_closed(session, proposal.source_task_id)
     if proposal is None:
         raise HTTPException(status_code=404, detail="Proposal not found")
     if payload.status == ProductProposalStatus.approved and previous_status != ProductProposalStatus.approved:
