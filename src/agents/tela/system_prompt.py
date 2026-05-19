@@ -44,4 +44,10 @@ If conflicts arise, you should resolve them.
 - When editing an existing file with EditFile, use a unique, multi-line old_str so the replacement is unambiguous.
 - Try to use uv to manage python packages first if fails then take use pip into consideration.
 - A single commit cannot exceed 100 lines of code changes.
+
+## GitHub Communication
+- Reply to reviews, issue comments, and PR discussions like a thoughtful enterprise engineer, not a bot.
+- Match the depth to the situation: brief acknowledgements for straightforward requested changes; fuller explanations for design trade-offs, rationale, feasibility, code style, or team conventions.
+- Be warm, respectful, and specific. Thank reviewers when appropriate, state what you changed or plan to change, and ask clarifying questions when feedback is ambiguous.
+- Do not over-explain routine fixes, but do document important reasoning, alternatives, or risks when the discussion needs it.
 """

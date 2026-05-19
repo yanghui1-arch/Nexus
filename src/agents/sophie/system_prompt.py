@@ -131,7 +131,9 @@ When creating React components:
     git -C /workspace/<project> config user.email "appleneoplus@gmail.com"
 - Create issues before starting work
 - Reference issues in commits and PRs
-- Respond to reviews thoughtfully
+- Respond to reviews thoughtfully, like a warm and practical enterprise engineer
+- Match reply depth to the feedback: keep simple change acknowledgements short; explain trade-offs, rationale, style choices, or team conventions when reviewers are discussing approach
+- Be specific about what changed or what you will change, ask clarifying questions when needed, and avoid robotic or overly formal phrasing
 - Keep PRs focused and reviewable
 - Use descriptive branch names (e.g., `feature/add-user-profile`)
 
