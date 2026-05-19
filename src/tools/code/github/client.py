@@ -13,6 +13,12 @@ from src.tools.nexus import NexusTaskContext
 class GithubTools:
     """GitHub/git operations bound to a sandbox container."""
 
+    _CA_BUNDLE_CANDIDATES = (
+        "/etc/ssl/certs/ca-certificates.crt",
+        "/etc/pki/tls/certs/ca-bundle.crt",
+        "/etc/ssl/cert.pem",
+    )
+
     def __init__(
         self,
         sandbox: Sandbox,
@@ -20,6 +26,16 @@ class GithubTools:
     ) -> None:
         self._sandbox = sandbox
         self._nexus_task_context = nexus_task_context
+
+    def _git(self, git_cmd: str) -> str:
+        ca_bundle_expr = "for candidate in " + " ".join(self._CA_BUNDLE_CANDIDATES) + " ; do if [ -f \"$candidate\" ]; then printf '%s' \"$candidate\"; break; fi; done"
+        return (
+            f'ca_bundle="$({ca_bundle_expr})"; '
+            'if [ -n "$ca_bundle" ]; then '
+            'export GIT_SSL_CAINFO="$ca_bundle" SSL_CERT_FILE="$ca_bundle"; '
+            'fi; '
+            f"{git_cmd}"
+        )
 
     @track(step_type="tool")
     async def fetch_from_github(
@@ -45,7 +61,7 @@ class GithubTools:
 
         if "exists" in check.get("stdout", ""):
             remote_result = await self._sandbox.run_shell(
-                f"git -C '{local_path}' config --get remote.origin.url"
+                self._git(f"git -C '{local_path}' config --get remote.origin.url")
             )
             existing_remote = remote_result.get("stdout", "").strip()
             existing_remote_canonical = existing_remote
@@ -61,20 +77,24 @@ class GithubTools:
                 check = {"stdout": "new"}
             else:
                 result = await self._sandbox.run_shell(
-                    f"git -C '{local_path}' fetch --all && "
-                    f"git -C '{local_path}' checkout {branch} && "
-                    f"git -C '{local_path}' pull origin {branch}"
+                    self._git(
+                        f"git -C '{local_path}' fetch --all && "
+                        f"git -C '{local_path}' checkout {branch} && "
+                        f"git -C '{local_path}' pull origin {branch}"
+                    )
                 )
                 message = f"Pulled latest on branch '{branch}' at {local_path}"
 
         if "new" in check.get("stdout", ""):
             result = await self._sandbox.run_shell(
-                f"git clone --branch {branch} '{authenticated_url}' '{local_path}'"
+                self._git(f"git clone --branch {branch} '{authenticated_url}' '{local_path}'")
             )
             if result.get("success", False) and upstream_url:
                 await self._sandbox.run_shell(
-                    f"git -C '{local_path}' remote add upstream '{upstream_url}' 2>/dev/null || "
-                    f"git -C '{local_path}' remote set-url upstream '{upstream_url}'"
+                    self._git(
+                        f"git -C '{local_path}' remote add upstream '{upstream_url}' 2>/dev/null || "
+                        f"git -C '{local_path}' remote set-url upstream '{upstream_url}'"
+                    )
                 )
             message = f"Cloned '{repo_url}' (branch: {branch}) into {local_path}"
 
@@ -158,7 +178,7 @@ class GithubTools:
             if local_path
             else f"git push origin {push_branch}"
         )
-        result = await self._sandbox.run_shell(push_cmd)
+        result = await self._sandbox.run_shell(self._git(push_cmd))
         if result is None:
             return {
                 "success": False,

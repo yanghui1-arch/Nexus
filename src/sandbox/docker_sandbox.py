@@ -41,10 +41,10 @@ class SandboxConfig:
     init_commands: tuple[CommandConfig, ...] = ()  # shell commands run once after the container starts
 
 
-_GIT_INSTALL = CommandConfig(name="git", command="apt-get update && apt-get install -y --no-install-recommends git", type="install")
+_GIT_INSTALL = CommandConfig(name="git", command="apt-get update && apt-get install -y --no-install-recommends ca-certificates git", type="install")
 _NODE_REACT_SETUP = CommandConfig(
     name="node-react-setup",
-    command="apt-get update && apt-get install -y --no-install-recommends git && npm install -g tsx",
+    command="apt-get update && apt-get install -y --no-install-recommends ca-certificates git && npm install -g tsx",
     type="install",
 )
 
