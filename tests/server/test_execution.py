@@ -631,3 +631,83 @@ def test_release_workspace_keeps_binding_for_inactive_instance(monkeypatch):
     assert captured == {
         "agent_instance_id": "agent-id",
     }
+
+
+def test_execute_agent_task_treats_shutdown_as_redispatch(monkeypatch):
+    task = SimpleNamespace(id="task-id", status=TaskStatus.running, agent_instance_id="agent-id")
+    captured = {}
+
+    class FakeSessionContext:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, *args):
+            return None
+
+    class FakeDatabase:
+        def __init__(self):
+            self.connected = False
+            self.disconnected = False
+
+        async def connect(self):
+            self.connected = True
+
+        async def disconnect(self):
+            self.disconnected = True
+
+        def session(self):
+            return FakeSessionContext()
+
+    async def fake_load_task(database, task_id):
+        assert task_id == task.id
+        return task
+
+    async def fake_load_binding(database, task):
+        return SimpleNamespace(github_repo="owner/repo", project=None, workspace_key="workspace")
+
+    async def fake_set_workspace_running(*args, **kwargs):
+        return None
+
+    async def fake_claim_running(*args, **kwargs):
+        return True
+
+    async def fake_run_agent_workflow(**kwargs):
+        raise asyncio.CancelledError()
+
+    async def fake_release_workspace(*args, **kwargs):
+        return None
+
+    async def fake_mark_queued_for_redispatch(database, task_id):
+        captured["task_id"] = task_id
+        captured["error"] = None
+        task.status = TaskStatus.queued
+
+    async def fake_set_failed(*args, **kwargs):
+        raise AssertionError("shutdown should not mark task failed")
+
+    monkeypatch.setattr(execution, "_load_task", fake_load_task)
+    monkeypatch.setattr(execution, "_load_binding", fake_load_binding)
+    monkeypatch.setattr(execution, "_set_workspace_running", fake_set_workspace_running)
+    monkeypatch.setattr(execution, "_claim_running", fake_claim_running)
+    monkeypatch.setattr(execution, "_run_agent_workflow", fake_run_agent_workflow)
+    monkeypatch.setattr(execution, "_release_workspace", fake_release_workspace)
+    monkeypatch.setattr(execution, "_mark_queued_for_redispatch", fake_mark_queued_for_redispatch)
+    monkeypatch.setattr(execution.TaskRepository, "set_failed", fake_set_failed)
+
+    asyncio.run(
+        execution.execute_agent_task(
+            task_id=task.id,
+            settings=SimpleNamespace(database_url="sqlite+aiosqlite:///:memory:", task_dispatch_lease_seconds=5),
+            dispatch_token="dispatch-token",
+        )
+    )
+
+    assert captured == {"task_id": task.id, "error": None}
+    assert task.status == TaskStatus.queued
+
+
+def test_is_worker_shutdown_exception_detects_shutdown_signals():
+    assert execution._is_worker_shutdown_exception(asyncio.CancelledError()) is True
+    assert execution._is_worker_shutdown_exception(KeyboardInterrupt()) is True
+    assert execution._is_worker_shutdown_exception(SystemExit()) is True
+    assert execution._is_worker_shutdown_exception(RuntimeError()) is False
