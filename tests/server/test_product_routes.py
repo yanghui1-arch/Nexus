@@ -19,6 +19,7 @@ from src.server.postgres.models import (
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
     ProductProposalRepository,
+    TaskRepository,
 )
 
 
@@ -107,3 +108,46 @@ def test_approve_proposal_dispatches_planning_task(monkeypatch) -> None:
     assert "Answer: Build RAG in small slices." in payload.question
     assert payload.repo == "owner/repo"
     assert payload.project == "nexus"
+
+
+def test_approve_proposal_closes_source_pm_task(monkeypatch) -> None:
+    proposal_id = uuid.uuid4()
+    source_task_id = uuid.uuid4()
+    approved = _proposal(
+        id=proposal_id,
+        status=ProductProposalStatus.approved,
+        source_task_id=source_task_id,
+    )
+    captured = {}
+    runner = SimpleNamespace(submit_task=AsyncMock(return_value=uuid.uuid4()))
+
+    async def fake_get(session, pid):
+        return _proposal(id=pid, status=ProductProposalStatus.proposed)
+
+    async def fake_set_status(session, pid, status):
+        return approved
+
+    async def fake_set_closed(session, task_id):
+        captured["closed_task_id"] = task_id
+        return SimpleNamespace(id=task_id)
+
+    async def fake_list_marc(session, *, agent, limit):
+        return [SimpleNamespace(id=uuid.uuid4())]
+
+    monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
+    monkeypatch.setattr(ProductProposalRepository, "set_status", fake_set_status)
+    monkeypatch.setattr(TaskRepository, "set_closed", fake_set_closed)
+    monkeypatch.setattr(AgentInstanceRepository, "list_by_active_task_load", fake_list_marc)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(runner=runner))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.patch(
+                f"/v1/product/proposals/{proposal_id}/status",
+                json={"status": "approved"},
+            )
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 200
+    assert captured["closed_task_id"] == source_task_id
