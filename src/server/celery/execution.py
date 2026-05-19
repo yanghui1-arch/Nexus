@@ -46,7 +46,13 @@ _WORK_ITEM_REVIEW_READY_STATUSES = {
     TaskWorkItemStatus.approved,
     TaskWorkItemStatus.closed,
 }
-_WORKER_INTERRUPTED_EXCEPTIONS = (asyncio.CancelledError, Terminated, WorkerShutdown, WorkerTerminate)
+_WORKER_INTERRUPTED_EXCEPTIONS = (
+    asyncio.CancelledError,
+    KeyboardInterrupt,
+    Terminated,
+    WorkerShutdown,
+    WorkerTerminate,
+)
 
 
 @dataclass(frozen=True)
@@ -194,9 +200,8 @@ async def execute_agent_task(
             "Task %s worker execution was interrupted by shutdown/termination; "
             "leaving task state unchanged for recovery.",
             task_id,
-            exc_info=True,
         )
-        raise
+        return
     except Exception as exc:
         logger.exception("Task %s failed in worker", task_id)
         await _mark_failed(database, task_id, str(exc))

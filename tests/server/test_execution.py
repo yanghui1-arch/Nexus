@@ -2,6 +2,8 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import src.server.celery.tasks as celery_tasks
+
 from src.agents.base.agent import BaseAgentResponse
 from src.server.celery import execution
 from src.server.postgres.models import GithubPullRequestFeedbackKind, TaskCategory, TaskStatus, TaskWorkItemStatus
@@ -682,17 +684,29 @@ def test_execute_agent_task_does_not_mark_worker_termination_failed(monkeypatch)
     monkeypatch.setattr(execution, "_mark_failed", fake_mark_failed)
     monkeypatch.setattr(execution, "_release_workspace", fake_noop)
 
-    try:
-        asyncio.run(
-            execution.execute_agent_task(
-                task_id=task_id,
-                settings=SimpleNamespace(database_url="postgresql://test", task_dispatch_lease_seconds=30),
-                dispatch_token="token",
-            )
+    asyncio.run(
+        execution.execute_agent_task(
+            task_id=task_id,
+            settings=SimpleNamespace(database_url="postgresql://test", task_dispatch_lease_seconds=30),
+            dispatch_token="token",
         )
-    except execution.Terminated:
-        pass
-    else:
-        raise AssertionError("worker termination should be re-raised")
+    )
 
     assert calls == []
+
+
+def test_run_agent_task_swallows_keyboard_interrupt(monkeypatch):
+    calls = []
+
+    async def fake_execute_agent_task(**kwargs):
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(celery_tasks, "execute_agent_task", fake_execute_agent_task)
+    monkeypatch.setattr(celery_tasks.asyncio, "run", lambda coro: asyncio.get_event_loop().run_until_complete(coro))
+    monkeypatch.setattr(celery_tasks.logger, "warning", lambda *args, **kwargs: calls.append((args, kwargs)))
+    monkeypatch.setattr(celery_tasks.logger, "exception", lambda *args, **kwargs: calls.append((args, kwargs)))
+
+    celery_tasks.run_agent_task("task-id", dispatch_token="token")
+
+    assert len(calls) == 1
+    assert "interrupted" in calls[0][0][0]
