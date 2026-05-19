@@ -139,9 +139,11 @@ class Tela(CodeAgent):
 
         stream_result = await self._create_chat_completion_stream(kwargs)
         message = stream_result.message
+        if stream_result.finish_reason is None:
+            raise ValueError("Tela stream completion missing finish_reason.")
 
         return BaseAgentStepResult(
-            finish_reason=stream_result.finish_reason or "stop",
+            finish_reason=stream_result.finish_reason,
             reasoning=stream_result.reasoning,
             completion_content=message.content,
             tool_calls=message.tool_calls or None,
