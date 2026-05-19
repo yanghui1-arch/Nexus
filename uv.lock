@@ -3,6 +3,15 @@ revision = 3
 requires-python = ">=3.12"
 
 [[package]]
+name = "aiosqlite"
+version = "0.22.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/4e/8a/64761f4005f17809769d23e518d915db74e6310474e733e3593cfc854ef1/aiosqlite-0.22.1.tar.gz", hash = "sha256:043e0bd78d32888c0a9ca90fc788b38796843360c855a7262a532813133a0650", size = 14821, upload-time = "2025-12-23T19:25:43.997Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/00/b7/e3bf5133d697a08128598c8d0abc5e16377b51465a33756de24fa7dee953/aiosqlite-0.22.1-py3-none-any.whl", hash = "sha256:21c002eb13823fad740196c5a2e9d8e62f6243bd9e7e4a1f87fb5e44ecb4fceb", size = 17405, upload-time = "2025-12-23T19:25:42.139Z" },
+]
+
+[[package]]
 name = "amqp"
 version = "5.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -852,7 +861,7 @@ wheels = [
 
 [[package]]
 name = "mwin"
-version = "0.2.4"
+version = "0.2.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -862,9 +871,9 @@ dependencies = [
     { name = "requests" },
     { name = "uuid6" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e6/1d/493d4ac1d5abda414a1b63a9715a02ce2b8a14a4f03e961526185e980a30/mwin-0.2.4.tar.gz", hash = "sha256:b8c71c1a0f297e87be4896bb28a44c5a861c6fcb53cd2af943abe5576b7805dc", size = 39565, upload-time = "2026-04-14T06:55:45.37Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/63/f3/e6dcca7343609578e1770967ffeb547f56f095f37b6554436b1371fba17d/mwin-0.2.5.tar.gz", hash = "sha256:1e96a82aa560d42c2e10bbe5170a2306aa4869c9e0a640db9e451cf2ce6865a9", size = 34586, upload-time = "2026-05-19T13:20:03.975Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5c/3a/96f16b03b78c04d05ac1ad54f9e565b28f0b90239c81519dc8b16e6b2973/mwin-0.2.4-py3-none-any.whl", hash = "sha256:db690860377351aacce69422b07e1e68402131d22b576ab97b7433b2642a2b4e", size = 48916, upload-time = "2026-04-14T06:55:42.06Z" },
+    { url = "https://files.pythonhosted.org/packages/09/a2/1b12b0c70b4a15aaa9f1eb07608410515ae646b52942837f01677304e42b/mwin-0.2.5-py3-none-any.whl", hash = "sha256:1ff017d6ab6ec874ac15075fa5a1d7e20330ceea0d2c719dde9bb942e8e7848f", size = 44492, upload-time = "2026-05-19T13:20:02.215Z" },
 ]
 
 [[package]]
@@ -890,6 +899,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "aiosqlite" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
@@ -914,6 +924,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "aiosqlite", specifier = ">=0.20.0" },
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
 ]

@@ -5,12 +5,12 @@ from unittest.mock import AsyncMock
 from src.agents.base.agent import BaseAgentResponse
 from src.server.celery import execution
 from src.server.postgres.models import GithubPullRequestFeedbackKind, TaskCategory, TaskStatus, TaskWorkItemStatus
-from src.server.postgres.repositories import TaskWorkItemRepository, VirtualPullRequestRepository
+from src.server.postgres.repositories import TaskWorkItemRepository
 
 
 class FakeAgent:
     def __init__(self) -> None:
-        self.work = AsyncMock(return_value=BaseAgentResponse(response="done", sop=None))
+        self.work = AsyncMock(return_value=BaseAgentResponse(response="done"))
         self.closed = False
         self.enter_count = 0
         self.exit_count = 0
@@ -190,7 +190,7 @@ def test_run_code_agent_workflow_small_task_passthrough(monkeypatch):
 
     async def fake_run_agent(**kwargs):
         calls.append(kwargs)
-        return BaseAgentResponse(response="final pr opened", sop=None)
+        return BaseAgentResponse(response="final pr opened")
 
     async def empty_checkpoint(database, task_id):
         assert task_id == task.id
@@ -269,17 +269,11 @@ def test_run_agent_workflow_pauses_when_work_item_is_ready(monkeypatch):
     async def get_item(session, work_item_id):
         return ready_item
 
-    async def get_virtual_pr(session, work_item_id):
-        return SimpleNamespace(id="virtual-pr-id")
-
-    async def list_reviews(session, virtual_pr_id):
-        return []
-
     async def fake_run_agent(**kwargs):
         assert "finish_current_task_work_item" in kwargs["question"]
         assert "final executable work item" in kwargs["question"]
         state["ready"] = True
-        return BaseAgentResponse(response="ready", sop=None)
+        return BaseAgentResponse(response="ready")
 
     async def empty_checkpoint(database, task_id):
         assert task_id == task.id
@@ -294,8 +288,6 @@ def test_run_agent_workflow_pauses_when_work_item_is_ready(monkeypatch):
     monkeypatch.setattr(TaskWorkItemRepository, "get_next_for_execution", next_item)
     monkeypatch.setattr(TaskWorkItemRepository, "set_running", set_running)
     monkeypatch.setattr(TaskWorkItemRepository, "get", get_item)
-    monkeypatch.setattr(VirtualPullRequestRepository, "get_by_work_item", get_virtual_pr)
-    monkeypatch.setattr(VirtualPullRequestRepository, "list_reviews_by_virtual_pr", list_reviews)
     monkeypatch.setattr(execution, "_build_agent", lambda **_: fake_agent)
     monkeypatch.setattr(execution, "_run_agent", fake_run_agent)
     monkeypatch.setattr(execution, "_get_latest_checkpoint", empty_checkpoint)
@@ -379,12 +371,6 @@ def test_run_agent_workflow_keeps_checkpoint_between_work_items(monkeypatch):
     async def get_item(session, work_item_id):
         return _ready_item(next(item for item in pending_items if item.id == work_item_id))
 
-    async def get_virtual_pr(session, work_item_id):
-        return SimpleNamespace(id=f"virtual-pr-{work_item_id}")
-
-    async def list_reviews(session, virtual_pr_id):
-        return []
-
     async def fake_run_agent(**kwargs):
         work_item_id = kwargs["agent"].nexus_task_context.current_work_item_id
         calls.append(
@@ -398,7 +384,7 @@ def test_run_agent_workflow_keeps_checkpoint_between_work_items(monkeypatch):
         ready_ids.add(work_item_id)
         if work_item_id == "item-1":
             task.checkpoint = [{"role": "assistant", "content": "first item finished"}]
-        return BaseAgentResponse(response=f"{work_item_id} ready", sop=None)
+        return BaseAgentResponse(response=f"{work_item_id} ready")
 
     async def latest_checkpoint(database, task_id):
         assert task_id == task.id
@@ -413,8 +399,6 @@ def test_run_agent_workflow_keeps_checkpoint_between_work_items(monkeypatch):
     monkeypatch.setattr(TaskWorkItemRepository, "get_next_for_execution", next_item)
     monkeypatch.setattr(TaskWorkItemRepository, "set_running", set_running)
     monkeypatch.setattr(TaskWorkItemRepository, "get", get_item)
-    monkeypatch.setattr(VirtualPullRequestRepository, "get_by_work_item", get_virtual_pr)
-    monkeypatch.setattr(VirtualPullRequestRepository, "list_reviews_by_virtual_pr", list_reviews)
     monkeypatch.setattr(execution, "_build_agent", lambda **_: fake_agent)
     monkeypatch.setattr(execution, "_run_agent", fake_run_agent)
     monkeypatch.setattr(execution, "_get_latest_checkpoint", latest_checkpoint)
@@ -539,7 +523,7 @@ def test_run_agent_workflow_processes_github_feedback_from_checkpoint(monkeypatc
 
     async def fake_run_agent(**kwargs):
         captured["run"] = kwargs
-        return BaseAgentResponse(response="replied", sop=None)
+        return BaseAgentResponse(response="replied")
 
     monkeypatch.setattr(execution, "_claim_pending_github_feedback", claim_feedback)
     monkeypatch.setattr(execution, "_mark_github_feedback_processed", mark_processed)
@@ -575,24 +559,20 @@ def test_run_agent_workflow_processes_github_feedback_from_checkpoint(monkeypatc
     assert fake_agent.close_count == 1
 
 
-def test_mark_post_execution_wait_state_restores_waiting_for_merge(monkeypatch):
+def test_mark_post_execution_wait_state_restores_waiting_for_review(monkeypatch):
     task_id = "task-id"
     captured = {}
 
     async def fake_get(session, requested_task_id):
         assert requested_task_id == task_id
-        return SimpleNamespace(id=task_id, status=TaskStatus.waiting_for_review, resume_status=TaskStatus.waiting_for_merge)
+        return SimpleNamespace(id=task_id, status=TaskStatus.waiting_for_review, resume_status=None)
 
-    async def fake_waiting_for_merge(session, requested_task_id, *, result):
+    async def fake_waiting_for_review(session, requested_task_id, *, result):
         captured["task_id"] = requested_task_id
         captured["result"] = result
 
-    async def fail_waiting_for_review(session, requested_task_id, *, result):
-        raise AssertionError("waiting_for_review should not be used when resume_status is waiting_for_merge")
-
     monkeypatch.setattr(execution.TaskRepository, "get", fake_get)
-    monkeypatch.setattr(execution.TaskRepository, "set_waiting_for_merge", fake_waiting_for_merge)
-    monkeypatch.setattr(execution.TaskRepository, "set_waiting_for_review", fail_waiting_for_review)
+    monkeypatch.setattr(execution.TaskRepository, "set_waiting_for_review", fake_waiting_for_review)
 
     asyncio.run(
         execution._mark_post_execution_wait_state(

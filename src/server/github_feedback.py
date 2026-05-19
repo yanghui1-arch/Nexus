@@ -12,11 +12,14 @@ from src.logger import logger
 from src.server.config import Settings
 from src.server.postgres.database import Database
 from src.server.postgres.models import (
+    FeatureItemStatus,
     GithubPullRequestFeedbackKind,
     GithubPullRequestFeedbackStatus,
     TaskRecord,
+    TaskStatus,
 )
 from src.server.postgres.repositories import (
+    FeatureItemRepository,
     GithubPullRequestFeedbackRepository,
     TaskRepository,
 )
@@ -159,7 +162,48 @@ class GithubFeedbackPoller:
             return 0
 
         pull_request = await self._fetch_pull_request(client, token, task.repo, pull_request_number)
-        if not pull_request or pull_request.get("state") != "open" or pull_request.get("merged_at"):
+        if not pull_request:
+            return 0
+
+        if task.status == TaskStatus.waiting_for_review:
+            # Once a reviewable task is backed by a real GitHub PR, GitHub becomes the
+            # source of truth for terminal PR outcomes:
+            # - merged PR -> merged task
+            # - closed but unmerged PR -> closed task
+            #
+            # We intentionally do not auto-manage intermediate review states here anymore.
+            if pull_request.get("merged_at"):
+                async with self._database.session() as session:
+                    updated = await TaskRepository.set_merged(session, task.id)
+                    if updated is not None:
+                        # The poller owns the GitHub PR -> product workflow mapping. Once a PR is
+                        # merged, any linked feature item should be persisted as completed too.
+                        await FeatureItemRepository.set_status_by_task_id(
+                            session,
+                            task.id,
+                            status=FeatureItemStatus.completed,
+                            updated_at=updated.updated_at,
+                        )
+                if updated is not None:
+                    logger.info("Synced task %s review status from %s to merged.", task.id, task.status.value)
+                return 0
+
+            if pull_request.get("state") == "closed":
+                async with self._database.session() as session:
+                    updated = await TaskRepository.set_closed(session, task.id)
+                    if updated is not None:
+                        # A closed-but-unmerged PR is a terminal outcome for the linked feature item too.
+                        await FeatureItemRepository.set_status_by_task_id(
+                            session,
+                            task.id,
+                            status=FeatureItemStatus.closed,
+                            updated_at=updated.updated_at,
+                        )
+                if updated is not None:
+                    logger.info("Synced task %s review status from %s to closed.", task.id, task.status.value)
+                return 0
+
+        if pull_request.get("state") != "open" or pull_request.get("merged_at"):
             return 0
 
         viewer_login = await self._resolve_viewer_login(client, token)
@@ -169,6 +213,9 @@ class GithubFeedbackPoller:
             task.repo,
             pull_request_number,
         )
+        conflict_item = _build_pr_merge_conflict_item(pull_request, pull_request_number)
+        if conflict_item is not None:
+            feedback_items.append(conflict_item)
 
         discovered_count = 0
         async with self._database.session() as session:
@@ -221,7 +268,7 @@ class GithubFeedbackPoller:
                 )
 
         return discovered_count
-
+    
     async def _resolve_viewer_login(
         self,
         client: httpx.AsyncClient,
@@ -421,6 +468,37 @@ def _build_pr_review_comment_items(payloads: list[dict[str, Any]]) -> list[_Gith
             )
         )
     return items
+
+
+def _build_pr_merge_conflict_item(
+    pull_request: dict[str, Any],
+    pull_request_number: int,
+) -> _GithubFeedbackItem | None:
+    mergeable_state = _normalize_text(pull_request.get("mergeable_state"))
+    mergeable = pull_request.get("mergeable")
+    if mergeable is not False and mergeable_state not in {"dirty", "unknown"}:
+        return None
+
+    body = (
+        f"Pull request #{pull_request_number} is currently not mergeable "
+        f"(mergeable_state={mergeable_state}). Please sync with the base branch, "
+        "resolve merge conflicts, commit the resolution, and push the existing PR branch again."
+    )
+    return _GithubFeedbackItem(
+        kind=GithubPullRequestFeedbackKind.pr_merge_conflict,
+        external_id=pull_request_number,
+        author="github",
+        body=body,
+        review_state=mergeable_state,
+        file_path=None,
+        line=None,
+        original_line=None,
+        commit_id=_normalize_text(pull_request.get("head", {}).get("sha")),
+        html_url=pull_request.get("html_url"),
+        created_at=_parse_github_datetime(pull_request.get("updated_at")),
+        updated_at=_parse_github_datetime(pull_request.get("updated_at")),
+        payload=pull_request,
+    )
 
 
 def _user_login(payload: Any) -> str | None:

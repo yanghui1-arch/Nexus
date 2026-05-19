@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -30,14 +31,13 @@ import src.server.api.routes.tasks as tasks_routes
 from src.server.api.routes.tasks import router as tasks_router
 from src.server.postgres.models import (
     AgentName,
+    TaskCategory,
     TaskStatus,
     TaskWorkItemStatus,
-    VirtualPullRequestLineSide,
 )
 from src.server.postgres.repositories import (
     TaskRepository,
     TaskWorkItemRepository,
-    _extract_code_snapshot,
 )
 
 
@@ -59,35 +59,12 @@ def _build_app(session_obj: object | None = None, runner_obj: object | None = No
     return app
 
 
-def test_extract_code_snapshot_from_virtual_pr_diff() -> None:
-    raw_diff = (
-        'diff --git a/src/file.py b/src/file.py\n'
-        '--- a/src/file.py\n'
-        '+++ b/src/file.py\n'
-        '@@ -1,3 +1,4 @@\n'
-        ' keep old\n'
-        '-remove me\n'
-        '+add me\n'
-        '+add also\n'
-        ' keep tail\n'
-    )
-
-    snapshot = _extract_code_snapshot(
-        raw_diff,
-        file_path='src/file.py',
-        start_line=2,
-        end_line=3,
-        line_side=VirtualPullRequestLineSide.new,
-    )
-
-    assert snapshot == '+add me\n+add also'
-
-
 def _make_task(
     *,
     question: str,
     status: TaskStatus,
     created_at: datetime,
+    category: TaskCategory = TaskCategory.coding,
     repo: str = 'owner/repo',
     project: str | None = 'workspace',
     agent: AgentName = AgentName.sophie,
@@ -97,13 +74,14 @@ def _make_task(
     started_at = created_at + timedelta(minutes=1)
     finished_at = (
         None
-        if status in {TaskStatus.queued, TaskStatus.running, TaskStatus.waiting_for_review, TaskStatus.waiting_for_merge}
+        if status in {TaskStatus.queued, TaskStatus.running, TaskStatus.waiting_for_review}
         else created_at + timedelta(minutes=4)
     )
     return SimpleNamespace(
         id=uuid.uuid4(),
         agent=agent,
         agent_instance_id=agent_instance_id or uuid.uuid4(),
+        category=category,
         question=question,
         repo=repo,
         project=project,
@@ -166,6 +144,7 @@ def test_list_tasks_returns_newest_first(monkeypatch: pytest.MonkeyPatch) -> Non
         'id',
         'agent',
         'agent_instance_id',
+        'category',
         'question',
         'repo',
         'project',
@@ -181,6 +160,49 @@ def test_list_tasks_returns_newest_first(monkeypatch: pytest.MonkeyPatch) -> Non
     }
 
 
+def test_create_task_returns_category_from_persisted_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = datetime.now(timezone.utc)
+    created_task = _make_task(
+        question='ship a coding task',
+        status=TaskStatus.queued,
+        category=TaskCategory.coding,
+        created_at=now,
+    )
+    runner = SimpleNamespace(submit_task=AsyncMock(return_value=created_task.id))
+
+    async def fake_get(session, task_id):
+        assert task_id == created_task.id
+        return created_task
+
+    monkeypatch.setattr(TaskRepository, 'get', fake_get)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(runner_obj=runner))
+        async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
+            return await client.post(
+                '/v1/tasks',
+                json={
+                    'agent_instance_id': str(created_task.agent_instance_id),
+                    'agent': created_task.agent.value,
+                    'question': created_task.question,
+                    'repo': created_task.repo,
+                    'project': created_task.project,
+                    'external_issue_url': None,
+                },
+            )
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 202
+    assert response.json() == {
+        'task_id': str(created_task.id),
+        'agent_instance_id': str(created_task.agent_instance_id),
+        'category': created_task.category.value,
+        'status': TaskStatus.queued.value,
+    }
+    runner.submit_task.assert_awaited_once()
+
+
 def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch) -> None:
     session_obj = object()
     app = _build_app(session_obj)
@@ -188,7 +210,7 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
     agent_instance_id = uuid.uuid4()
     expected_task = _make_task(
         question='filtered task',
-        status=TaskStatus.waiting_for_merge,
+        status=TaskStatus.waiting_for_review,
         created_at=now,
         repo='owner/nexus',
         project='web',
@@ -210,7 +232,8 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
                 '/v1/tasks',
                 params={
                     'agent_instance_id': str(agent_instance_id),
-                    'status': 'waiting_for_merge',
+                    'status': 'waiting_for_review',
+                    'category': 'coding',
                     'repo': 'owner/nexus',
                     'project': 'web',
                     'limit': '10',
@@ -225,6 +248,7 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
             'id': str(expected_task.id),
             'agent': expected_task.agent.value,
             'agent_instance_id': str(expected_task.agent_instance_id),
+            'category': expected_task.category.value,
             'question': expected_task.question,
             'repo': expected_task.repo,
             'project': expected_task.project,
@@ -242,7 +266,8 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
     assert captured == {
         'session': session_obj,
         'agent_instance_id': agent_instance_id,
-        'status': TaskStatus.waiting_for_merge,
+        'status': TaskStatus.waiting_for_review,
+        'category': TaskCategory.coding,
         'repo': 'owner/nexus',
         'project': 'web',
         'limit': 10,
@@ -373,12 +398,14 @@ def test_update_task_status_reopens_closed_task_for_review(monkeypatch: pytest.M
     assert captured['waiting_for_review_result'] is None
 
 
-def test_update_task_status_reopens_closed_task_for_merge(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_update_task_status_reopens_closed_task_for_review_when_work_items_are_all_approved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     now = datetime.now(timezone.utc)
     task = _make_task(question='reopen merge task', status=TaskStatus.closed, created_at=now)
     reopened_task = _make_task(
         question='reopen merge task',
-        status=TaskStatus.waiting_for_merge,
+        status=TaskStatus.waiting_for_review,
         created_at=now,
     )
     reopened_task.id = task.id
@@ -395,14 +422,14 @@ def test_update_task_status_reopens_closed_task_for_merge(monkeypatch: pytest.Mo
             SimpleNamespace(id=uuid.uuid4(), status=TaskWorkItemStatus.approved),
         ]
 
-    async def fake_set_waiting_for_merge(session, task_id, **kwargs):
-        captured['waiting_for_merge_task_id'] = task_id
-        captured['waiting_for_merge_result'] = kwargs.get('result')
+    async def fake_set_waiting_for_review(session, task_id, **kwargs):
+        captured['waiting_for_review_task_id'] = task_id
+        captured['waiting_for_review_result'] = kwargs.get('result')
         return reopened_task
 
     monkeypatch.setattr(TaskRepository, 'get', fake_get_task)
     monkeypatch.setattr(TaskWorkItemRepository, 'list_by_task', fake_list_work_items)
-    monkeypatch.setattr(TaskRepository, 'set_waiting_for_merge', fake_set_waiting_for_merge)
+    monkeypatch.setattr(TaskRepository, 'set_waiting_for_review', fake_set_waiting_for_review)
 
     async def run_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=_build_app())
@@ -415,9 +442,9 @@ def test_update_task_status_reopens_closed_task_for_merge(monkeypatch: pytest.Mo
     response = asyncio.run(run_request())
 
     assert response.status_code == 200
-    assert response.json()['status'] == 'waiting_for_merge'
-    assert captured['waiting_for_merge_task_id'] == task.id
-    assert captured['waiting_for_merge_result'] is None
+    assert response.json()['status'] == 'waiting_for_review'
+    assert captured['waiting_for_review_task_id'] == task.id
+    assert captured['waiting_for_review_result'] is None
 
 
 def test_consult_task_returns_process_reply(monkeypatch: pytest.MonkeyPatch) -> None:

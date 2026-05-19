@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import re
 import uuid
+from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
@@ -14,13 +14,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.server.postgres.models import (
     AgentInstanceRecord,
     AgentName,
-    TaskCategory,
-    ProductProposalRecord,
-    ProductProposalStatus,
+    AgentPurchaseRecord,
+    AuthSessionRecord,
     FeatureItemRecord,
     FeatureItemStatus,
     FeatureRecord,
     FeatureStatus,
+    ProductProposalRecord,
+    ProductProposalStatus,
+    TaskCategory,
     GithubPullRequestFeedbackKind,
     GithubPullRequestFeedbackRecord,
     GithubPullRequestFeedbackStatus,
@@ -28,15 +30,7 @@ from src.server.postgres.models import (
     TaskStatus,
     TaskWorkItemRecord,
     TaskWorkItemStatus,
-    VirtualPullRequestCommentRecord,
-    VirtualPullRequestLineSide,
-    VirtualPullRequestRecord,
-    VirtualPullRequestReviewDecision,
-    VirtualPullRequestReviewRecord,
-    VirtualPullRequestStatus,
-    VirtualPullRequestThreadKind,
-    VirtualPullRequestThreadRecord,
-    VirtualPullRequestThreadStatus,
+    UserRecord,
     WorkspaceRecord,
     WorkspaceStatus,
 )
@@ -44,91 +38,6 @@ from src.server.postgres.models import (
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-_HUNK_HEADER_RE = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@")
-
-
-def _normalize_diff_path(value: str) -> str | None:
-    trimmed = value.strip()
-    if not trimmed or trimmed == "/dev/null":
-        return None
-    if trimmed.startswith(("a/", "b/")):
-        return trimmed[2:]
-    return trimmed
-
-
-def _diff_file_matches(file_path: str, old_path: str | None, new_path: str | None) -> bool:
-    if old_path and new_path and old_path != new_path:
-        display_path = f"{old_path} \u2192 {new_path}"
-    else:
-        display_path = new_path or old_path
-
-    candidates = [path for path in (old_path, new_path, display_path) if path]
-    return any(candidate == file_path or candidate.endswith(file_path) for candidate in candidates)
-
-
-def _extract_code_snapshot(
-    raw_diff: str | None,
-    *,
-    file_path: str | None,
-    start_line: int | None,
-    end_line: int | None,
-    line_side: VirtualPullRequestLineSide | None,
-) -> str | None:
-    if not raw_diff or not file_path or start_line is None or line_side is None:
-        return None
-
-    lower_line = min(start_line, end_line or start_line)
-    upper_line = max(start_line, end_line or start_line)
-    captured: list[str] = []
-    old_path: str | None = None
-    new_path: str | None = None
-    old_line_number = 0
-    new_line_number = 0
-    in_target_file = False
-
-    def capture(line_number: int | None, raw_line: str) -> None:
-        if line_number is not None and lower_line <= line_number <= upper_line:
-            captured.append(raw_line)
-
-    for line in raw_diff.replace("\r\n", "\n").split("\n"):
-        if line.startswith("diff --git "):
-            parts = line.split(" ")
-            old_path = _normalize_diff_path(parts[2]) if len(parts) > 2 else None
-            new_path = _normalize_diff_path(parts[3]) if len(parts) > 3 else None
-            in_target_file = False
-            continue
-        if line.startswith("--- "):
-            old_path = _normalize_diff_path(line[4:])
-            continue
-        if line.startswith("+++ "):
-            new_path = _normalize_diff_path(line[4:])
-            continue
-        if line.startswith("@@ "):
-            match = _HUNK_HEADER_RE.match(line)
-            old_line_number = int(match.group(1)) if match else 0
-            new_line_number = int(match.group(2)) if match else 0
-            in_target_file = _diff_file_matches(file_path, old_path, new_path)
-            continue
-        if not in_target_file:
-            continue
-
-        if line.startswith("+") and not line.startswith("+++"):
-            capture(new_line_number if line_side == VirtualPullRequestLineSide.new else None, line)
-            new_line_number += 1
-            continue
-        if line.startswith("-") and not line.startswith("---"):
-            capture(old_line_number if line_side == VirtualPullRequestLineSide.old else None, line)
-            old_line_number += 1
-            continue
-        if line.startswith(" "):
-            line_number = new_line_number if line_side == VirtualPullRequestLineSide.new else old_line_number
-            capture(line_number, line)
-            old_line_number += 1
-            new_line_number += 1
-
-    return "\n".join(captured) if captured else None
 
 
 class AgentInstanceRepository:
@@ -143,7 +52,6 @@ class AgentInstanceRepository:
             TaskStatus.queued,
             TaskStatus.running,
             TaskStatus.waiting_for_review,
-            TaskStatus.waiting_for_merge,
         ]
         load_query = (
             select(
@@ -222,7 +130,6 @@ class AgentInstanceRepository:
                         TaskStatus.queued,
                         TaskStatus.running,
                         TaskStatus.waiting_for_review,
-                        TaskStatus.waiting_for_merge,
                     ]
                 ),
             )
@@ -452,6 +359,35 @@ class ProductProposalRepository:
         await session.refresh(proposal)
         return proposal
 
+    @staticmethod
+    async def sync_status_from_features(
+        session: AsyncSession,
+        proposal_id: uuid.UUID,
+    ) -> ProductProposalRecord | None:
+        # Proposal completion is derived from its linked features rather than set directly.
+        proposal = await session.get(ProductProposalRecord, proposal_id)
+        if proposal is None:
+            return None
+        if proposal.status == ProductProposalStatus.rejected:
+            return proposal
+
+        result = await session.execute(
+            select(FeatureRecord.status).where(FeatureRecord.proposal_id == proposal_id)
+        )
+        feature_statuses = list(result.scalars().all())
+        if not feature_statuses:
+            return proposal
+
+        next_status = (
+            ProductProposalStatus.completed
+            if all(status in {FeatureStatus.completed, FeatureStatus.closed} for status in feature_statuses)
+            else ProductProposalStatus.planned
+        )
+        if proposal.status != next_status:
+            proposal.status = next_status
+            proposal.updated_at = utc_now()
+        return proposal
+
 
 class FeatureRepository:
     @staticmethod
@@ -481,49 +417,6 @@ class FeatureRepository:
         await session.refresh(feature)
         return feature
 
-    @staticmethod
-    async def create_with_items(
-        session: AsyncSession,
-        *,
-        proposal_id: uuid.UUID | None,
-        title: str,
-        description: str,
-        project: str | None,
-        items: list[dict[str, str]],
-    ) -> tuple[FeatureRecord, list[FeatureItemRecord]]:
-        feature = FeatureRecord(
-            proposal_id=proposal_id,
-            title=title,
-            description=description,
-            project=project,
-            status=FeatureStatus.planned,
-        )
-        session.add(feature)
-        await session.flush()
-        feature_items = [
-            FeatureItemRecord(
-                feature_id=feature.id,
-                order_index=index,
-                title=item["title"],
-                description=item["description"],
-                status=FeatureItemStatus.pending,
-            )
-            for index, item in enumerate(items, start=1)
-        ]
-        session.add_all(feature_items)
-        await session.flush()
-        if proposal_id is not None:
-            proposal = await session.get(ProductProposalRecord, proposal_id)
-            if proposal is not None:
-                proposal.status = ProductProposalStatus.planned
-                proposal.updated_at = utc_now()
-        await session.commit()
-        await session.refresh(feature)
-        for item in feature_items:
-            await session.refresh(item)
-        return feature, feature_items
-
-    @staticmethod
     async def get(session: AsyncSession, feature_id: uuid.UUID) -> FeatureRecord | None:
         return await session.get(FeatureRecord, feature_id)
 
@@ -545,18 +438,34 @@ class FeatureRepository:
         return list(result.scalars().all())
 
     @staticmethod
-    async def set_status(
+    async def sync_status_from_items(
         session: AsyncSession,
         feature_id: uuid.UUID,
-        status: FeatureStatus,
     ) -> FeatureRecord | None:
         feature = await session.get(FeatureRecord, feature_id)
         if feature is None:
             return None
-        feature.status = status
-        feature.updated_at = utc_now()
-        await session.commit()
-        await session.refresh(feature)
+
+        result = await session.execute(
+            select(FeatureItemRecord.status).where(FeatureItemRecord.feature_id == feature_id)
+        )
+        item_statuses = list(result.scalars().all())
+        if not item_statuses:
+            return feature
+
+        next_status = (
+            FeatureStatus.completed
+            if all(status in {FeatureItemStatus.completed, FeatureItemStatus.closed} for status in item_statuses)
+            else FeatureStatus.in_progress
+            if any(status == FeatureItemStatus.in_progress for status in item_statuses)
+            else FeatureStatus.planned
+        )
+        if feature.status != next_status:
+            feature.status = next_status
+            feature.updated_at = utc_now()
+        if feature.proposal_id is not None:
+            # Feature-item progress rolls the parent feature forward, which can also advance the parent proposal.
+            await ProductProposalRepository.sync_status_from_features(session, feature.proposal_id)
         return feature
 
 
@@ -636,11 +545,12 @@ class FeatureItemRepository:
             )
             .returning(FeatureItemRecord)
         )
-        result: CursorResult[Any] = cast(CursorResult[Any], await session.execute(stmt))
+        result = await session.execute(stmt)
         item = result.scalar_one_or_none()
         if item is None:
             await session.rollback()
             return None
+        await FeatureRepository.sync_status_from_items(session, item.feature_id)
         await session.commit()
         return item
 
@@ -666,6 +576,8 @@ class FeatureItemRepository:
             status=FeatureItemStatus.pending,
         )
         session.add(item)
+        await session.flush()
+        await FeatureRepository.sync_status_from_items(session, feature_id)
         await session.commit()
         await session.refresh(item)
         return item
@@ -680,24 +592,30 @@ class FeatureItemRepository:
         result = await session.execute(query)
         return list(result.scalars().all())
 
-    @staticmethod
-    async def set_status(
+    async def set_status_by_task_id(
         session: AsyncSession,
-        item_id: uuid.UUID,
+        task_id: uuid.UUID,
+        *,
         status: FeatureItemStatus,
-    ) -> FeatureItemRecord | None:
-        item = await session.get(FeatureItemRecord, item_id)
-        if item is None:
-            return None
-        item.status = status
-        item.updated_at = utc_now()
-        if status == FeatureItemStatus.in_progress and item.started_at is None:
-            item.started_at = utc_now()
-        if status in {FeatureItemStatus.completed, FeatureItemStatus.closed}:
-            item.finished_at = utc_now()
+        updated_at: datetime,
+    ) -> list[FeatureItemRecord]:
+        result = await session.execute(
+            select(FeatureItemRecord).where(FeatureItemRecord.task_id == task_id)
+        )
+        items = list(result.scalars().all())
+        affected_feature_ids: set[uuid.UUID] = set()
+        for item in items:
+            item.status = status
+            item.updated_at = updated_at
+            if item.started_at is None:
+                item.started_at = updated_at
+            if status in {FeatureItemStatus.completed, FeatureItemStatus.closed}:
+                item.finished_at = updated_at
+            affected_feature_ids.add(item.feature_id)
+        for feature_id in affected_feature_ids:
+            await FeatureRepository.sync_status_from_items(session, feature_id)
         await session.commit()
-        await session.refresh(item)
-        return item
+        return items
 
 
 class TaskRepository:
@@ -772,14 +690,7 @@ class TaskRepository:
                 TaskRecord.category == TaskCategory.coding,
                 TaskRecord.repo.is_not(None),
                 TaskRecord.external_pull_request_url.is_not(None),
-                TaskRecord.status.in_(
-                    [
-                        TaskStatus.queued,
-                        TaskStatus.running,
-                        TaskStatus.waiting_for_review,
-                        TaskStatus.waiting_for_merge,
-                    ]
-                ),
+                TaskRecord.status == TaskStatus.waiting_for_review,
             )
             .order_by(TaskRecord.updated_at.asc(), TaskRecord.created_at.asc())
             .limit(limit)
@@ -795,8 +706,11 @@ class TaskRepository:
     ) -> list[TaskRecord]:
         reviewable_running_task = and_(
             TaskRecord.status == TaskStatus.running,
-            select(VirtualPullRequestRecord.id)
-            .where(VirtualPullRequestRecord.task_id == TaskRecord.id)
+            select(TaskWorkItemRecord.id)
+            .where(
+                TaskWorkItemRecord.task_id == TaskRecord.id,
+                TaskWorkItemRecord.status == TaskWorkItemStatus.ready_for_review,
+            )
             .exists(),
         )
         query = (
@@ -807,7 +721,6 @@ class TaskRepository:
                     TaskRecord.status.in_(
                         [
                             TaskStatus.waiting_for_review,
-                            TaskStatus.waiting_for_merge,
                             TaskStatus.merged,
                             TaskStatus.closed,
                         ]
@@ -891,7 +804,7 @@ class TaskRepository:
             .returning(TaskRecord)
         )
 
-        result: CursorResult[Any] = cast(CursorResult[Any], await session.execute(stmt))
+        result = await session.execute(stmt)
         task = result.scalar_one_or_none()
         if task is None:
             await session.rollback()
@@ -932,7 +845,7 @@ class TaskRepository:
         )
 
         try:
-            result: CursorResult[Any] = cast(CursorResult[Any], await session.execute(stmt))
+            result = await session.execute(stmt)
             task = result.scalar_one_or_none()
             if task is None:
                 await session.rollback()
@@ -1034,11 +947,10 @@ class TaskRepository:
         task = await session.get(TaskRecord, task_id)
         if task is None:
             return None
-        if task.status not in {TaskStatus.waiting_for_review, TaskStatus.waiting_for_merge}:
+        if task.status != TaskStatus.waiting_for_review:
             return None
 
         now = utc_now()
-        task.resume_status = task.status
         task.status = TaskStatus.queued
         task.error = None
         task.finished_at = None
@@ -1060,7 +972,7 @@ class TaskRepository:
         if task is None:
             return None
 
-        task.status = task.resume_status or TaskStatus.waiting_for_review
+        task.status = TaskStatus.waiting_for_review
         task.resume_status = None
         task.error = error
         task.finished_at = None
@@ -1084,30 +996,6 @@ class TaskRepository:
 
         now = utc_now()
         task.status = TaskStatus.waiting_for_review
-        task.result = result
-        task.error = None
-        task.finished_at = None
-        task.resume_status = None
-        task.updated_at = now
-        task.dispatch_token = None
-        task.lease_expires_at = None
-        await session.commit()
-        await session.refresh(task)
-        return task
-
-    @staticmethod
-    async def set_waiting_for_merge(
-        session: AsyncSession,
-        task_id: uuid.UUID,
-        *,
-        result: str | None,
-    ) -> TaskRecord | None:
-        task = await session.get(TaskRecord, task_id)
-        if task is None:
-            return None
-
-        now = utc_now()
-        task.status = TaskStatus.waiting_for_merge
         task.result = result
         task.error = None
         task.finished_at = None
@@ -1397,268 +1285,6 @@ class TaskWorkItemRepository:
         return work_item
 
 
-class VirtualPullRequestRepository:
-    @staticmethod
-    async def list_by_task(
-        session: AsyncSession,
-        task_id: uuid.UUID,
-    ) -> list[VirtualPullRequestRecord]:
-        query = (
-            select(VirtualPullRequestRecord)
-            .where(VirtualPullRequestRecord.task_id == task_id)
-            .order_by(VirtualPullRequestRecord.created_at.asc())
-        )
-        result = await session.execute(query)
-        return list(result.scalars().all())
-
-    @staticmethod
-    async def get(
-        session: AsyncSession,
-        virtual_pr_id: uuid.UUID,
-    ) -> VirtualPullRequestRecord | None:
-        return await session.get(VirtualPullRequestRecord, virtual_pr_id)
-
-    @staticmethod
-    async def get_by_work_item(
-        session: AsyncSession,
-        work_item_id: uuid.UUID,
-    ) -> VirtualPullRequestRecord | None:
-        query = select(VirtualPullRequestRecord).where(
-            VirtualPullRequestRecord.work_item_id == work_item_id
-        )
-        result = await session.execute(query)
-        return result.scalar_one_or_none()
-
-    @staticmethod
-    async def upsert_for_work_item(
-        session: AsyncSession,
-        *,
-        task_id: uuid.UUID,
-        work_item_id: uuid.UUID,
-        base_commit: str,
-        head_commit: str,
-        summary: str,
-        changed_files: list[str],
-        additions: int,
-        deletions: int,
-        diff: str,
-    ) -> VirtualPullRequestRecord:
-        virtual_pr = await VirtualPullRequestRepository.get_by_work_item(session, work_item_id)
-        if virtual_pr is None:
-            virtual_pr = VirtualPullRequestRecord(
-                task_id=task_id,
-                work_item_id=work_item_id,
-                status=VirtualPullRequestStatus.ready_for_review,
-                base_commit=base_commit,
-                head_commit=head_commit,
-                summary=summary,
-                changed_files=changed_files,
-                additions=additions,
-                deletions=deletions,
-                diff=diff,
-            )
-            session.add(virtual_pr)
-        else:
-            virtual_pr.status = VirtualPullRequestStatus.ready_for_review
-            virtual_pr.base_commit = base_commit
-            virtual_pr.head_commit = head_commit
-            virtual_pr.summary = summary
-            virtual_pr.changed_files = changed_files
-            virtual_pr.additions = additions
-            virtual_pr.deletions = deletions
-            virtual_pr.diff = diff
-            virtual_pr.updated_at = utc_now()
-
-        await session.commit()
-        await session.refresh(virtual_pr)
-        return virtual_pr
-
-    @staticmethod
-    async def add_review(
-        session: AsyncSession,
-        *,
-        virtual_pr_id: uuid.UUID,
-        decision: VirtualPullRequestReviewDecision,
-        reviewer: str | None,
-        comment: str | None,
-    ) -> VirtualPullRequestReviewRecord | None:
-        virtual_pr = await session.get(VirtualPullRequestRecord, virtual_pr_id)
-        if virtual_pr is None:
-            return None
-
-        if decision == VirtualPullRequestReviewDecision.approved:
-            virtual_pr.status = VirtualPullRequestStatus.approved
-        elif decision == VirtualPullRequestReviewDecision.closed:
-            virtual_pr.status = VirtualPullRequestStatus.closed
-        elif decision == VirtualPullRequestReviewDecision.reopened:
-            virtual_pr.status = VirtualPullRequestStatus.ready_for_review
-        virtual_pr.updated_at = utc_now()
-
-        review = VirtualPullRequestReviewRecord(
-            task_id=virtual_pr.task_id,
-            virtual_pr_id=virtual_pr.id,
-            decision=decision,
-            reviewer=reviewer,
-            comment=comment,
-        )
-        session.add(review)
-        await session.commit()
-        await session.refresh(review)
-        return review
-
-    @staticmethod
-    async def list_reviews_by_virtual_pr(
-        session: AsyncSession,
-        virtual_pr_id: uuid.UUID,
-    ) -> list[VirtualPullRequestReviewRecord]:
-        query = (
-            select(VirtualPullRequestReviewRecord)
-            .where(VirtualPullRequestReviewRecord.virtual_pr_id == virtual_pr_id)
-            .order_by(VirtualPullRequestReviewRecord.created_at.asc())
-        )
-        result = await session.execute(query)
-        return list(result.scalars().all())
-
-
-class VirtualPullRequestThreadRepository:
-    @staticmethod
-    async def list_by_virtual_pr(
-        session: AsyncSession,
-        virtual_pr_id: uuid.UUID,
-    ) -> list[VirtualPullRequestThreadRecord]:
-        query = (
-            select(VirtualPullRequestThreadRecord)
-            .where(VirtualPullRequestThreadRecord.virtual_pr_id == virtual_pr_id)
-            .order_by(VirtualPullRequestThreadRecord.created_at.asc())
-        )
-        result = await session.execute(query)
-        return list(result.scalars().all())
-
-    @staticmethod
-    async def get(
-        session: AsyncSession,
-        thread_id: uuid.UUID,
-    ) -> VirtualPullRequestThreadRecord | None:
-        return await session.get(VirtualPullRequestThreadRecord, thread_id)
-
-    @staticmethod
-    async def create(
-        session: AsyncSession,
-        *,
-        task_id: uuid.UUID,
-        virtual_pr_id: uuid.UUID,
-        kind: VirtualPullRequestThreadKind,
-        created_by: str | None,
-        body: str,
-        file_path: str | None = None,
-        start_line: int | None = None,
-        end_line: int | None = None,
-        line_side: VirtualPullRequestLineSide | None = None,
-        diff_hunk: str | None = None,
-    ) -> tuple[VirtualPullRequestThreadRecord, VirtualPullRequestCommentRecord] | None:
-        virtual_pr = await session.get(VirtualPullRequestRecord, virtual_pr_id)
-        if virtual_pr is None or virtual_pr.task_id != task_id:
-            return None
-
-        thread = VirtualPullRequestThreadRecord(
-            task_id=task_id,
-            virtual_pr_id=virtual_pr_id,
-            kind=kind,
-            status=VirtualPullRequestThreadStatus.open,
-            file_path=file_path,
-            start_line=start_line,
-            end_line=end_line,
-            line_side=line_side,
-            diff_hunk=diff_hunk,
-            code_snapshot=_extract_code_snapshot(
-                virtual_pr.diff,
-                file_path=file_path,
-                start_line=start_line,
-                end_line=end_line,
-                line_side=line_side,
-            ),
-            created_by=created_by,
-        )
-        session.add(thread)
-        await session.flush()
-
-        comment = VirtualPullRequestCommentRecord(
-            thread_id=thread.id,
-            author=created_by,
-            body=body,
-        )
-        session.add(comment)
-        await session.commit()
-        await session.refresh(thread)
-        await session.refresh(comment)
-        return thread, comment
-
-    @staticmethod
-    async def update_status(
-        session: AsyncSession,
-        *,
-        virtual_pr_id: uuid.UUID,
-        thread_id: uuid.UUID,
-        status: VirtualPullRequestThreadStatus,
-    ) -> VirtualPullRequestThreadRecord | None:
-        thread = await session.get(VirtualPullRequestThreadRecord, thread_id)
-        if thread is None or thread.virtual_pr_id != virtual_pr_id:
-            return None
-        thread.status = status
-        thread.updated_at = utc_now()
-        await session.commit()
-        await session.refresh(thread)
-        return thread
-
-    @staticmethod
-    async def add_comment(
-        session: AsyncSession,
-        *,
-        thread_id: uuid.UUID,
-        author: str | None,
-        parent_comment_id: uuid.UUID | None = None,
-        body: str,
-    ) -> VirtualPullRequestCommentRecord | None:
-        thread = await session.get(VirtualPullRequestThreadRecord, thread_id)
-        if thread is None:
-            return None
-
-        if parent_comment_id is not None:
-            parent_comment = await session.get(VirtualPullRequestCommentRecord, parent_comment_id)
-            if parent_comment is None or parent_comment.thread_id != thread_id:
-                return None
-
-        comment = VirtualPullRequestCommentRecord(
-            thread_id=thread_id,
-            parent_comment_id=parent_comment_id,
-            author=author,
-            body=body,
-        )
-        thread.updated_at = utc_now()
-        session.add(comment)
-        await session.commit()
-        await session.refresh(comment)
-        return comment
-
-
-class VirtualPullRequestCommentRepository:
-    @staticmethod
-    async def list_by_thread_ids(
-        session: AsyncSession,
-        thread_ids: list[uuid.UUID],
-    ) -> list[VirtualPullRequestCommentRecord]:
-        if not thread_ids:
-            return []
-
-        query = (
-            select(VirtualPullRequestCommentRecord)
-            .where(VirtualPullRequestCommentRecord.thread_id.in_(thread_ids))
-            .order_by(VirtualPullRequestCommentRecord.created_at.asc())
-        )
-        result = await session.execute(query)
-        return list(result.scalars().all())
-
-
 class GithubPullRequestFeedbackRepository:
     @staticmethod
     async def upsert_discovered(
@@ -1850,3 +1476,131 @@ class GithubPullRequestFeedbackRepository:
             record.processed_at = None
             record.updated_at = now
         await session.commit()
+
+
+class UserRepository:
+    @staticmethod
+    async def get(session: AsyncSession, user_id: uuid.UUID) -> UserRecord | None:
+        return await session.get(UserRecord, user_id)
+
+    @staticmethod
+    async def get_by_github_id(session: AsyncSession, github_id: str) -> UserRecord | None:
+        result = await session.execute(select(UserRecord).where(UserRecord.github_id == github_id))
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def upsert_github_user(
+        session: AsyncSession,
+        *,
+        github_id: str,
+        github_login: str,
+        email: str | None,
+    ) -> UserRecord:
+        user = await UserRepository.get_by_github_id(session, github_id)
+        if user is None:
+            user = UserRecord(github_id=github_id, github_login=github_login, email=email)
+            session.add(user)
+        else:
+            user.github_login = github_login
+            user.email = email or user.email
+            user.updated_at = utc_now()
+        await session.commit()
+        await session.refresh(user)
+        return user
+
+    @staticmethod
+    async def add_balance(session: AsyncSession, user_id: uuid.UUID, amount: Decimal) -> UserRecord | None:
+        user = await session.get(UserRecord, user_id)
+        if user is None:
+            return None
+        user.balance += amount
+        user.updated_at = utc_now()
+        await session.commit()
+        await session.refresh(user)
+        return user
+
+
+class AuthSessionRepository:
+    @staticmethod
+    async def create(
+        session: AsyncSession,
+        *,
+        token_hash: str,
+        user_id: uuid.UUID,
+        expires_at: datetime,
+    ) -> AuthSessionRecord:
+        auth_session = AuthSessionRecord(token_hash=token_hash, user_id=user_id, expires_at=expires_at)
+        session.add(auth_session)
+        await session.commit()
+        await session.refresh(auth_session)
+        return auth_session
+
+    @staticmethod
+    async def get_user_by_token_hash(session: AsyncSession, token_hash: str) -> UserRecord | None:
+        result = await session.execute(
+            select(UserRecord)
+            .join(AuthSessionRecord, AuthSessionRecord.user_id == UserRecord.id)
+            .where(AuthSessionRecord.token_hash == token_hash, AuthSessionRecord.expires_at > utc_now())
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def delete(session: AsyncSession, token_hash: str) -> None:
+        auth_session = await session.get(AuthSessionRecord, token_hash)
+        if auth_session is not None:
+            await session.delete(auth_session)
+            await session.commit()
+
+
+class AgentPurchaseRepository:
+    @staticmethod
+    async def create_purchase(
+        session: AsyncSession,
+        *,
+        user_id: uuid.UUID,
+        agent: AgentName,
+        price: Decimal,
+        expires_at: datetime,
+    ) -> AgentPurchaseRecord:
+        # Purchasing touches user balance, agent instance, workspace, and purchase records;
+        # keep every related write in this method so one commit/rollback covers the flow.
+        try:
+            user = await session.get(UserRecord, user_id, with_for_update=True)
+            if user is None:
+                raise ValueError("User not found")
+            if user.balance < price:
+                raise ValueError("Insufficient balance")
+
+            user.balance -= price
+            user.updated_at = utc_now()
+            agent_instance = AgentInstanceRecord(
+                agent=agent,
+                client_id=f"purchase-{user_id.hex[:8]}-{uuid.uuid4().hex[:8]}",
+                display_name=f"{agent.value.title()} subscription",
+                expires_at=expires_at,
+                is_active=True,
+            )
+            session.add(agent_instance)
+            await session.flush()
+            workspace = WorkspaceRecord(
+                agent_instance_id=agent_instance.id,
+                workspace_key=f"agent-instance:{agent_instance.id}",
+                github_repo=None,
+                project=None,
+                status=WorkspaceStatus.idle,
+            )
+            session.add(workspace)
+
+            purchase = AgentPurchaseRecord(
+                user_id=user_id,
+                agent_instance_id=agent_instance.id,
+                agent=agent,
+                price=price,
+            )
+            session.add(purchase)
+            await session.commit()
+            await session.refresh(purchase)
+            return purchase
+        except Exception:
+            await session.rollback()
+            raise

@@ -12,9 +12,8 @@ import pytest
 from src.server.postgres.models import TaskWorkItemStatus
 from src.server.postgres.repositories import (
     TaskWorkItemRepository,
-    VirtualPullRequestRepository,
 )
-from src.tools.nexus.client import NexusReviewTools, NexusTaskContext, parse_numstat
+from src.tools.nexus.client import NexusReviewTools, NexusTaskContext
 
 
 class FakeDatabase:
@@ -30,14 +29,6 @@ def make_context(*, current_work_item_id: uuid.UUID | None = None) -> NexusTaskC
         repo="owner/repo",
         current_work_item_id=current_work_item_id,
     )
-
-
-def test_parse_numstat_sums_text_changes_and_keeps_binary_files() -> None:
-    changed_files, additions, deletions = parse_numstat("2\t1\tsrc/a.py\n-\t-\tassets/logo.png\n")
-
-    assert changed_files == ["src/a.py", "assets/logo.png"]
-    assert additions == 2
-    assert deletions == 1
 
 
 def test_create_task_work_items_uses_hidden_task_context(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -101,10 +92,6 @@ def test_finish_current_task_work_item_infers_base_commit(monkeypatch: pytest.Mo
             local_path="/workspace/repo",
         )
 
-    async def fake_upsert(session, **kwargs):
-        captured.update(kwargs)
-        return SimpleNamespace(id=uuid.uuid4())
-
     async def fake_mark_ready(session, requested_id, *, summary, base_commit, head_commit, local_path):
         captured["ready"] = {
             "work_item_id": requested_id,
@@ -116,7 +103,6 @@ def test_finish_current_task_work_item_infers_base_commit(monkeypatch: pytest.Mo
         return None
 
     monkeypatch.setattr(TaskWorkItemRepository, "get", fake_get)
-    monkeypatch.setattr(VirtualPullRequestRepository, "upsert_for_work_item", fake_upsert)
     monkeypatch.setattr(TaskWorkItemRepository, "mark_ready_for_review", fake_mark_ready)
 
     result = asyncio.run(
@@ -126,12 +112,10 @@ def test_finish_current_task_work_item_infers_base_commit(monkeypatch: pytest.Mo
     )
 
     assert result["success"] is True
-    assert captured["base_commit"] == "base123"
-    assert captured["head_commit"] == "head123"
     assert captured["ready"]["base_commit"] == "base123"
+    assert captured["ready"]["head_commit"] == "head123"
 
-
-def test_finish_current_task_work_item_captures_diff_stats(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_finish_current_task_work_item_marks_ready_for_review(monkeypatch: pytest.MonkeyPatch) -> None:
     work_item_id = uuid.uuid4()
     context = make_context(current_work_item_id=work_item_id)
     sandbox = AsyncMock()
@@ -141,9 +125,7 @@ def test_finish_current_task_work_item_captures_diff_stats(monkeypatch: pytest.M
             return {"success": True, "stdout": "", "stderr": ""}
         if "rev-parse" in cmd:
             return {"success": True, "stdout": "head123\n", "stderr": ""}
-        if "--numstat" in cmd:
-            return {"success": True, "stdout": "2\t1\tsrc/a.py\n3\t0\tsrc/b.py\n", "stderr": ""}
-        return {"success": True, "stdout": "diff --git a/src/a.py b/src/a.py\n", "stderr": ""}
+        return {"success": True, "stdout": "", "stderr": ""}
 
     sandbox.run_shell = fake_run_shell
     captured: dict[str, Any] = {}
@@ -159,10 +141,6 @@ def test_finish_current_task_work_item_captures_diff_stats(monkeypatch: pytest.M
             local_path="/workspace/repo",
         )
 
-    async def fake_upsert(session, **kwargs):
-        captured.update(kwargs)
-        return SimpleNamespace(id=uuid.uuid4())
-
     async def fake_mark_ready(session, requested_id, *, summary, base_commit, head_commit, local_path):
         captured["ready"] = {
             "work_item_id": requested_id,
@@ -174,7 +152,6 @@ def test_finish_current_task_work_item_captures_diff_stats(monkeypatch: pytest.M
         return None
 
     monkeypatch.setattr(TaskWorkItemRepository, "get", fake_get)
-    monkeypatch.setattr(VirtualPullRequestRepository, "upsert_for_work_item", fake_upsert)
     monkeypatch.setattr(TaskWorkItemRepository, "mark_ready_for_review", fake_mark_ready)
 
     result = asyncio.run(
@@ -184,9 +161,7 @@ def test_finish_current_task_work_item_captures_diff_stats(monkeypatch: pytest.M
     )
 
     assert result["success"] is True
-    assert captured["base_commit"] == "base123"
-    assert captured["head_commit"] == "head123"
-    assert captured["changed_files"] == ["src/a.py", "src/b.py"]
-    assert captured["additions"] == 5
-    assert captured["deletions"] == 1
     assert captured["ready"]["summary"] == "Finished scoped change."
+    assert captured["ready"]["base_commit"] == "base123"
+    assert captured["ready"]["head_commit"] == "head123"
+    assert captured["ready"]["local_path"] == "/workspace/repo"

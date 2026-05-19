@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from enum import Enum
 from typing import Any
 
@@ -101,43 +102,6 @@ class ProductProposalResponse(BaseModel):
             created_at=proposal.created_at,
             updated_at=proposal.updated_at,
         )
-
-
-class FeatureItemCreateRequest(BaseModel):
-    title: str = Field(min_length=1, max_length=255)
-    description: str = Field(min_length=1)
-
-    @field_validator("title", "description")
-    @classmethod
-    def validate_text(cls, value: str) -> str:
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("value cannot be empty")
-        return stripped
-
-
-class FeatureCreateRequest(BaseModel):
-    proposal_id: uuid.UUID | None = None
-    title: str = Field(min_length=1, max_length=255)
-    description: str = Field(min_length=1)
-    project: str | None = None
-    items: list[FeatureItemCreateRequest] = Field(min_length=1)
-
-    @field_validator("title", "description")
-    @classmethod
-    def validate_text(cls, value: str) -> str:
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("value cannot be empty")
-        return stripped
-
-
-class FeatureStatusUpdateRequest(BaseModel):
-    status: FeatureStatus
-
-
-class FeatureItemStatusUpdateRequest(BaseModel):
-    status: FeatureItemStatus
 
 
 class FeatureItemResponse(BaseModel):
@@ -288,6 +252,7 @@ class TaskResponse(BaseModel):
     id: uuid.UUID
     agent: str
     agent_instance_id: uuid.UUID
+    category: TaskCategory
     question: str
     repo: str | None
     project: str | None
@@ -307,6 +272,7 @@ class TaskResponse(BaseModel):
             id=task.id,
             agent=task.agent.value,
             agent_instance_id=task.agent_instance_id,
+            category=task.category,
             question=task.question,
             repo=task.repo,
             project=task.project,
@@ -435,3 +401,28 @@ class AgentInstanceResponse(BaseModel):
             updated_at=instance.updated_at,
             workspace=WorkspaceResponse.from_record(workspace) if workspace else None,
         )
+
+
+class UserResponse(BaseModel):
+    id: uuid.UUID
+    github_login: str
+    email: str | None
+    balance: Decimal
+
+
+class RechargeRequest(BaseModel):
+    amount: Decimal = Field(gt=Decimal("0"), le=Decimal("1000000"), decimal_places=2)
+
+
+class PurchaseAgentRequest(BaseModel):
+    agent: AgentKind
+
+
+class PurchaseAgentResponse(BaseModel):
+    id: uuid.UUID
+    agent_instance_id: uuid.UUID
+    agent: str
+    price: Decimal
+    balance: Decimal
+    purchased_at: datetime
+    expires_at: datetime

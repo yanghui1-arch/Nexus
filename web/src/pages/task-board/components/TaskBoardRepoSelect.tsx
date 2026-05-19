@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Select } from '@/components/ui/select';
 
 type TaskBoardRepoSelectProps = {
@@ -11,16 +12,18 @@ export function TaskBoardRepoSelect({
   value,
   onChange,
 }: TaskBoardRepoSelectProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="max-w-sm">
       <Select
-        aria-label="Select repository"
+        aria-label={t('taskBoard.selectRepository')}
         value={value}
         onChange={event => onChange(event.target.value)}
       >
         {repoOptions.map(repo => (
           <option key={repo} value={repo}>
-            {repo}
+            {repo === 'All repositories' ? t('taskBoard.allRepositories') : repo}
           </option>
         ))}
       </Select>

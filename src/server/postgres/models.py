@@ -3,6 +3,7 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 from sqlalchemy import (
     BigInteger,
@@ -13,6 +14,7 @@ from sqlalchemy import (
     Index,
     Integer,
     JSON,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -31,7 +33,6 @@ class TaskStatus(str, enum.Enum):
     queued = "queued"
     running = "running"
     waiting_for_review = "waiting_for_review"
-    waiting_for_merge = "waiting_for_merge"
     merged = "merged"
     closed = "closed"
     failed = "failed"
@@ -71,6 +72,7 @@ class ProductProposalStatus(str, enum.Enum):
     approved = "approved"
     rejected = "rejected"
     planned = "planned"
+    completed = "completed"
 
 
 class FeatureStatus(str, enum.Enum):
@@ -87,38 +89,11 @@ class FeatureItemStatus(str, enum.Enum):
     closed = "closed"
 
 
-class VirtualPullRequestStatus(str, enum.Enum):
-    ready_for_review = "ready_for_review"
-    approved = "approved"
-    closed = "closed"
-
-
-class VirtualPullRequestReviewDecision(str, enum.Enum):
-    approved = "approved"
-    closed = "closed"
-    reopened = "reopened"
-    commented = "commented"
-
-
-class VirtualPullRequestThreadKind(str, enum.Enum):
-    general = "general"
-    inline = "inline"
-
-
-class VirtualPullRequestThreadStatus(str, enum.Enum):
-    open = "open"
-    resolved = "resolved"
-
-
-class VirtualPullRequestLineSide(str, enum.Enum):
-    old = "old"
-    new = "new"
-
-
 class GithubPullRequestFeedbackKind(str, enum.Enum):
     pr_comment = "pr_comment"
     pr_review = "pr_review"
     pr_review_comment = "pr_review_comment"
+    pr_merge_conflict = "pr_merge_conflict"
 
 
 class GithubPullRequestFeedbackStatus(str, enum.Enum):
@@ -130,6 +105,40 @@ class GithubPullRequestFeedbackStatus(str, enum.Enum):
 
 class Base(DeclarativeBase):
     pass
+
+
+class UserRecord(Base):
+    __tablename__ = "user_account"
+    __table_args__ = (UniqueConstraint("github_id", name="uq_user_github_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    github_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    github_login: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    balance: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0.00"), server_default="0.00")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now, server_default=func.now())
+
+
+class AuthSessionRecord(Base):
+    __tablename__ = "auth_session"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user_account.id", ondelete="CASCADE"), nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, server_default=func.now())
+
+
+class AgentPurchaseRecord(Base):
+    __tablename__ = "agent_purchase"
+    __table_args__ = (Index("ix_agent_purchase_user_agent", "user_id", "agent"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user_account.id", ondelete="CASCADE"), nullable=False, index=True)
+    agent_instance_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("agent_instance.id", ondelete="SET NULL"), nullable=True, index=True)
+    agent: Mapped[AgentName] = mapped_column(Enum(AgentName, native_enum=False), nullable=False)
+    price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    purchased_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, server_default=func.now())
 
 
 class AgentInstanceRecord(Base):
@@ -146,6 +155,7 @@ class AgentInstanceRecord(Base):
     )
     display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     client_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -448,175 +458,6 @@ class TaskWorkItemRecord(Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-
-class VirtualPullRequestRecord(Base):
-    __tablename__ = "virtual_pull_request"
-    __table_args__ = (
-        UniqueConstraint("work_item_id", name="uq_virtual_pull_request_work_item"),
-        Index("ix_virtual_pull_request_task_status", "task_id", "status"),
-    )
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    task_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("task.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    work_item_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("task_work_item.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    status: Mapped[VirtualPullRequestStatus] = mapped_column(
-        Enum(VirtualPullRequestStatus, native_enum=False, length=32),
-        nullable=False,
-        index=True,
-        default=VirtualPullRequestStatus.ready_for_review,
-    )
-    base_commit: Mapped[str] = mapped_column(String(64), nullable=False)
-    head_commit: Mapped[str] = mapped_column(String(64), nullable=False)
-    summary: Mapped[str] = mapped_column(Text, nullable=False)
-    changed_files: Mapped[list[str]] = mapped_column(
-        JSON,
-        nullable=False,
-        default=list,
-        server_default=text("'[]'::json"),
-    )
-    additions: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    deletions: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    diff: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=utc_now,
-        server_default=func.now(),
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=utc_now,
-        onupdate=utc_now,
-        server_default=func.now(),
-    )
-
-
-class VirtualPullRequestReviewRecord(Base):
-    __tablename__ = "virtual_pull_request_review"
-    __table_args__ = (
-        Index("ix_virtual_pull_request_review_task", "task_id", "created_at"),
-        Index("ix_virtual_pull_request_review_virtual_pr", "virtual_pr_id", "created_at"),
-    )
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    task_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("task.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    virtual_pr_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("virtual_pull_request.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    decision: Mapped[VirtualPullRequestReviewDecision] = mapped_column(
-        Enum(VirtualPullRequestReviewDecision, native_enum=False, length=32),
-        nullable=False,
-        index=True,
-    )
-    reviewer: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=utc_now,
-        server_default=func.now(),
-    )
-
-
-class VirtualPullRequestThreadRecord(Base):
-    __tablename__ = "virtual_pull_request_thread"
-    __table_args__ = (
-        Index("ix_virtual_pull_request_thread_virtual_pr", "virtual_pr_id", "created_at"),
-    )
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    task_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("task.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    virtual_pr_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("virtual_pull_request.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    kind: Mapped[VirtualPullRequestThreadKind] = mapped_column(
-        Enum(VirtualPullRequestThreadKind, native_enum=False, length=32),
-        nullable=False,
-    )
-    status: Mapped[VirtualPullRequestThreadStatus] = mapped_column(
-        Enum(VirtualPullRequestThreadStatus, native_enum=False, length=32),
-        nullable=False,
-        default=VirtualPullRequestThreadStatus.open,
-    )
-    file_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    start_line: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    end_line: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    line_side: Mapped[VirtualPullRequestLineSide | None] = mapped_column(
-        Enum(VirtualPullRequestLineSide, native_enum=False, length=16),
-        nullable=True,
-    )
-    diff_hunk: Mapped[str | None] = mapped_column(Text, nullable=True)
-    code_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=utc_now,
-        server_default=func.now(),
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=utc_now,
-        onupdate=utc_now,
-        server_default=func.now(),
-    )
-
-
-class VirtualPullRequestCommentRecord(Base):
-    __tablename__ = "virtual_pull_request_comment"
-    __table_args__ = (
-        Index("ix_virtual_pull_request_comment_thread", "thread_id", "created_at"),
-    )
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    thread_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("virtual_pull_request_thread.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    parent_comment_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("virtual_pull_request_comment.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    author: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    body: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=utc_now,
-        server_default=func.now(),
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=utc_now,
-        onupdate=utc_now,
-        server_default=func.now(),
-    )
 
 
 class GithubPullRequestFeedbackRecord(Base):

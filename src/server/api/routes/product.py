@@ -8,7 +8,6 @@ from src.server.postgres.database import Database
 from src.server.postgres.models import (
     AgentName,
     ProductProposalStatus,
-    FeatureItemStatus,
     FeatureStatus,
 )
 from src.server.postgres.repositories import (
@@ -24,11 +23,7 @@ from src.server.schemas import (
     ProductProposalCreateRequest,
     ProductProposalResponse,
     ProductProposalStatusUpdateRequest,
-    FeatureCreateRequest,
-    FeatureItemResponse,
-    FeatureItemStatusUpdateRequest,
     FeatureResponse,
-    FeatureStatusUpdateRequest,
 )
 
 router = APIRouter(prefix="/v1/product", tags=["product"])
@@ -137,30 +132,6 @@ async def update_proposal_status(
     return ProductProposalResponse.from_record(proposal)
 
 
-@router.post("/features", response_model=FeatureResponse, status_code=201)
-async def create_feature(
-    request: Request,
-    payload: FeatureCreateRequest,
-) -> FeatureResponse:
-    database: Database = request.app.state.database
-    async with database.session() as session:
-        if payload.proposal_id is not None:
-            proposal = await ProductProposalRepository.get(session, payload.proposal_id)
-            if proposal is None:
-                raise HTTPException(status_code=404, detail="Proposal not found")
-            if proposal.status != ProductProposalStatus.approved:
-                raise HTTPException(status_code=409, detail="Only approved proposals can become features")
-        feature, items = await FeatureRepository.create_with_items(
-            session,
-            proposal_id=payload.proposal_id,
-            title=payload.title,
-            description=payload.description,
-            project=payload.project,
-            items=[item.model_dump() for item in payload.items],
-        )
-    return FeatureResponse.from_record(feature, items=items)
-
-
 @router.get("/features", response_model=list[FeatureResponse])
 async def list_features(
     request: Request,
@@ -191,32 +162,3 @@ async def get_feature(
             raise HTTPException(status_code=404, detail="Feature not found")
         items = await FeatureItemRepository.list_by_feature(session, feature_id)
     return FeatureResponse.from_record(feature, items=items)
-
-
-@router.patch("/features/{feature_id}/status", response_model=FeatureResponse)
-async def update_feature_status(
-    request: Request,
-    feature_id: uuid.UUID,
-    payload: FeatureStatusUpdateRequest,
-) -> FeatureResponse:
-    database: Database = request.app.state.database
-    async with database.session() as session:
-        feature = await FeatureRepository.set_status(session, feature_id, payload.status)
-        if feature is None:
-            raise HTTPException(status_code=404, detail="Feature not found")
-        items = await FeatureItemRepository.list_by_feature(session, feature_id)
-    return FeatureResponse.from_record(feature, items=items)
-
-
-@router.patch("/feature-items/{item_id}/status", response_model=FeatureItemResponse)
-async def update_feature_item_status(
-    request: Request,
-    item_id: uuid.UUID,
-    payload: FeatureItemStatusUpdateRequest,
-) -> FeatureItemResponse:
-    database: Database = request.app.state.database
-    async with database.session() as session:
-        item = await FeatureItemRepository.set_status(session, item_id, payload.status)
-    if item is None:
-        raise HTTPException(status_code=404, detail="Feature item not found")
-    return FeatureItemResponse.from_record(item)

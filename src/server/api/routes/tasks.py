@@ -12,8 +12,8 @@ from src.agents.base import Agent
 from src.server.config import get_settings
 from src.server.postgres.database import Database
 from src.server.postgres.models import (
+    TaskCategory,
     TaskStatus,
-    TaskWorkItemStatus,
 )
 from src.server.postgres.repositories import (
     TaskRepository,
@@ -43,14 +43,21 @@ async def create_task(
     payload: TaskCreateRequest,
 ) -> TaskSubmitResponse:
     runner: AgentTaskRunner = request.app.state.runner
+    database: Database = request.app.state.database
     try:
         task_id = await runner.submit_task(payload)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    async with database.session() as session:
+        task = await TaskRepository.get(session, task_id)
+    if task is None:
+        raise HTTPException(status_code=500, detail="Created task could not be loaded")
+
     return TaskSubmitResponse(
         task_id=task_id,
         agent_instance_id=payload.agent_instance_id,
+        category=task.category,
         status=TaskStatus.queued,
     )
 
@@ -60,6 +67,7 @@ async def list_tasks(
     request: Request,
     agent_instance_id: uuid.UUID | None = Query(default=None),
     status: TaskStatus | None = Query(default=None),
+    category: TaskCategory | None = Query(default=None),
     repo: str | None = Query(default=None),
     project: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
@@ -70,6 +78,7 @@ async def list_tasks(
             session,
             agent_instance_id=agent_instance_id,
             status=status,
+            category=category,
             repo=repo,
             project=project,
             limit=limit,
@@ -121,19 +130,19 @@ async def update_task_status(
         if payload.status == TaskStatus.merged:
             if task.status == payload.status:
                 return TaskResponse.from_record(task)
-            if task.status != TaskStatus.waiting_for_merge:
+            if task.status != TaskStatus.waiting_for_review:
                 raise HTTPException(
                     status_code=409,
-                    detail="Only waiting_for_merge tasks can be updated to merged",
+                    detail="Only waiting_for_review tasks can be updated to merged",
                 )
             updated = await TaskRepository.set_merged(session, task_id)
         elif payload.status == TaskStatus.closed:
             if task.status == payload.status:
                 return TaskResponse.from_record(task)
-            if task.status not in {TaskStatus.waiting_for_review, TaskStatus.waiting_for_merge}:
+            if task.status != TaskStatus.waiting_for_review:
                 raise HTTPException(
                     status_code=409,
-                    detail="Only waiting_for_review or waiting_for_merge tasks can be closed",
+                    detail="Only waiting_for_review tasks can be closed",
                 )
             updated = await TaskRepository.set_closed(session, task_id)
         else:
@@ -144,21 +153,11 @@ async def update_task_status(
                     status_code=409,
                     detail="Only closed tasks can be reopened",
                 )
-            work_items = await TaskWorkItemRepository.list_by_task(session, task_id)
-            if work_items and all(
-                work_item.status == TaskWorkItemStatus.approved for work_item in work_items
-            ):
-                updated = await TaskRepository.set_waiting_for_merge(
-                    session,
-                    task_id,
-                    result=task.result,
-                )
-            else:
-                updated = await TaskRepository.set_waiting_for_review(
-                    session,
-                    task_id,
-                    result=task.result,
-                )
+            updated = await TaskRepository.set_waiting_for_review(
+                session,
+                task_id,
+                result=task.result,
+            )
 
     if updated is None:
         raise HTTPException(status_code=404, detail="Task not found")

@@ -27,7 +27,6 @@ from src.server.postgres.repositories import (
     GithubPullRequestFeedbackRepository,
     TaskRepository,
     TaskWorkItemRepository,
-    VirtualPullRequestRepository,
     WorkspaceRepository,
 )
 from src.tools.nexus import NexusTaskContext
@@ -364,11 +363,10 @@ async def _run_code_agent_workflow(
 
             async with database.session() as session:
                 refreshed = await TaskWorkItemRepository.get(session, work_item.id)
-                virtual_pr = await VirtualPullRequestRepository.get_by_work_item(session, work_item.id)
 
             if refreshed is None:
                 raise RuntimeError(f"Work item {work_item.id} of task {task.id} disappeared during execution.")
-            if virtual_pr is None or refreshed.status.value != "ready_for_review":
+            if refreshed.status.value != "ready_for_review":
                 raise RuntimeError(
                     "Agent finished a work item without calling finish_current_task_work_item."
                 )
@@ -526,7 +524,7 @@ def _build_work_item_prompt(
 
     return (
         f"Implement only this work item {work_item.title}. Commit this work item's scoped changes before finishing; "
-        "the Nexus virtual PR is built from base_commit..head_commit."
+        "Nexus records this work item's review scope from base_commit..head_commit. "
         f"{external_pr_instruction}"
         "When the scoped implementation is complete, call finish_current_task_work_item"
     )
@@ -700,10 +698,6 @@ async def _mark_post_execution_wait_state(
             TaskStatus.failed,
         }:
             return
-        
-        if task.resume_status == TaskStatus.waiting_for_merge:
-            await TaskRepository.set_waiting_for_merge(session, task_id, result=result)
-            return
         await TaskRepository.set_waiting_for_review(session, task_id, result=result)
 
 
@@ -753,7 +747,8 @@ def _build_github_feedback_prompt(
         f"There is new GitHub feedback on the existing pull request #{pull_number} in {task.repo}.",
         "This is not a new task and you must not open a new pull request.",
         "If code changes are needed, update the existing branch/PR and then reply on GitHub.",
-        "Use `reply_to_pr` for `pr_comment` and `pr_review` items.",
+        "If a `pr_merge_conflict` item is present, resolve the merge conflicts locally and push the existing PR branch again.",
+        "Use `reply_to_pr` for `pr_comment`, `pr_review`, and `pr_merge_conflict` items.",
         "Use `reply_to_pr_review_comment` for `pr_review_comment` items with the exact `comment_id` shown below.",
         "Handle every feedback item exactly once.",
         "",

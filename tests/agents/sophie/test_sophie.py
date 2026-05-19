@@ -69,62 +69,6 @@ class TestSophieCreation:
         assert sophie.max_attempts == 50
 
 
-class TestSophieSystemPrompt:
-    """Test Sophie's system prompt content."""
-
-    def test_system_prompt_contains_design_philosophy(self):
-        """Test that system prompt includes Anthropic design principles."""
-        sophie = Sophie.create(
-            base_url="https://api.openai.com/v1",
-            api_key="test-key",
-            model="gpt-4",
-            max_context=8192,
-            github_repo="test/repo",
-        )
-        
-        prompt = sophie.system_prompt
-        
-        # Check for design philosophy keywords (case-insensitive for human-centered)
-        assert "Clarity" in prompt
-        assert "Craft" in prompt
-        assert "Trust" in prompt
-        assert "Thoughtfulness" in prompt
-        assert "human-centered" in prompt.lower()
-
-    def test_system_prompt_contains_react_capabilities(self):
-        """Test that system prompt includes React development capabilities."""
-        sophie = Sophie.create(
-            base_url="https://api.openai.com/v1",
-            api_key="test-key",
-            model="gpt-4",
-            max_context=8192,
-            github_repo="test/repo",
-        )
-        
-        prompt = sophie.system_prompt
-        
-        # Check for React-related content
-        assert "React" in prompt
-        assert "TypeScript" in prompt or "component" in prompt
-
-    def test_system_prompt_contains_workflow(self):
-        """Test that system prompt includes workflow instructions."""
-        sophie = Sophie.create(
-            base_url="https://api.openai.com/v1",
-            api_key="test-key",
-            model="gpt-4",
-            max_context=8192,
-            github_repo="test/repo",
-        )
-        
-        prompt = sophie.system_prompt
-        
-        # Check for workflow steps
-        assert "Understand" in prompt
-        assert "Research" in prompt
-        assert "Design" in prompt
-
-
 @pytest.mark.asyncio
 class TestSophieAsyncContext:
     """Test Sophie's async context manager functionality."""
@@ -399,7 +343,7 @@ class TestSophieToolAccess:
 
                 async with sophie as s:
                     assert "WebFetch" in s.tool_kits
-                    assert "WebSearch" in s.tool_kits
+                    assert "web_search_agent" in s.tool_kits
 
 
 

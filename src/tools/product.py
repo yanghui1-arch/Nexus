@@ -121,8 +121,14 @@ class ProductTools:
             proposal = await ProductProposalRepository.get(session, proposal_id)
             if proposal is None:
                 return {"success": False, "message": "Proposal not found."}
-            if proposal.status != ProductProposalStatus.approved:
-                return {"success": False, "message": "Only approved proposals can become features."}
+            if proposal.status not in {
+                ProductProposalStatus.approved,
+                ProductProposalStatus.planned,
+            }:
+                return {
+                    "success": False,
+                    "message": "Only approved or planned proposals can become features.",
+                }
 
             feature = await FeatureRepository.create(
                 session,

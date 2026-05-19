@@ -7,7 +7,13 @@ from types import SimpleNamespace
 
 import anyio
 
-from src.server.postgres.models import FeatureItemStatus, FeatureStatus, ProductProposalStatus
+from src.server.postgres.models import (
+    FeatureItemStatus,
+    FeatureRecord,
+    FeatureStatus,
+    ProductProposalRecord,
+    ProductProposalStatus,
+)
 from src.server.postgres.repositories import FeatureItemRepository, FeatureRepository, ProductProposalRepository
 from src.tools.nexus import NexusTaskContext
 from src.tools.product import ProductTools
@@ -30,11 +36,47 @@ class FakeSession:
     def add(self, item):
         self.added = item
 
+    async def flush(self):
+        return None
+
     async def commit(self):
         return None
 
     async def refresh(self, item):
         return None
+
+
+class FakeFeatureItemSyncSession:
+    def __init__(
+        self,
+        *,
+        feature: SimpleNamespace,
+        proposal: SimpleNamespace,
+        item_statuses: list[FeatureItemStatus],
+        sibling_feature_statuses: list[FeatureStatus],
+    ) -> None:
+        self.feature = feature
+        self.proposal = proposal
+        self.item_statuses = item_statuses
+        self.sibling_feature_statuses = sibling_feature_statuses
+        self.execute_call_count = 0
+
+    async def get(self, model, object_id):
+        if model is FeatureRecord and object_id == self.feature.id:
+            return self.feature
+        if model is ProductProposalRecord and object_id == self.proposal.id:
+            return self.proposal
+        return None
+
+    async def execute(self, query):
+        del query
+        self.execute_call_count += 1
+        statuses = (
+            self.item_statuses
+            if self.execute_call_count == 1
+            else [self.feature.status, *self.sibling_feature_statuses]
+        )
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: list(statuses)))
 
 
 def _proposal(**overrides):
@@ -185,7 +227,7 @@ def test_create_feature_for_product_proposal_requires_approved_proposal(monkeypa
 
     assert result == {
         "success": False,
-        "message": "Only approved proposals can become features.",
+        "message": "Only approved or planned proposals can become features.",
     }
 
 
@@ -229,6 +271,33 @@ def test_create_feature_for_product_proposal_from_approved_proposal(monkeypatch)
         "description": "Add RAG capability.",
         "project": "nexus",
     }
+
+
+def test_create_feature_for_product_proposal_from_planned_proposal(monkeypatch):
+    proposal_id = uuid.uuid4()
+    feature = _feature(id=uuid.uuid4(), proposal_id=proposal_id)
+
+    async def fake_get(session, pid):
+        return _proposal(id=pid, status=ProductProposalStatus.planned)
+
+    async def fake_create(session, **kwargs):
+        return feature
+
+    monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
+    monkeypatch.setattr(FeatureRepository, "create", fake_create)
+    tools = ProductTools(database=FakeDatabase())
+
+    async def run():
+        return await tools.create_feature_for_product_proposal(
+            proposal_id=proposal_id,
+            title="Follow-up slice",
+            description="Add a follow-up feature.",
+        )
+
+    result = anyio.run(run)
+
+    assert result["success"] is True
+    assert result["proposal_id"] == str(proposal_id)
 
 
 def test_create_feature_item_requires_existing_feature(monkeypatch):
@@ -297,9 +366,17 @@ def test_create_feature_item_from_feature(monkeypatch):
     }
 
 
-def test_feature_item_repository_create_assigns_next_order_index():
+def test_feature_item_repository_create_assigns_next_order_index(monkeypatch):
     session = FakeSession(max_order_index=3)
     feature_id = uuid.uuid4()
+    captured = {}
+
+    async def fake_sync_status_from_items(current_session, current_feature_id):
+        captured["session"] = current_session
+        captured["feature_id"] = current_feature_id
+        return None
+
+    monkeypatch.setattr(FeatureRepository, "sync_status_from_items", fake_sync_status_from_items)
 
     async def run():
         return await FeatureItemRepository.create(
@@ -315,3 +392,42 @@ def test_feature_item_repository_create_assigns_next_order_index():
     assert item.feature_id == feature_id
     assert item.order_index == 4
     assert item.status == FeatureItemStatus.pending
+    assert captured == {"session": session, "feature_id": feature_id}
+
+
+def test_feature_repository_sync_status_from_items_marks_linked_proposal_completed():
+    proposal = _proposal(status=ProductProposalStatus.planned)
+    feature = _feature(proposal_id=proposal.id, status=FeatureStatus.in_progress)
+    session = FakeFeatureItemSyncSession(
+        feature=feature,
+        proposal=proposal,
+        item_statuses=[FeatureItemStatus.completed, FeatureItemStatus.closed],
+        sibling_feature_statuses=[FeatureStatus.closed],
+    )
+
+    async def run():
+        return await FeatureRepository.sync_status_from_items(session, feature.id)
+
+    updated = anyio.run(run)
+
+    assert updated.status == FeatureStatus.completed
+    assert proposal.status == ProductProposalStatus.completed
+
+
+def test_feature_repository_sync_status_from_items_reopens_linked_proposal_when_work_remains():
+    proposal = _proposal(status=ProductProposalStatus.completed)
+    feature = _feature(proposal_id=proposal.id, status=FeatureStatus.completed)
+    session = FakeFeatureItemSyncSession(
+        feature=feature,
+        proposal=proposal,
+        item_statuses=[FeatureItemStatus.pending, FeatureItemStatus.closed],
+        sibling_feature_statuses=[FeatureStatus.closed],
+    )
+
+    async def run():
+        return await FeatureRepository.sync_status_from_items(session, feature.id)
+
+    updated = anyio.run(run)
+
+    assert updated.status == FeatureStatus.planned
+    assert proposal.status == ProductProposalStatus.planned

@@ -2,29 +2,37 @@ export const DEFAULT_WORKSPACE_PATH = '/task-board';
 
 export const WORKSPACE_NAV_ITEMS = [
   {
-    label: 'Account',
+    labelKey: 'nav.account',
     to: '/account',
   },
   {
-    label: 'Task Board',
+    labelKey: 'nav.taskBoard',
     to: '/task-board',
   },
   {
-    label: 'Publish Task',
+    labelKey: 'nav.publishTask',
     to: '/publish-task',
   },
   {
-    label: 'Process Tracking',
+    labelKey: 'nav.processTracking',
     to: '/process-tracking',
   },
   {
-    label: 'Code Review',
+    labelKey: 'nav.productResearch',
+    to: '/product-research',
+  },
+  {
+    labelKey: 'nav.codeReview',
     to: '/code-review',
     subItems: [
       {
-        label: 'Nexus',
+        labelKey: 'app.name',
         to: '/code-review/nexus',
       },
     ],
+  },
+  {
+    labelKey: 'nav.pricing',
+    to: '/pricing',
   },
 ] as const;

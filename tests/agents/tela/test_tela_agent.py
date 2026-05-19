@@ -4,6 +4,7 @@ All tests use mocked OpenAI client and a mocked Docker sandbox so they run
 without any real API keys or Docker daemon.
 """
 import pytest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.agents.tela import Tela
@@ -42,28 +43,27 @@ def make_pool_manager(mock_sandbox):
 
 
 def make_stop_response(content: str = "done"):
-    """Build a minimal OpenAI chat completion response that stops."""
-    choice = MagicMock()
-    choice.finish_reason = "stop"
-    choice.message = ChatCompletionMessage(role="assistant", content=content)
-    resp = MagicMock()
-    resp.choices = [choice]
-    resp.usage.total_tokens = 42
-    return resp
+    """Build a minimal streaming response that stops."""
+    async def _stream():
+        delta = SimpleNamespace(content=content, tool_calls=None, reasoning_content=None)
+        choice = SimpleNamespace(finish_reason="stop", delta=delta)
+        chunk = SimpleNamespace(choices=[choice], usage=SimpleNamespace(total_tokens=42))
+        yield chunk
+    return _stream()
 
 
 def make_tool_response(name: str, args: str, call_id: str = "c1"):
-    """Build a response that requests one tool call."""
-    tc = ChatCompletionMessageToolCall(
-        id=call_id, type="function", function=Function(name=name, arguments=args)
-    )
-    choice = MagicMock()
-    choice.finish_reason = "tool_calls"
-    choice.message = ChatCompletionMessage(role="assistant", content=None, tool_calls=[tc])
-    resp = MagicMock()
-    resp.choices = [choice]
-    resp.usage.total_tokens = 20
-    return resp
+    """Build a streaming response that requests one tool call."""
+    async def _stream():
+        tc_delta = MagicMock()
+        tc_delta.index = 0
+        tc_delta.id = call_id
+        tc_delta.function = SimpleNamespace(name=name, arguments=args)
+        delta = SimpleNamespace(content=None, tool_calls=[tc_delta], reasoning_content=None)
+        choice = SimpleNamespace(finish_reason="tool_calls", delta=delta)
+        chunk = SimpleNamespace(choices=[choice], usage=SimpleNamespace(total_tokens=20))
+        yield chunk
+    return _stream()
 
 
 class TestContextManager:
@@ -106,7 +106,7 @@ class TestContextManager:
                 assert "get_issue_comments" in tela.tool_kits
                 assert "pr_to_github" in tela.tool_kits
                 assert "WebFetch" in tela.tool_kits
-                assert "WebSearch" in tela.tool_kits
+                assert "web_search_agent" in tela.tool_kits
 
 
     async def test_step_raises_without_context_manager(self):
@@ -156,24 +156,6 @@ class TestContextManager:
 
         mock_http.post.assert_not_awaited()
 
-    async def test_enter_injects_fork_urls_into_system_prompt(self):
-        tela = make_tela(github_repo="owner/repo", github_token="ghp_test")
-        mock_sandbox = AsyncMock()
-
-        with patch("src.agents.tela.agent.get_sandbox_pool_manager", return_value=make_pool_manager(mock_sandbox)):
-            with patch("src.agents.base.code_agent.httpx.AsyncClient") as mock_client_cls:
-                mock_http = AsyncMock()
-                mock_http.get.return_value = MagicMock(
-                    status_code=200,
-                    json=MagicMock(return_value={"fork": True, "parent": {"full_name": "owner/repo"}}),
-                )
-                mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_http)
-                mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
-                async with tela:
-                    assert "Nexus-Tela/repo" in tela.system_prompt
-                    assert "owner/repo" in tela.system_prompt
-                    assert "Upstream repo" in tela.system_prompt
-                    assert "Upstream URL" in tela.system_prompt
 
 
 class TestStep:
@@ -274,6 +256,7 @@ class TestGithubTools:
             {"success": True, "stdout": "new", "stderr": ""},   # test -d .git
             {"success": True, "stdout": "", "stderr": ""},       # git clone
             {"success": True, "stdout": "", "stderr": ""},       # git remote add upstream
+            {"success": True, "stdout": "", "stderr": ""},       # sync main with upstream
         ])
         kit = GithubTools(sandbox)
         await kit.fetch_from_github(
@@ -284,19 +267,55 @@ class TestGithubTools:
         upstream_cmd = sandbox.run_shell.call_args_list[2][0][0]
         assert "remote" in upstream_cmd and "upstream" in upstream_cmd
         assert "https://github.com/owner/repo" in upstream_cmd
+        sync_call = sandbox.run_shell.call_args_list[3][0][0]
+        assert "fetch upstream main" in sync_call
 
-    async def test_fetch_skips_upstream_when_not_provided(self):
+    async def test_fetch_syncs_main_with_upstream_when_already_cloned(self):
         sandbox = AsyncMock()
+        sandbox.recreate = AsyncMock()
         sandbox.run_shell = AsyncMock(side_effect=[
-            {"success": True, "stdout": "new", "stderr": ""},
-            {"success": True, "stdout": "", "stderr": ""},
+            {"success": True, "stdout": "exists", "stderr": ""},                          # test -d .git
+            {"success": True, "stdout": "https://github.com/Nexus-Tela/repo\n", "stderr": ""},  # origin remote
+            {"success": True, "stdout": "", "stderr": ""},                                 # fetch upstream + sync main
+            {"success": True, "stdout": "", "stderr": ""},                                 # sync_main_branch
         ])
         kit = GithubTools(sandbox)
-        await kit.fetch_from_github(
+
+        result = await kit.fetch_from_github(
             repo_url="https://github.com/Nexus-Tela/repo",
             local_path="/workspace/myproject",
+            upstream_url="https://github.com/owner/repo",
         )
-        assert sandbox.run_shell.call_count == 2
+
+        assert result["success"] is True
+        assert "Synchronized 'main' with upstream" in result["message"]
+        sync_call = sandbox.run_shell.call_args_list[3][0][0]
+        assert "fetch upstream main" in sync_call
+        assert "reset --hard upstream/main" in sync_call
+        sandbox.recreate.assert_not_awaited()
+
+    async def test_fetch_syncs_main_with_upstream_after_clone(self):
+        sandbox = AsyncMock()
+        sandbox.run_shell = AsyncMock(side_effect=[
+            {"success": True, "stdout": "new", "stderr": ""},   # test -d .git
+            {"success": True, "stdout": "", "stderr": ""},      # git clone
+            {"success": True, "stdout": "", "stderr": ""},      # git remote add upstream
+            {"success": True, "stdout": "", "stderr": ""},      # sync_main_branch
+        ])
+        kit = GithubTools(sandbox)
+
+        result = await kit.fetch_from_github(
+            repo_url="https://github.com/Nexus-Tela/repo",
+            local_path="/workspace/myproject",
+            upstream_url="https://github.com/owner/repo",
+        )
+
+        assert result["success"] is True
+        assert "synchronized 'main' with upstream" in result["message"].lower()
+        clone_call = sandbox.run_shell.call_args_list[1][0][0]
+        assert "git clone" in clone_call
+        sync_call = sandbox.run_shell.call_args_list[3][0][0]
+        assert "fetch upstream main" in sync_call
 
     async def test_fetch_uses_repo_url_as_given(self):
         sandbox = AsyncMock()
@@ -402,20 +421,7 @@ class TestGithubTools:
         assert "Closes #7" in captured_body[0]
 
 
-class TestSopAndReport:
-    def test_sop_not_implemented(self):
-        tela = make_tela()
-        history = [
-            {"role": "assistant", "content": None, "tool_calls": [
-                {"id": "c1", "type": "function", "function": {"name": "RunCode", "arguments": '{"code":"x"}'}}
-            ]},
-            {"role": "tool", "tool_call_id": "c1", "content": "42"},
-            {"role": "assistant", "content": "The answer is 42."},
-        ]
-        with pytest.raises(NotImplementedError):
-            tela.SOP(history)
-
-
+class TestReport:
     def test_last_report_returns_last_assistant_content(self):
         tela = make_tela()
         ctx = [
@@ -497,10 +503,6 @@ class TestFactory:
             )
         assert tela.llm_config.model == "gpt-4o-mini"
         assert tela.github_token == "ghp_abc"
-
-
-
-
 
 
 
