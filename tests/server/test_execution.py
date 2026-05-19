@@ -631,3 +631,68 @@ def test_release_workspace_keeps_binding_for_inactive_instance(monkeypatch):
     assert captured == {
         "agent_instance_id": "agent-id",
     }
+
+
+def test_execute_agent_task_does_not_mark_worker_termination_failed(monkeypatch):
+    task_id = "task-id"
+    calls = []
+
+    class FakeRuntimeDatabase:
+        def __init__(self, url):
+            self.url = url
+            self.connected = False
+            self.disconnected = False
+
+        async def connect(self):
+            self.connected = True
+
+        async def disconnect(self):
+            self.disconnected = True
+
+    async def fake_load_task(database, requested_task_id):
+        assert requested_task_id == task_id
+        return make_task(id=task_id, agent_instance_id="agent-id")
+
+    async def fake_load_binding(database, task):
+        return execution._ExecutionBinding(
+            github_repo="owner/repo",
+            project=None,
+            workspace_key="workspace",
+        )
+
+    async def fake_noop(*args, **kwargs):
+        return None
+
+    async def fake_claim_running(*args, **kwargs):
+        return True
+
+    async def fake_run_agent_workflow(*args, **kwargs):
+        raise execution.Terminated(15)
+
+    async def fake_mark_failed(*args, **kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr(execution, "Database", FakeRuntimeDatabase)
+    monkeypatch.setattr(execution, "_load_task", fake_load_task)
+    monkeypatch.setattr(execution, "_load_binding", fake_load_binding)
+    monkeypatch.setattr(execution, "_set_workspace_running", fake_noop)
+    monkeypatch.setattr(execution, "_claim_running", fake_claim_running)
+    monkeypatch.setattr(execution, "_lease_heartbeat", fake_noop)
+    monkeypatch.setattr(execution, "_run_agent_workflow", fake_run_agent_workflow)
+    monkeypatch.setattr(execution, "_mark_failed", fake_mark_failed)
+    monkeypatch.setattr(execution, "_release_workspace", fake_noop)
+
+    try:
+        asyncio.run(
+            execution.execute_agent_task(
+                task_id=task_id,
+                settings=SimpleNamespace(database_url="postgresql://test", task_dispatch_lease_seconds=30),
+                dispatch_token="token",
+            )
+        )
+    except execution.Terminated:
+        pass
+    else:
+        raise AssertionError("worker termination should be re-raised")
+
+    assert calls == []

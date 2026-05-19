@@ -5,6 +5,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, cast
 
+from celery.exceptions import Terminated, WorkerShutdown, WorkerTerminate
 from openai.types.chat import ChatCompletionMessage
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 
@@ -45,6 +46,7 @@ _WORK_ITEM_REVIEW_READY_STATUSES = {
     TaskWorkItemStatus.approved,
     TaskWorkItemStatus.closed,
 }
+_WORKER_INTERRUPTED_EXCEPTIONS = (asyncio.CancelledError, Terminated, WorkerShutdown, WorkerTerminate)
 
 
 @dataclass(frozen=True)
@@ -187,6 +189,14 @@ async def execute_agent_task(
             await _mark_post_execution_wait_state(database, task_id, None)
             logger.info("Task %s returned to its waiting state.", task_id)
 
+    except _WORKER_INTERRUPTED_EXCEPTIONS:
+        logger.warning(
+            "Task %s worker execution was interrupted by shutdown/termination; "
+            "leaving task state unchanged for recovery.",
+            task_id,
+            exc_info=True,
+        )
+        raise
     except Exception as exc:
         logger.exception("Task %s failed in worker", task_id)
         await _mark_failed(database, task_id, str(exc))
