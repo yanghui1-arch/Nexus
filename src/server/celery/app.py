@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from celery import Celery
+from celery.signals import worker_shutdown
 
 from src.server.config import get_settings
+from src.server.celery.state import worker_shutting_down
 
 
 settings = get_settings()
@@ -51,5 +53,11 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
 )
+
+
+@worker_shutdown.connect
+def _on_worker_shutdown(*args, **kwargs) -> None:
+    worker_shutting_down.set()
+
 
 celery_app.autodiscover_tasks(["src.server.celery"])

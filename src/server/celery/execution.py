@@ -11,7 +11,7 @@ from openai.types.chat.chat_completion_message_param import ChatCompletionMessag
 from src.agents import Marc, Sophie, Tela
 from src.agents.base.agent import Agent, BaseAgentResponse, WorkTempStatus
 from src.logger import logger
-from src.server.config import Settings, get_settings
+from src.server.celery.state import worker_shutting_down
 from src.server.postgres.database import Database
 from src.server.postgres.models import (
     GithubPullRequestFeedbackKind,
@@ -188,12 +188,14 @@ async def execute_agent_task(
             logger.info("Task %s returned to its waiting state.", task_id)
 
     except asyncio.CancelledError:
-        logger.warning("Task %s was interrupted by worker shutdown; queueing it for redispatch.", task_id)
-        async with database.session() as session:
-            interrupted_task = await TaskRepository.get(session, task_id)
-            if interrupted_task is not None and interrupted_task.status != TaskStatus.failed:
-                await TaskRepository.set_queued(session, task_id)
-        return
+        if worker_shutting_down.is_set():
+            logger.warning("Task %s was interrupted by worker shutdown; queueing it for redispatch.", task_id)
+            async with database.session() as session:
+                interrupted_task = await TaskRepository.get(session, task_id)
+                if interrupted_task is not None and interrupted_task.status != TaskStatus.failed:
+                    await TaskRepository.set_queued(session, task_id)
+            return
+        raise
     except Exception as exc:
         logger.exception("Task %s failed in worker", task_id)
         await _mark_failed(database, task_id, str(exc))

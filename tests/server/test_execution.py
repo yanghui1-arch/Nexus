@@ -686,6 +686,7 @@ def test_execute_agent_task_treats_shutdown_as_redispatch(monkeypatch):
     async def fake_set_failed(*args, **kwargs):
         raise AssertionError("shutdown should not mark task failed")
 
+    monkeypatch.setattr(execution.worker_shutting_down, "is_set", lambda: True)
     monkeypatch.setattr(execution, "_load_task", fake_load_task)
     monkeypatch.setattr(execution, "_load_binding", fake_load_binding)
     monkeypatch.setattr(execution, "_set_workspace_running", fake_set_workspace_running)
