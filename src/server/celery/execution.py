@@ -53,6 +53,7 @@ _WORKER_INTERRUPTED_EXCEPTIONS = (
     WorkerShutdown,
     WorkerTerminate,
 )
+_worker_shutdown_requested: ContextVar[bool] = ContextVar("worker_shutdown_requested", default=False)
 
 
 @dataclass(frozen=True)
@@ -73,11 +74,7 @@ async def execute_agent_task(
     database = Database(cfg.database_url)
     await database.connect()
 
-    pending_checkpoint_tasks: set[asyncio.Task[Any]] = set()
-    stop_lease_heartbeat = asyncio.Event()
-    lease_heartbeat_task: asyncio.Task[Any] | None = None
-    binding: _ExecutionBinding | None = None
-    task: TaskRecord | None = None
+    interrupted = False
 
     def on_progress(status: WorkTempStatus) -> None:
         if status["process"] != "SAVE_CHECKPOINT":
@@ -191,11 +188,12 @@ async def execute_agent_task(
             recovered=recovered,
         )
 
-        if task is not None and task.category == TaskCategory.coding:
+        if task is not None and task.category == TaskCategory.coding and not interrupted:
             await _mark_post_execution_wait_state(database, task_id, None)
             logger.info("Task %s returned to its waiting state.", task_id)
 
     except _WORKER_INTERRUPTED_EXCEPTIONS:
+        interrupted = True
         logger.warning(
             "Task %s worker execution was interrupted by shutdown/termination; "
             "leaving task state unchanged for recovery.",

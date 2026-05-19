@@ -710,3 +710,60 @@ def test_run_agent_task_swallows_keyboard_interrupt(monkeypatch):
 
     assert len(calls) == 1
     assert "interrupted" in calls[0][0][0]
+
+
+def test_execute_agent_task_skips_waiting_for_review_on_shutdown(monkeypatch):
+    task_id = "task-id"
+    set_waiting_calls = []
+
+    class FakeRuntimeDatabase:
+        def __init__(self, url):
+            self.url = url
+
+        async def connect(self):
+            return None
+
+        async def disconnect(self):
+            return None
+
+    async def fake_load_task(database, requested_task_id):
+        return make_task(id=task_id, agent_instance_id="agent-id")
+
+    async def fake_load_binding(database, task):
+        return execution._ExecutionBinding(
+            github_repo="owner/repo",
+            project=None,
+            workspace_key="workspace",
+        )
+
+    async def fake_noop(*args, **kwargs):
+        return None
+
+    async def fake_claim_running(*args, **kwargs):
+        return True
+
+    async def fake_run_agent_workflow(*args, **kwargs):
+        raise execution.WorkerTerminate()
+
+    async def fake_set_waiting_for_review(*args, **kwargs):
+        set_waiting_calls.append((args, kwargs))
+
+    monkeypatch.setattr(execution, "Database", FakeRuntimeDatabase)
+    monkeypatch.setattr(execution, "_load_task", fake_load_task)
+    monkeypatch.setattr(execution, "_load_binding", fake_load_binding)
+    monkeypatch.setattr(execution, "_set_workspace_running", fake_noop)
+    monkeypatch.setattr(execution, "_claim_running", fake_claim_running)
+    monkeypatch.setattr(execution, "_lease_heartbeat", fake_noop)
+    monkeypatch.setattr(execution, "_run_agent_workflow", fake_run_agent_workflow)
+    monkeypatch.setattr(execution, "_release_workspace", fake_noop)
+    monkeypatch.setattr(execution.TaskRepository, "set_waiting_for_review", fake_set_waiting_for_review)
+
+    asyncio.run(
+        execution.execute_agent_task(
+            task_id=task_id,
+            settings=SimpleNamespace(database_url="postgresql://test", task_dispatch_lease_seconds=30),
+            dispatch_token="token",
+        )
+    )
+
+    assert set_waiting_calls == []
