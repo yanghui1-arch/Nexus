@@ -10,9 +10,6 @@ import {
 import { codeToTokens, type BundledLanguage } from 'shiki';
 import { cn } from '@/lib/utils';
 
-const GITHUB_MARKDOWN_SANS_FAMILY =
-  '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji"';
-
 const GITHUB_MARKDOWN_MONO_FAMILY =
   'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace';
 
@@ -43,14 +40,6 @@ type MarkdownShikiToken = {
   color?: string;
   content: string;
   fontStyle?: number;
-};
-
-const GITHUB_MARKDOWN_HEADING_STYLE: CSSProperties = {
-  fontFamily: GITHUB_MARKDOWN_SANS_FAMILY,
-};
-
-const GITHUB_MARKDOWN_ROOT_STYLE: CSSProperties = {
-  fontFamily: GITHUB_MARKDOWN_SANS_FAMILY,
 };
 
 type MarkdownContentProps = {
@@ -243,38 +232,32 @@ const MARKDOWN_OPTIONS = {
     code: MarkdownCode,
     h1: {
       props: {
-        className: 'mb-3 last:mb-0 text-base font-semibold text-foreground',
-        style: GITHUB_MARKDOWN_HEADING_STYLE,
+        className: 'mb-3 last:mb-0 text-base font-normal text-foreground',
       },
     },
     h2: {
       props: {
-        className: 'mb-3 last:mb-0 text-base font-semibold text-foreground',
-        style: GITHUB_MARKDOWN_HEADING_STYLE,
+        className: 'mb-3 last:mb-0 text-base font-normal text-foreground',
       },
     },
     h3: {
       props: {
-        className: 'mb-3 last:mb-0 text-sm font-semibold text-foreground',
-        style: GITHUB_MARKDOWN_HEADING_STYLE,
+        className: 'mb-3 last:mb-0 text-sm font-normal text-foreground',
       },
     },
     h4: {
       props: {
-        className: 'mb-3 last:mb-0 text-sm font-semibold text-foreground',
-        style: GITHUB_MARKDOWN_HEADING_STYLE,
+        className: 'mb-3 last:mb-0 text-sm font-normal text-foreground',
       },
     },
     h5: {
       props: {
-        className: 'mb-3 last:mb-0 text-sm font-semibold text-foreground',
-        style: GITHUB_MARKDOWN_HEADING_STYLE,
+        className: 'mb-3 last:mb-0 text-sm font-normal text-foreground',
       },
     },
     h6: {
       props: {
-        className: 'mb-3 last:mb-0 text-sm font-semibold text-foreground',
-        style: GITHUB_MARKDOWN_HEADING_STYLE,
+        className: 'mb-3 last:mb-0 text-sm font-normal text-foreground',
       },
     },
     hr: {
@@ -347,7 +330,6 @@ export function MarkdownContent({
     return (
       <p
         className={cn('text-sm leading-relaxed text-foreground break-words', className)}
-        style={GITHUB_MARKDOWN_ROOT_STYLE}
       >
         {emptyState}
       </p>
@@ -357,7 +339,6 @@ export function MarkdownContent({
   return (
     <div
       className={cn('text-sm leading-relaxed text-foreground break-words', className)}
-      style={GITHUB_MARKDOWN_ROOT_STYLE}
     >
       <Markdown options={MARKDOWN_OPTIONS}>{trimmedContent}</Markdown>
     </div>
