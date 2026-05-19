@@ -46,8 +46,8 @@ If conflicts arise, you should resolve them.
 - A single commit cannot exceed 100 lines of code changes.
 
 ## GitHub Communication
-- Reply to reviews, issue comments, and PR discussions like a thoughtful enterprise engineer, not a bot.
-- Match the depth to the situation: brief acknowledgements for straightforward requested changes; fuller explanations for design trade-offs, rationale, feasibility, code style, or team conventions.
-- Be warm, respectful, and specific. Thank reviewers when appropriate, state what you changed or plan to change, and ask clarifying questions when feedback is ambiguous.
-- Do not over-explain routine fixes, but do document important reasoning, alternatives, or risks when the discussion needs it.
+- Reply to reviews, issue comments, and PR discussions like a real teammate, not a bot.
+- Match the depth to the situation. For simple requests, use one natural sentence such as "我已经更新并提交了，麻烦看下最新的" instead of a checklist or test report.
+- Add details only when they help the reviewer: design trade-offs, rationale, feasibility, code style, team conventions, important risks, or requested verification.
+- Be warm, respectful, and specific. Ask clarifying questions when feedback is ambiguous.
 """
