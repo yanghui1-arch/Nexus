@@ -339,36 +339,45 @@ class Agent(BaseModel):
         usage_tokens = 0
         tool_calls_state: dict[int, dict[str, str]] = {}
 
-        stream = await self.openai_client.chat.completions.create(**stream_kwargs)
-        async for chunk in stream:
-            if getattr(chunk, "usage", None) is not None:
-                usage_tokens = chunk.usage.total_tokens or usage_tokens
+        stream_or_completion = await self.openai_client.chat.completions.create(**stream_kwargs)
+        if hasattr(stream_or_completion, "choices"):
+            completion = stream_or_completion
+            choice = completion.choices[0]
+            message = choice.message
+            finish_reason = choice.finish_reason
+            reasoning = getattr(message, "reasoning_content", None)
+            usage_tokens = completion.usage.total_tokens if getattr(completion, "usage", None) else 0
+        else:
+            async for chunk in stream_or_completion:
+                if getattr(chunk, "usage", None) is not None:
+                    usage_tokens = chunk.usage.total_tokens or usage_tokens
 
-            if not chunk.choices:
-                continue
-            choice = chunk.choices[0]
-            if choice.finish_reason is not None:
-                finish_reason = choice.finish_reason
+                if not chunk.choices:
+                    continue
+                choice = chunk.choices[0]
+                if choice.finish_reason is not None:
+                    finish_reason = choice.finish_reason
 
-            delta = choice.delta
-            if delta.content:
-                content_parts.append(delta.content)
+                delta = choice.delta
+                if delta.content:
+                    content_parts.append(delta.content)
 
-            reasoning_content = getattr(delta, "reasoning_content", None)
-            if reasoning_content:
-                reasoning_parts.append(reasoning_content)
+                reasoning_content = getattr(delta, "reasoning_content", None)
+                if reasoning_content:
+                    reasoning_parts.append(reasoning_content)
 
-            if delta.tool_calls:
-                for tc in delta.tool_calls:
-                    tool_calls_state = self._merge_tool_call_delta(tool_calls_state, tc)
+                if delta.tool_calls:
+                    for tc in delta.tool_calls:
+                        tool_calls_state = self._merge_tool_call_delta(tool_calls_state, tc)
 
-        tool_calls = self._build_tool_calls(tool_calls_state)
-        message = ChatCompletionMessage(
-            role="assistant",
-            content="".join(content_parts) or None,
-            tool_calls=tool_calls or None,
-        )
-        reasoning = "".join(reasoning_parts) if reasoning_parts else None
+            tool_calls = self._build_tool_calls(tool_calls_state)
+            message = ChatCompletionMessage(
+                role="assistant",
+                content="".join(content_parts) or None,
+                tool_calls=tool_calls or None,
+            )
+            reasoning = "".join(reasoning_parts) if reasoning_parts else None
+
         return StreamCompletionResult(
             message=message,
             finish_reason=finish_reason,
