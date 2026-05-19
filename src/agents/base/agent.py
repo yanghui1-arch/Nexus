@@ -340,8 +340,6 @@ class Agent(BaseModel):
         tool_calls_state: dict[int, dict[str, str]] = {}
 
         stream = await self.openai_client.chat.completions.create(**stream_kwargs)
-        if not hasattr(stream, "__aiter__"):
-            raise TypeError("Expected streaming response with async iterator when stream=True.")
         async for chunk in stream:
             if getattr(chunk, "usage", None) is not None:
                 usage_tokens = chunk.usage.total_tokens or usage_tokens
