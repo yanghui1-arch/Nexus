@@ -475,7 +475,8 @@ def _build_pr_merge_conflict_item(
     pull_request_number: int,
 ) -> _GithubFeedbackItem | None:
     mergeable_state = _normalize_text(pull_request.get("mergeable_state"))
-    if mergeable_state not in {"dirty", "unknown"}:
+    mergeable = pull_request.get("mergeable")
+    if mergeable is not False and mergeable_state not in {"dirty", "unknown"}:
         return None
 
     body = (

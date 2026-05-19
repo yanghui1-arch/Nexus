@@ -477,6 +477,7 @@ def test_poll_once_dispatches_merge_conflict_feedback(monkeypatch):
         return {
             "state": "open",
             "merged_at": None,
+            "mergeable": False,
             "mergeable_state": "dirty",
             "html_url": "https://github.com/owner/repo/pull/12",
             "updated_at": "2024-01-11T00:00:00Z",
