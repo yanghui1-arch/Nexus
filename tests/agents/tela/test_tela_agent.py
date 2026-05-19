@@ -4,6 +4,7 @@ All tests use mocked OpenAI client and a mocked Docker sandbox so they run
 without any real API keys or Docker daemon.
 """
 import pytest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.agents.tela import Tela
@@ -42,28 +43,27 @@ def make_pool_manager(mock_sandbox):
 
 
 def make_stop_response(content: str = "done"):
-    """Build a minimal OpenAI chat completion response that stops."""
-    choice = MagicMock()
-    choice.finish_reason = "stop"
-    choice.message = ChatCompletionMessage(role="assistant", content=content)
-    resp = MagicMock()
-    resp.choices = [choice]
-    resp.usage.total_tokens = 42
-    return resp
+    """Build a minimal streaming response that stops."""
+    async def _stream():
+        delta = SimpleNamespace(content=content, tool_calls=None, reasoning_content=None)
+        choice = SimpleNamespace(finish_reason="stop", delta=delta)
+        chunk = SimpleNamespace(choices=[choice], usage=SimpleNamespace(total_tokens=42))
+        yield chunk
+    return _stream()
 
 
 def make_tool_response(name: str, args: str, call_id: str = "c1"):
-    """Build a response that requests one tool call."""
-    tc = ChatCompletionMessageToolCall(
-        id=call_id, type="function", function=Function(name=name, arguments=args)
-    )
-    choice = MagicMock()
-    choice.finish_reason = "tool_calls"
-    choice.message = ChatCompletionMessage(role="assistant", content=None, tool_calls=[tc])
-    resp = MagicMock()
-    resp.choices = [choice]
-    resp.usage.total_tokens = 20
-    return resp
+    """Build a streaming response that requests one tool call."""
+    async def _stream():
+        tc_delta = MagicMock()
+        tc_delta.index = 0
+        tc_delta.id = call_id
+        tc_delta.function = SimpleNamespace(name=name, arguments=args)
+        delta = SimpleNamespace(content=None, tool_calls=[tc_delta], reasoning_content=None)
+        choice = SimpleNamespace(finish_reason="tool_calls", delta=delta)
+        chunk = SimpleNamespace(choices=[choice], usage=SimpleNamespace(total_tokens=20))
+        yield chunk
+    return _stream()
 
 
 class TestContextManager:
@@ -466,9 +466,6 @@ class TestFactory:
             )
         assert tela.llm_config.model == "gpt-4o-mini"
         assert tela.github_token == "ghp_abc"
-
-
-
 
 
 

@@ -87,16 +87,19 @@ def test_marc_step_passes_read_only_tools_to_openai():
     async def run():
         marc = make_marc()
         marc._sandbox = SimpleNamespace()
-        fake_completion = SimpleNamespace(
-            choices=[SimpleNamespace(
-                finish_reason="stop",
-                message=SimpleNamespace(content="done", tool_calls=None),
-            )],
-            usage=SimpleNamespace(total_tokens=12),
-        )
+
+        async def fake_stream():
+            yield SimpleNamespace(
+                choices=[SimpleNamespace(
+                    finish_reason="stop",
+                    delta=SimpleNamespace(content="done", tool_calls=None),
+                )],
+                usage=SimpleNamespace(total_tokens=12),
+            )
+
         fake_client = SimpleNamespace(
             chat=SimpleNamespace(
-                completions=SimpleNamespace(create=AsyncMock(return_value=fake_completion))
+                completions=SimpleNamespace(create=AsyncMock(return_value=fake_stream()))
             )
         )
         marc.openai_client = fake_client
