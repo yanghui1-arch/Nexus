@@ -91,7 +91,7 @@ class Marc(Agent):
             self._sandbox_pool_manager = None
         await self.close()
 
-    @track(tags=["exec", "marc"], step_type="llm", llm_provider=LLMProvider.OPENAI, system_prompt="Marc/step@0.1")
+    @track(tags=["exec", "marc"], step_type="llm", llm_provider=LLMProvider.OPENAI)
     async def step(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> BaseAgentStepResult:
         if self._sandbox is None:
             raise RuntimeError("Marc must be used as an async context manager (async with Marc(...) as marc:)")
