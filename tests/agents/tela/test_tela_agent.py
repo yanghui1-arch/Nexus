@@ -256,6 +256,7 @@ class TestGithubTools:
             {"success": True, "stdout": "new", "stderr": ""},   # test -d .git
             {"success": True, "stdout": "", "stderr": ""},       # git clone
             {"success": True, "stdout": "", "stderr": ""},       # git remote add upstream
+            {"success": True, "stdout": "", "stderr": ""},       # sync main with upstream
         ])
         kit = GithubTools(sandbox)
         await kit.fetch_from_github(
@@ -266,19 +267,55 @@ class TestGithubTools:
         upstream_cmd = sandbox.run_shell.call_args_list[2][0][0]
         assert "remote" in upstream_cmd and "upstream" in upstream_cmd
         assert "https://github.com/owner/repo" in upstream_cmd
+        sync_call = sandbox.run_shell.call_args_list[3][0][0]
+        assert "fetch upstream main" in sync_call
 
-    async def test_fetch_skips_upstream_when_not_provided(self):
+    async def test_fetch_syncs_main_with_upstream_when_already_cloned(self):
         sandbox = AsyncMock()
+        sandbox.recreate = AsyncMock()
         sandbox.run_shell = AsyncMock(side_effect=[
-            {"success": True, "stdout": "new", "stderr": ""},
-            {"success": True, "stdout": "", "stderr": ""},
+            {"success": True, "stdout": "exists", "stderr": ""},                          # test -d .git
+            {"success": True, "stdout": "https://github.com/Nexus-Tela/repo\n", "stderr": ""},  # origin remote
+            {"success": True, "stdout": "", "stderr": ""},                                 # fetch upstream + sync main
+            {"success": True, "stdout": "", "stderr": ""},                                 # sync_main_branch
         ])
         kit = GithubTools(sandbox)
-        await kit.fetch_from_github(
+
+        result = await kit.fetch_from_github(
             repo_url="https://github.com/Nexus-Tela/repo",
             local_path="/workspace/myproject",
+            upstream_url="https://github.com/owner/repo",
         )
-        assert sandbox.run_shell.call_count == 2
+
+        assert result["success"] is True
+        assert "Synchronized 'main' with upstream" in result["message"]
+        sync_call = sandbox.run_shell.call_args_list[3][0][0]
+        assert "fetch upstream main" in sync_call
+        assert "reset --hard upstream/main" in sync_call
+        sandbox.recreate.assert_not_awaited()
+
+    async def test_fetch_syncs_main_with_upstream_after_clone(self):
+        sandbox = AsyncMock()
+        sandbox.run_shell = AsyncMock(side_effect=[
+            {"success": True, "stdout": "new", "stderr": ""},   # test -d .git
+            {"success": True, "stdout": "", "stderr": ""},      # git clone
+            {"success": True, "stdout": "", "stderr": ""},      # git remote add upstream
+            {"success": True, "stdout": "", "stderr": ""},      # sync_main_branch
+        ])
+        kit = GithubTools(sandbox)
+
+        result = await kit.fetch_from_github(
+            repo_url="https://github.com/Nexus-Tela/repo",
+            local_path="/workspace/myproject",
+            upstream_url="https://github.com/owner/repo",
+        )
+
+        assert result["success"] is True
+        assert "synchronized 'main' with upstream" in result["message"].lower()
+        clone_call = sandbox.run_shell.call_args_list[1][0][0]
+        assert "git clone" in clone_call
+        sync_call = sandbox.run_shell.call_args_list[3][0][0]
+        assert "fetch upstream main" in sync_call
 
     async def test_fetch_uses_repo_url_as_given(self):
         sandbox = AsyncMock()
