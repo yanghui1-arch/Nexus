@@ -60,6 +60,9 @@ class ProductWorkflowPoller:
             if feature is None:
                 logger.warning("Skip feature item %s because its feature is missing.", item.id)
                 return False
+            # Feature items inherit ownership from their proposal workspace. Use the
+            # proposal repo/project when choosing a Tela instance so product work
+            # is not published to an agent that belongs to another workspace.
             proposal = await FeatureItemRepository.get_proposal(session, item.id)
             if proposal is None:
                 logger.warning("Skip feature item %s because its proposal is missing.", item.id)
