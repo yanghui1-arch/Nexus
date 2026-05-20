@@ -11,8 +11,8 @@ from openai.types.chat.chat_completion_message_param import ChatCompletionMessag
 from src.agents import Marc, Sophie, Tela
 from src.agents.base.agent import Agent, BaseAgentResponse, WorkTempStatus
 from src.logger import logger
-from src.server.celery.state import worker_shutting_down
 from src.server.config import Settings, get_settings
+from src.server.celery.state import worker_shutting_down
 from src.server.postgres.database import Database
 from src.server.postgres.models import (
     GithubPullRequestFeedbackKind,
