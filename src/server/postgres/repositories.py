@@ -651,19 +651,8 @@ class TaskRepository:
         return task
 
     @staticmethod
-    async def get(
-        session: AsyncSession,
-        task_id: uuid.UUID,
-        *,
-        user_id: uuid.UUID | None = None,
-    ) -> TaskRecord | None:
-        query = select(TaskRecord).where(TaskRecord.id == task_id)
-        if user_id is not None:
-            query = query.join(AgentInstanceRecord, AgentInstanceRecord.id == TaskRecord.agent_instance_id).where(
-                AgentInstanceRecord.user_id == user_id
-            )
-        result = await session.execute(query)
-        return result.scalar_one_or_none()
+    async def get(session: AsyncSession, task_id: uuid.UUID) -> TaskRecord | None:
+        return await session.get(TaskRecord, task_id)
 
     @staticmethod
     async def list(

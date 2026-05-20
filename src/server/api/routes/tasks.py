@@ -59,7 +59,7 @@ async def create_task(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     async with database.session() as session:
-        task = await TaskRepository.get(session, task_id, user_id=user.id)
+        task = await TaskRepository.get(session, task_id)
     if task is None:
         raise HTTPException(status_code=500, detail="Created task could not be loaded")
 
@@ -106,8 +106,11 @@ async def get_task(
 ) -> TaskResponse:
     database: Database = request.app.state.database
     async with database.session() as session:
-        task = await TaskRepository.get(session, task_id, user_id=user.id)
-    if task is None:
+        task = await TaskRepository.get(session, task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
+    if instance is None or instance.user_id != user.id:
         raise HTTPException(status_code=404, detail="Task not found")
     return TaskResponse.from_record(task)
 
@@ -120,8 +123,11 @@ async def list_task_work_items(
 ) -> list[TaskWorkItemResponse]:
     database: Database = request.app.state.database
     async with database.session() as session:
-        task = await TaskRepository.get(session, task_id, user_id=user.id)
+        task = await TaskRepository.get(session, task_id)
         if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
+        if instance is None or instance.user_id != user.id:
             raise HTTPException(status_code=404, detail="Task not found")
         work_items = await TaskWorkItemRepository.list_by_task(session, task_id)
     return [TaskWorkItemResponse.from_record(work_item) for work_item in work_items]
@@ -137,8 +143,11 @@ async def update_task_status(
     database: Database = request.app.state.database
 
     async with database.session() as session:
-        task = await TaskRepository.get(session, task_id, user_id=user.id)
+        task = await TaskRepository.get(session, task_id)
         if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
+        if instance is None or instance.user_id != user.id:
             raise HTTPException(status_code=404, detail="Task not found")
 
         if payload.status == TaskStatus.merged:
@@ -187,8 +196,11 @@ async def consult_task(
 ) -> TaskConsultResponse:
     database: Database = request.app.state.database
     async with database.session() as session:
-        task = await TaskRepository.get(session, task_id, user_id=user.id)
-    if task is None:
+        task = await TaskRepository.get(session, task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
+    if instance is None or instance.user_id != user.id:
         raise HTTPException(status_code=404, detail="Task not found")
     if task.agent.value not in available_agent_factory.keys():
         raise HTTPException(status_code=404, detail=f"Unsupported agent: {task.agent.value}")

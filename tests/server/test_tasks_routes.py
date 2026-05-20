@@ -62,6 +62,13 @@ def _build_app(session_obj: object | None = None, runner_obj: object | None = No
     return app
 
 
+async def _fake_get_current_user_instance(session, agent_instance_id):
+    return SimpleNamespace(
+        id=agent_instance_id,
+        user_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
+    )
+
+
 def _make_task(
     *,
     question: str,
@@ -316,6 +323,7 @@ def test_list_task_work_items(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(TaskRepository, 'get', fake_get)
     monkeypatch.setattr(TaskWorkItemRepository, 'list_by_task', fake_list_by_task)
+    monkeypatch.setattr(AgentInstanceRepository, 'get', _fake_get_current_user_instance)
 
     async def run_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=_build_app())
@@ -347,6 +355,7 @@ def test_update_task_status_closes_reviewable_task(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(TaskRepository, 'get', fake_get_task)
     monkeypatch.setattr(TaskRepository, 'set_closed', fake_set_closed)
+    monkeypatch.setattr(AgentInstanceRepository, 'get', _fake_get_current_user_instance)
 
     async def run_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=_build_app())
@@ -393,6 +402,7 @@ def test_update_task_status_reopens_closed_task_for_review(monkeypatch: pytest.M
     monkeypatch.setattr(TaskRepository, 'get', fake_get_task)
     monkeypatch.setattr(TaskWorkItemRepository, 'list_by_task', fake_list_work_items)
     monkeypatch.setattr(TaskRepository, 'set_waiting_for_review', fake_set_waiting_for_review)
+    monkeypatch.setattr(AgentInstanceRepository, 'get', _fake_get_current_user_instance)
 
     async def run_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=_build_app())
@@ -442,6 +452,7 @@ def test_update_task_status_reopens_closed_task_for_review_when_work_items_are_a
     monkeypatch.setattr(TaskRepository, 'get', fake_get_task)
     monkeypatch.setattr(TaskWorkItemRepository, 'list_by_task', fake_list_work_items)
     monkeypatch.setattr(TaskRepository, 'set_waiting_for_review', fake_set_waiting_for_review)
+    monkeypatch.setattr(AgentInstanceRepository, 'get', _fake_get_current_user_instance)
 
     async def run_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=_build_app())
@@ -508,6 +519,7 @@ def test_consult_task_returns_process_reply(monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr(TaskRepository, 'get', fake_get)
     monkeypatch.setattr(tasks_routes, 'get_settings', _make_settings)
+    monkeypatch.setattr(AgentInstanceRepository, 'get', _fake_get_current_user_instance)
     monkeypatch.setattr(tasks_routes.Sophie, 'create', fake_create)
 
     async def run_request() -> httpx.Response:

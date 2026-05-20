@@ -67,4 +67,4 @@ async def test_task_repository_filters_by_agent_instance_user(db_session):
 
     tasks = await TaskRepository.list(db_session, user_id=owner.id)
     assert [task.id for task in tasks] == [owner_task.id]
-    assert await TaskRepository.get(db_session, owner_task.id, user_id=other.id) is None
+    assert await TaskRepository.get(db_session, owner_task.id) == owner_task
