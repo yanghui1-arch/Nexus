@@ -58,8 +58,8 @@ def _proposal(**overrides: Any) -> Any:
     return SimpleNamespace(**values)
 
 
-async def _fake_scopes(session, *, user_id):
-    return [("owner/repo", "nexus")]
+async def _fake_user_workspaces(session, *, user_id):
+    return [SimpleNamespace(github_repo="owner/repo", project="nexus")]
 
 
 def test_approve_proposal_dispatches_planning_task(monkeypatch) -> None:
@@ -78,16 +78,18 @@ def test_approve_proposal_dispatches_planning_task(monkeypatch) -> None:
         captured["status"] = status
         return approved
 
-    async def fake_list_marc(session, *, agent, user_id=None, scope=None, limit):
+    async def fake_list_marc(session, *, agent, user_id=None, github_repo=None, project=None, limit):
         captured["agent"] = agent
         captured["user_id"] = user_id
+        captured["github_repo"] = github_repo
+        captured["project"] = project
         captured["limit"] = limit
         return [SimpleNamespace(id=marc_instance_id)]
 
     monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
     monkeypatch.setattr(ProductProposalRepository, "set_status", fake_set_status)
     monkeypatch.setattr(AgentInstanceRepository, "list_by_active_task_load", fake_list_marc)
-    monkeypatch.setattr(WorkspaceRepository, "list_repo_project_scopes", _fake_scopes)
+    monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
 
     async def run_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=_build_app(runner=runner, user_id=user_id))
@@ -106,6 +108,8 @@ def test_approve_proposal_dispatches_planning_task(monkeypatch) -> None:
         "status": ProductProposalStatus.approved,
         "agent": AgentName.marc,
         "user_id": user_id,
+        "github_repo": "owner/repo",
+        "project": "nexus",
         "limit": 1,
     }
     payload = runner.submit_task.await_args.args[0]
@@ -142,14 +146,14 @@ def test_approve_proposal_marks_source_pm_task_merged(monkeypatch) -> None:
         captured["merged_task_id"] = task_id
         return SimpleNamespace(id=task_id)
 
-    async def fake_list_marc(session, *, agent, user_id=None, scope=None, limit):
+    async def fake_list_marc(session, *, agent, user_id=None, github_repo=None, project=None, limit):
         return [SimpleNamespace(id=uuid.uuid4())]
 
     monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
     monkeypatch.setattr(ProductProposalRepository, "set_status", fake_set_status)
     monkeypatch.setattr(TaskRepository, "set_merged", fake_set_merged)
     monkeypatch.setattr(AgentInstanceRepository, "list_by_active_task_load", fake_list_marc)
-    monkeypatch.setattr(WorkspaceRepository, "list_repo_project_scopes", _fake_scopes)
+    monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
 
     async def run_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=_build_app(runner=runner, user_id=user_id))
@@ -191,7 +195,7 @@ def test_reject_proposal_marks_source_pm_task_closed(monkeypatch) -> None:
     monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
     monkeypatch.setattr(ProductProposalRepository, "set_status", fake_set_status)
     monkeypatch.setattr(TaskRepository, "set_closed", fake_set_closed)
-    monkeypatch.setattr(WorkspaceRepository, "list_repo_project_scopes", _fake_scopes)
+    monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
 
     async def run_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=_build_app(runner=runner, user_id=user_id))
@@ -216,7 +220,7 @@ def test_list_proposals_filters_current_user(monkeypatch) -> None:
         return [_proposal(user_id=user_id)]
 
     monkeypatch.setattr(ProductProposalRepository, "list", fake_list)
-    monkeypatch.setattr(WorkspaceRepository, "list_repo_project_scopes", _fake_scopes)
+    monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
 
     async def run_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=_build_app(user_id=user_id))
@@ -226,7 +230,7 @@ def test_list_proposals_filters_current_user(monkeypatch) -> None:
     response = asyncio.run(run_request())
 
     assert response.status_code == 200
-    assert captured["scopes"] == [("owner/repo", "nexus")]
+    assert captured["workspaces"] == [SimpleNamespace(github_repo="owner/repo", project="nexus")]
 
 
 def test_get_proposal_hides_unscoped_record(monkeypatch) -> None:
@@ -236,7 +240,7 @@ def test_get_proposal_hides_unscoped_record(monkeypatch) -> None:
         return _proposal(id=pid, repo="other/repo", project="other")
 
     monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
-    monkeypatch.setattr(WorkspaceRepository, "list_repo_project_scopes", _fake_scopes)
+    monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
 
     async def run_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=_build_app(user_id=uuid.uuid4()))

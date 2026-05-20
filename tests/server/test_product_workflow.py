@@ -32,8 +32,8 @@ def _settings(**overrides):
 
 def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
     item = SimpleNamespace(id="feature-item-id", title="Knowledge base", description="Add search.")
-    user_id = uuid.uuid4()
     feature = SimpleNamespace(project="nexus")
+    proposal = SimpleNamespace(repo="owner/repo", project="nexus")
     tela_instance_id = uuid.uuid4()
     tela = SimpleNamespace(id=tela_instance_id)
     runner = FakeRunner()
@@ -44,9 +44,10 @@ def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
         calls["item"] += 1
         return item if calls["item"] == 1 else None
 
-    async def fake_list_agents(session, *, agent, scope, limit):
+    async def fake_list_agents(session, *, agent, github_repo, project, limit):
         captured["agent"] = agent
-        captured["scope"] = scope
+        captured["github_repo"] = github_repo
+        captured["project"] = project
         captured["limit"] = limit
         return [tela]
 
@@ -54,9 +55,9 @@ def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
         captured["feature_item_id"] = item_id
         return feature
 
-    async def fake_get_proposal_scope(session, item_id):
-        captured["proposal_scope_item_id"] = item_id
-        return ("owner/repo", "nexus")
+    async def fake_get_proposal(session, item_id):
+        captured["proposal_item_id"] = item_id
+        return proposal
 
     async def fake_get_repo(session, item_id):
         captured["repo_item_id"] = item_id
@@ -69,7 +70,7 @@ def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
     monkeypatch.setattr(FeatureItemRepository, "get_next_unassigned", fake_next_item)
     monkeypatch.setattr(AgentInstanceRepository, "list_by_active_task_load", fake_list_agents)
     monkeypatch.setattr(FeatureItemRepository, "get_feature", fake_get_feature)
-    monkeypatch.setattr(FeatureItemRepository, "get_proposal_scope", fake_get_proposal_scope)
+    monkeypatch.setattr(FeatureItemRepository, "get_proposal", fake_get_proposal)
     monkeypatch.setattr(FeatureItemRepository, "get_repo", fake_get_repo)
     monkeypatch.setattr(FeatureItemRepository, "assign_task", fake_assign)
 
@@ -83,10 +84,11 @@ def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
 
     assert result == 1
     assert captured["agent"] == AgentName.tela
-    assert captured["scope"] == ("owner/repo", "nexus")
+    assert captured["github_repo"] == "owner/repo"
+    assert captured["project"] == "nexus"
     assert captured["limit"] == 1
     assert captured["feature_item_id"] == "feature-item-id"
-    assert captured["proposal_scope_item_id"] == "feature-item-id"
+    assert captured["proposal_item_id"] == "feature-item-id"
     assert captured["repo_item_id"] == "feature-item-id"
     payload = runner.submit_task.await_args.args[0]
     assert payload.agent_instance_id == tela_instance_id
