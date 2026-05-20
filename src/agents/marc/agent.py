@@ -97,7 +97,7 @@ class Marc(Agent):
             self._sandbox_pool_manager = None
         await self.close()
 
-    @track(tags=["exec", "marc"], step_type="llm", llm_provider=LLMProvider.OPENAI, system_prompt="Marc/step@0.1")
+    @track(tags=["exec", "marc"], step_type="llm", llm_provider=LLMProvider.OPENAI)
     async def step(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> BaseAgentStepResult:
         if self._sandbox is None:
             raise RuntimeError("Marc must be used as an async context manager (async with Marc(...) as marc:)")
@@ -113,18 +113,18 @@ class Marc(Agent):
             if self.sample_config.extra_body:
                 kwargs["extra_body"] = self.sample_config.extra_body
 
-        completion: ChatCompletion = await self.openai_client.chat.completions.create(**kwargs)
-        choice = completion.choices[0]
-        message = choice.message
-        reasoning = getattr(message, "reasoning_content", None)
+        stream_result = await self._create_chat_completion_stream(kwargs)
+        message = stream_result.message
+        if stream_result.finish_reason is None:
+            raise ValueError("Marc stream completion missing finish_reason.")
 
         return BaseAgentStepResult(
-            finish_reason=choice.finish_reason,
-            reasoning=reasoning,
+            finish_reason=stream_result.finish_reason,
+            reasoning=stream_result.reasoning,
             completion_content=message.content,
             tool_calls=message.tool_calls or None,
             message_param=message,
-            current_step_consume_tokens=completion.usage.total_tokens if completion.usage else 0,
+            current_step_consume_tokens=stream_result.usage_tokens,
         )
 
     def last_report_current_process(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> str:

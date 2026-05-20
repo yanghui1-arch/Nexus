@@ -160,15 +160,39 @@ class Database:
             )
             await conn.execute(text("ALTER TABLE task ALTER COLUMN status SET DEFAULT 'queued'"))
             await conn.execute(
-                text("UPDATE task SET status = 'waiting_for_merge' WHERE status = 'completed'")
+                text("UPDATE task SET status = 'waiting_for_review' WHERE status = 'completed'")
             )
             await conn.execute(
                 text("UPDATE task SET status = 'waiting_for_review' WHERE status = 'waiting'")
             )
             await conn.execute(
+                text("UPDATE task SET status = 'waiting_for_review' WHERE status = 'waiting_for_merge'")
+            )
+            await conn.execute(
+                text(
+                    "UPDATE task SET resume_status = 'waiting_for_review' "
+                    "WHERE resume_status = 'waiting_for_merge'"
+                )
+            )
+            await conn.execute(
                 text(
                     "UPDATE task_work_item SET status = 'ready_for_review' "
                     "WHERE status = 'changes_requested'"
+                )
+            )
+            await conn.execute(
+                text(
+                    "UPDATE product_proposal p "
+                    "SET status = CASE "
+                    "WHEN EXISTS (SELECT 1 FROM feature f WHERE f.proposal_id = p.id) "
+                    "AND NOT EXISTS ("
+                    "SELECT 1 FROM feature f "
+                    "WHERE f.proposal_id = p.id AND f.status NOT IN ('completed', 'closed')"
+                    ") THEN 'completed' "
+                    "WHEN EXISTS (SELECT 1 FROM feature f WHERE f.proposal_id = p.id) THEN 'planned' "
+                    "ELSE p.status "
+                    "END "
+                    "WHERE p.status <> 'rejected'"
                 )
             )
             await conn.execute(text("ALTER TABLE user_account ADD COLUMN IF NOT EXISTS balance NUMERIC(12, 2) DEFAULT 0.00 NOT NULL"))

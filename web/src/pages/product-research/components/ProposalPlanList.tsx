@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   CheckCircle2,
   ChevronDown,
@@ -50,6 +51,7 @@ type ProposalPlanListProps = {
 };
 
 export function ProposalPlanList({ features }: ProposalPlanListProps) {
+  const { t } = useTranslation();
   const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
   const [expandedItemIds, setExpandedItemIds] = useState<string[]>([]);
   const [tasksById, setTasksById] = useState<Record<string, ApiTask | null>>({});
@@ -131,7 +133,7 @@ export function ProposalPlanList({ features }: ProposalPlanListProps) {
   if (features.length === 0) {
     return (
       <div className="rounded-xl border bg-background/70 px-5 py-8 text-sm text-muted-foreground">
-        Plan list will appear here once this proposal is linked to features and feature items.
+        {t('productResearch.planListEmpty')}
       </div>
     );
   }
@@ -142,11 +144,11 @@ export function ProposalPlanList({ features }: ProposalPlanListProps) {
         <Table className="table-fixed">
           <TableHeader>
             <TableRow className={TABLE_HEADER_ROW_CLASS}>
-              <TableHead className={`w-[40%] px-5 ${TABLE_HEAD_CLASS}`}>Feature</TableHead>
-              <TableHead className={`w-[18%] px-5 ${TABLE_HEAD_CLASS}`}>Updated</TableHead>
-              <TableHead className={`w-[22%] px-5 ${TABLE_HEAD_CLASS}`}>Progress</TableHead>
+              <TableHead className={`w-[40%] px-5 ${TABLE_HEAD_CLASS}`}>{t('productResearch.feature')}</TableHead>
+              <TableHead className={`w-[18%] px-5 ${TABLE_HEAD_CLASS}`}>{t('common.updated')}</TableHead>
+              <TableHead className={`w-[22%] px-5 ${TABLE_HEAD_CLASS}`}>{t('productResearch.progress')}</TableHead>
               <TableHead className={`w-[20%] px-5 ${TABLE_HEAD_CLASS}`}>
-                Statistics
+                {t('productResearch.statistics')}
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -189,11 +191,11 @@ export function ProposalPlanList({ features }: ProposalPlanListProps) {
                             variant={featureMeta.variant}
                             className={featureMeta.className}
                           >
-                            {featureMeta.label}
+                            {t(`productResearch.featureStatus.${feature.status}`)}
                           </Badge>
                         </div>
                         <span className="truncate text-sm text-black/55">
-                          {getProjectLabel(feature.project)}
+                          {getProjectLabel(feature.project, t)}
                         </span>
                       </div>
                     </div>
@@ -266,15 +268,15 @@ export function ProposalPlanList({ features }: ProposalPlanListProps) {
                       variant={FEATURE_STATUS_META[selectedFeature.status].variant}
                       className={FEATURE_STATUS_META[selectedFeature.status].className}
                     >
-                      {FEATURE_STATUS_META[selectedFeature.status].label}
+                      {t(`productResearch.featureStatus.${selectedFeature.status}`)}
                     </Badge>
                   </div>
                 </div>
 
                 <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
-                  <span>{getProjectLabel(selectedFeature.project)}</span>
-                  <span>{(selectedFeature.items ?? []).length} feature items</span>
-                  <span>Updated {formatDateTime(selectedFeature.updated_at)}</span>
+                  <span>{getProjectLabel(selectedFeature.project, t)}</span>
+                  <span>{t('productResearch.featureItemsCount', { count: (selectedFeature.items ?? []).length })}</span>
+                  <span>{t('common.updatedAt', { time: formatDateTime(selectedFeature.updated_at) })}</span>
                 </div>
               </DialogHeader>
 
@@ -282,7 +284,7 @@ export function ProposalPlanList({ features }: ProposalPlanListProps) {
                 <div className="flex flex-col gap-5">
                   {(selectedFeature.items ?? []).length === 0 ? (
                     <p className="text-sm text-muted-foreground">
-                      No feature items have been created yet.
+                      {t('productResearch.noFeatureItems')}
                     </p>
                   ) : (
                     (selectedFeature.items ?? []).map(item => {
@@ -315,9 +317,9 @@ export function ProposalPlanList({ features }: ProposalPlanListProps) {
                                   </span>
                                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                                     {item.task_id ? (
-                                      <span>Task {shortId(item.task_id)}</span>
+                                      <span>{t('productResearch.taskShort', { id: shortId(item.task_id) })}</span>
                                     ) : null}
-                                    <span>Updated {formatDateTime(item.updated_at)}</span>
+                                    <span>{t('common.updatedAt', { time: formatDateTime(item.updated_at) })}</span>
                                   </div>
                                 </div>
 
@@ -338,7 +340,7 @@ export function ProposalPlanList({ features }: ProposalPlanListProps) {
                                     variant={itemMeta.variant}
                                     className={itemMeta.className}
                                   >
-                                    {itemMeta.label}
+                                    {t(`productResearch.featureItemStatus.${item.status}`)}
                                   </Badge>
                                 </div>
                               </div>

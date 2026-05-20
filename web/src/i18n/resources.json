@@ -1,0 +1,498 @@
+{
+  "zh": {
+    "translation": {
+      "language": {
+        "label": "语言",
+        "switchTo": "切换到 {{language}}",
+        "zh": "中文",
+        "en": "English"
+      },
+      "app": {
+        "name": "Nexus",
+        "tagline": "SaaS 控制中心"
+      },
+      "nav": {
+        "taskBoard": "任务看板",
+        "publishTask": "发布任务",
+        "processTracking": "进度追踪",
+        "productResearch": "产品研究",
+        "codeReview": "代码评审",
+        "pricing": "价格"
+      },
+      "auth": {
+        "logout": "退出登录",
+        "loadingAccount": "正在加载账户…",
+        "loginWithGithub": "使用 GitHub 登录"
+      },
+      "status": {
+        "queued": "排队中",
+        "running": "运行中",
+        "waiting_for_review": "等待评审",
+        "merged": "已合并",
+        "closed": "已关闭",
+        "failed": "失败"
+      },
+      "common": {
+        "title": "标题",
+        "project": "项目",
+        "status": "状态",
+        "updated": "更新时间",
+        "description": "描述",
+        "repository": "仓库",
+        "agent": "智能体",
+        "task": "任务",
+        "details": "详情",
+        "previous": "上一页",
+        "next": "下一页",
+        "noProject": "无项目",
+        "noRepository": "无仓库",
+        "updatedAt": "更新于 {{time}}",
+        "updatedRelative": "{{time}}更新"
+      },
+      "login": {
+        "title": "登录 Nexus",
+        "description": "使用你的 GitHub 账户继续。",
+        "continueWithGithub": "使用 GitHub 继续"
+      },
+      "pricing": {
+        "title": "价格",
+        "availableBalance": "可用余额",
+        "amountPlaceholder": "金额（人民币）",
+        "recharge": "充值",
+        "buyAgent": "购买智能体",
+        "perMonth": "/ 月",
+        "buyPlan": "购买 {{plan}}",
+        "invalidRechargeAmount": "请输入有效的充值金额。",
+        "balanceRecharged": "余额已充值",
+        "currentBalance": "当前余额：{{balance}}",
+        "rechargeFailed": "充值失败",
+        "agentPurchased": "{{agent}} 已购买",
+        "validUntil": "有效期至 {{date}}",
+        "purchaseFailed": "购买失败",
+        "plans": {
+          "common": {
+            "access": "30 天访问权限"
+          },
+          "tela": {
+            "description": "后端、基础设施、测试和可靠性工作。",
+            "automation": "仓库自动化",
+            "backendSupport": "后端交付支持"
+          },
+          "sophie": {
+            "description": "前端交付、界面打磨和产品页面。",
+            "reactImplementation": "React 实现",
+            "designSystemFit": "设计系统适配"
+          }
+        }
+      },
+      "publishTask": {
+        "title": "发布任务",
+        "description": "创建并分配新的智能体工作项。",
+        "question": "问题",
+        "questionPlaceholder": "描述智能体应执行的任务。",
+        "routing": "路由",
+        "routingDescription": "选择仓库、可选项目、外部 issue 链接和目标智能体。",
+        "projectOptional": "项目（可选）",
+        "outerIssueUrlOptional": "外部 Issue URL（可选）",
+        "agentInstance": "智能体实例",
+        "noActiveAgents": "没有可用的活跃智能体实例",
+        "selectAgent": "选择智能体实例",
+        "activateAgentHint": "发布任务前，请创建或激活智能体实例。",
+        "footerHint": "发布的任务会直接提交到后端队列。",
+        "publishing": "发布中…",
+        "publish": "发布任务",
+        "toastPublished": "任务已发布",
+        "toastPublishedDescription": "任务已提交到后端队列。",
+        "toastPublishFailed": "发布任务失败"
+      },
+      "taskBoard": {
+        "title": "任务看板",
+        "description": "按后端任务状态分组的实时任务看板。",
+        "selectRepository": "选择仓库",
+        "allRepositories": "全部仓库",
+        "loadingTasks": "正在加载任务…",
+        "emptyColumn": "此列暂无任务。",
+        "openReview": "打开评审"
+      },
+      "codeReview": {
+        "title": "代码评审",
+        "description": "查看 Nexus 评审任务，并跳转到 GitHub 执行评审操作。",
+        "review": "评审",
+        "merge": "合并",
+        "close": "关闭",
+        "backToQueue": "返回队列",
+        "prLink": "PR 链接",
+        "issueLink": "Issue 链接",
+        "noPrLinked": "尚未关联 GitHub PR。",
+        "loadingQueue": "正在加载评审队列…",
+        "emptyQueue": "{{queue}} 队列中没有 Nexus 任务。",
+        "githubPr": "GitHub PR",
+        "githubIssue": "GitHub Issue"
+      },
+      "processTracking": {
+        "title": "进度追踪",
+        "description": "选择智能体和运行中的任务，然后询问最新进度。",
+        "loadingAgents": "正在加载智能体实例…",
+        "chooseTask": "选择任务…",
+        "selectAgentFirst": "请先选择智能体",
+        "selectTaskTitle": "选择任务",
+        "selectTaskDescription": "选择要向该智能体咨询的运行中任务。",
+        "runningTasksAvailable": "{{count}} 个运行中任务可用",
+        "noRunningTasks": "所选智能体没有可用的运行中任务。",
+        "selectedTask": "已选任务",
+        "noTaskSelected": "未选择运行中任务",
+        "chat": "聊天",
+        "chatHintReady": "询问最新进度、阻塞项或预计完成时间。",
+        "chatHintEmpty": "选择智能体和任务后开始聊天。",
+        "you": "你",
+        "agentTyping": "智能体正在输入",
+        "inputPlaceholderReady": "询问最新进度、阻塞项或预计完成时间…",
+        "inputPlaceholderEmpty": "请先选择任务。",
+        "consultTask": "咨询所选任务",
+        "consultFailed": "咨询智能体失败",
+        "consultFailedDescription": "咨询所选任务失败。"
+      },
+      "productResearch": {
+        "title": "产品研究",
+        "description": "评审收到的需求，并查看功能级交付进度。",
+        "requirementApproved": "需求已批准",
+        "requirementRejected": "需求已拒绝",
+        "updateProposalFailed": "更新提案失败",
+        "updateProposalFailedDescription": "更新所选提案失败。",
+        "loadDataFailed": "加载产品研究失败",
+        "loadDataFailedDescription": "加载产品研究数据失败。",
+        "backToRequirements": "返回需求列表",
+        "backToFeatures": "返回功能列表",
+        "loadingProposal": "正在加载提案…",
+        "loadingFeature": "正在加载功能…",
+        "loadingRequirements": "正在加载需求…",
+        "loadingFeatures": "正在加载功能…",
+        "allProjects": "全部项目",
+        "filterFeaturesByProject": "按项目筛选功能",
+        "filterRequirementsByStatus": "按状态筛选需求",
+        "filterRequirementsByProject": "按项目筛选需求",
+        "progress": "进度",
+        "submitted": "提交时间",
+        "showingEntries": "显示第 {{start}} 到 {{end}} 条，共 {{total}} 条",
+        "featureItems": "功能项",
+        "featureItemsCount": "{{count}} 个功能项",
+        "noFeatureItems": "尚未创建功能项。",
+        "proposalShort": "提案 {{id}}",
+        "taskShort": "任务 {{id}}",
+        "planList": "计划列表",
+        "summary": "摘要",
+        "suggestedPlan": "建议计划",
+        "rejecting": "拒绝中…",
+        "reject": "拒绝",
+        "approving": "批准中…",
+        "approve": "批准",
+        "feature": "功能",
+        "statistics": "统计",
+        "planListEmpty": "当此提案关联到功能和功能项后，计划列表会显示在这里。",
+        "emptyRequirementsProject": "没有匹配所选项目的需求。",
+        "emptyRequirementsPending": "没有等待评审的需求。",
+        "emptyRequirementsAccepted": "暂无已接受需求。",
+        "emptyRequirementsRejected": "暂无已拒绝需求。",
+        "emptyRequirements": "暂无需求。",
+        "emptyFeaturesProject": "没有匹配所选项目的功能。",
+        "emptyFeatures": "暂无正在追踪的实现功能。",
+        "proposalFilter": {
+          "all": "全部",
+          "proposed": "待处理",
+          "accepted": "已接受",
+          "rejected": "已拒绝"
+        },
+        "proposalStatus": {
+          "proposed": "待评审",
+          "approved": "已批准",
+          "rejected": "已拒绝",
+          "planned": "已计划"
+        },
+        "featureStatus": {
+          "planned": "已计划",
+          "in_progress": "进行中",
+          "completed": "已完成",
+          "closed": "已关闭"
+        },
+        "featureItemStatus": {
+          "pending": "待处理",
+          "in_progress": "进行中",
+          "completed": "已完成",
+          "closed": "已关闭"
+        }
+      },
+      "taskDetail": {
+        "title": "任务详情",
+        "description": "任务状态和元数据。",
+        "loadingTitle": "正在加载任务",
+        "loadingDescription": "正在获取最新任务详情。",
+        "notFoundTitle": "未找到任务",
+        "notFoundDescription": "请求的任务 ID 不存在：{{taskId}}",
+        "legacyDescription": "任务路由和执行上下文。",
+        "backendDescription": "后端返回的真实任务记录。",
+        "metadata": "元数据",
+        "agent": "智能体",
+        "agentInstance": "智能体实例",
+        "type": "类型",
+        "status": "状态",
+        "repository": "仓库",
+        "branch": "分支",
+        "project": "项目",
+        "created": "创建时间",
+        "updated": "更新时间",
+        "started": "开始时间",
+        "finished": "结束时间",
+        "result": "结果",
+        "failedToLoad": "加载任务失败。"
+      }
+    }
+  },
+  "en": {
+    "translation": {
+      "language": {
+        "label": "Language",
+        "switchTo": "Switch to {{language}}",
+        "zh": "中文",
+        "en": "English"
+      },
+      "app": {
+        "name": "Nexus",
+        "tagline": "SaaS Control Center"
+      },
+      "nav": {
+        "taskBoard": "Task Board",
+        "publishTask": "Publish Task",
+        "processTracking": "Process Tracking",
+        "productResearch": "Product Research",
+        "codeReview": "Code Review",
+        "pricing": "Pricing"
+      },
+      "auth": {
+        "logout": "Logout",
+        "loadingAccount": "Loading account…",
+        "loginWithGithub": "Login with GitHub"
+      },
+      "status": {
+        "queued": "Queued",
+        "running": "Running",
+        "waiting_for_review": "Waiting for Review",
+        "merged": "Merged",
+        "closed": "Closed",
+        "failed": "Failed"
+      },
+      "common": {
+        "title": "Title",
+        "project": "Project",
+        "status": "Status",
+        "updated": "Updated",
+        "description": "Description",
+        "repository": "Repository",
+        "agent": "Agent",
+        "task": "Task",
+        "details": "Details",
+        "previous": "Previous",
+        "next": "Next",
+        "noProject": "No project",
+        "noRepository": "No repository",
+        "updatedAt": "Updated {{time}}",
+        "updatedRelative": "Updated {{time}}"
+      },
+      "login": {
+        "title": "Login to Nexus",
+        "description": "Use your GitHub account to continue.",
+        "continueWithGithub": "Continue with GitHub"
+      },
+      "pricing": {
+        "title": "Pricing",
+        "availableBalance": "Available balance",
+        "amountPlaceholder": "Amount in CNY",
+        "recharge": "Recharge",
+        "buyAgent": "Buy agent",
+        "perMonth": "/ month",
+        "buyPlan": "Buy {{plan}}",
+        "invalidRechargeAmount": "Please enter a valid recharge amount.",
+        "balanceRecharged": "Balance recharged",
+        "currentBalance": "Current balance: {{balance}}",
+        "rechargeFailed": "Recharge failed",
+        "agentPurchased": "{{agent}} purchased",
+        "validUntil": "Valid until {{date}}",
+        "purchaseFailed": "Purchase failed",
+        "plans": {
+          "common": {
+            "access": "30 days access"
+          },
+          "tela": {
+            "description": "Backend, infra, tests, and reliability work.",
+            "automation": "Repository automation",
+            "backendSupport": "Backend delivery support"
+          },
+          "sophie": {
+            "description": "Frontend delivery, UI polish, and product pages.",
+            "reactImplementation": "React implementation",
+            "designSystemFit": "Design-system fit"
+          }
+        }
+      },
+      "publishTask": {
+        "title": "Publish Task",
+        "description": "Create and assign new work items for agents.",
+        "question": "Question",
+        "questionPlaceholder": "Describe the task the agent should execute.",
+        "routing": "Routing",
+        "routingDescription": "Choose the repository, optional project, outer issue link, and target agent.",
+        "projectOptional": "Project (optional)",
+        "outerIssueUrlOptional": "Outer issue URL (optional)",
+        "agentInstance": "Agent instance",
+        "noActiveAgents": "No active agent instances available",
+        "selectAgent": "Select an agent instance",
+        "activateAgentHint": "Create or activate an agent instance before publishing a task.",
+        "footerHint": "Published tasks are submitted directly to the backend queue.",
+        "publishing": "Publishing...",
+        "publish": "Publish Task",
+        "toastPublished": "Task published",
+        "toastPublishedDescription": "The task has been submitted to the backend queue.",
+        "toastPublishFailed": "Failed to publish task"
+      },
+      "taskBoard": {
+        "title": "Task Board",
+        "description": "Live task board grouped by backend task status.",
+        "selectRepository": "Select repository",
+        "allRepositories": "All repositories",
+        "loadingTasks": "Loading tasks...",
+        "emptyColumn": "No tasks in this column.",
+        "openReview": "Open Review"
+      },
+      "codeReview": {
+        "title": "Code Review",
+        "description": "View Nexus review tasks and jump to GitHub for review actions.",
+        "review": "Review",
+        "merge": "Merge",
+        "close": "Close",
+        "backToQueue": "Back to queue",
+        "prLink": "PR Link",
+        "issueLink": "Issue Link",
+        "noPrLinked": "No GitHub PR has been linked yet.",
+        "loadingQueue": "Loading review queue...",
+        "emptyQueue": "No Nexus tasks are in {{queue}}.",
+        "githubPr": "GitHub PR",
+        "githubIssue": "GitHub Issue"
+      },
+      "processTracking": {
+        "title": "Process Tracking",
+        "description": "Select an agent and running task, then ask for the latest process.",
+        "loadingAgents": "Loading agent instances...",
+        "chooseTask": "Choose a task...",
+        "selectAgentFirst": "Select an agent first",
+        "selectTaskTitle": "Select a task",
+        "selectTaskDescription": "Choose the running task you want to consult about for this agent.",
+        "runningTasksAvailable": "{{count}} running task available",
+        "noRunningTasks": "No running tasks available for the selected agent.",
+        "selectedTask": "Selected task",
+        "noTaskSelected": "No running task selected",
+        "chat": "Chat",
+        "chatHintReady": "Ask for the latest process, blockers, or ETA.",
+        "chatHintEmpty": "Select an agent and task to start chatting.",
+        "you": "You",
+        "agentTyping": "Agent is typing",
+        "inputPlaceholderReady": "Ask for the latest process, blockers, or ETA...",
+        "inputPlaceholderEmpty": "Select a task first.",
+        "consultTask": "Consult selected task",
+        "consultFailed": "Failed to consult agent",
+        "consultFailedDescription": "Failed to consult the selected task."
+      },
+      "productResearch": {
+        "title": "Product Research",
+        "description": "Review incoming requirements and inspect feature-level delivery progress.",
+        "requirementApproved": "Requirement approved",
+        "requirementRejected": "Requirement rejected",
+        "updateProposalFailed": "Failed to update proposal",
+        "updateProposalFailedDescription": "Failed to update the selected proposal.",
+        "loadDataFailed": "Failed to load product research",
+        "loadDataFailedDescription": "Failed to load product research data.",
+        "backToRequirements": "Back to requirements",
+        "backToFeatures": "Back to features",
+        "loadingProposal": "Loading proposal...",
+        "loadingFeature": "Loading feature...",
+        "loadingRequirements": "Loading requirements...",
+        "loadingFeatures": "Loading features...",
+        "allProjects": "All projects",
+        "filterFeaturesByProject": "Filter features by project",
+        "filterRequirementsByStatus": "Filter requirements by status",
+        "filterRequirementsByProject": "Filter requirements by project",
+        "progress": "Progress",
+        "submitted": "Submitted",
+        "showingEntries": "Showing {{start}} to {{end}} of {{total}} entries",
+        "featureItems": "Feature Items",
+        "featureItemsCount": "{{count}} feature items",
+        "noFeatureItems": "No feature items have been created yet.",
+        "proposalShort": "Proposal {{id}}",
+        "taskShort": "Task {{id}}",
+        "planList": "Plan List",
+        "summary": "Summary",
+        "suggestedPlan": "Suggested Plan",
+        "rejecting": "Rejecting...",
+        "reject": "Reject",
+        "approving": "Approving...",
+        "approve": "Approve",
+        "feature": "Feature",
+        "statistics": "Statistics",
+        "planListEmpty": "Plan list will appear here once this proposal is linked to features and feature items.",
+        "emptyRequirementsProject": "No requirements match the selected project.",
+        "emptyRequirementsPending": "No requirements are waiting for review.",
+        "emptyRequirementsAccepted": "No accepted requirements yet.",
+        "emptyRequirementsRejected": "No rejected requirements yet.",
+        "emptyRequirements": "No requirements yet.",
+        "emptyFeaturesProject": "No features match the selected project.",
+        "emptyFeatures": "No implementation features are being tracked yet.",
+        "proposalFilter": {
+          "all": "All",
+          "proposed": "Pending",
+          "accepted": "Accepted",
+          "rejected": "Rejected"
+        },
+        "proposalStatus": {
+          "proposed": "Pending Review",
+          "approved": "Approved",
+          "rejected": "Rejected",
+          "planned": "Planned"
+        },
+        "featureStatus": {
+          "planned": "Planned",
+          "in_progress": "In Progress",
+          "completed": "Completed",
+          "closed": "Closed"
+        },
+        "featureItemStatus": {
+          "pending": "Pending",
+          "in_progress": "In Progress",
+          "completed": "Completed",
+          "closed": "Closed"
+        }
+      },
+      "taskDetail": {
+        "title": "Task Detail",
+        "description": "Task status and metadata.",
+        "loadingTitle": "Loading task",
+        "loadingDescription": "Fetching the latest task details.",
+        "notFoundTitle": "Task not found",
+        "notFoundDescription": "The requested task ID does not exist: {{taskId}}",
+        "legacyDescription": "Task routing and execution context.",
+        "backendDescription": "Real task record returned by the backend.",
+        "metadata": "Metadata",
+        "agent": "Agent",
+        "agentInstance": "Agent instance",
+        "type": "Type",
+        "status": "Status",
+        "repository": "Repository",
+        "branch": "Branch",
+        "project": "Project",
+        "created": "Created",
+        "updated": "Updated",
+        "started": "Started",
+        "finished": "Finished",
+        "result": "Result",
+        "failedToLoad": "Failed to load task."
+      }
+    }
+  }
+}

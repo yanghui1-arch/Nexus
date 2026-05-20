@@ -14,7 +14,6 @@ from src.server.postgres.database import Database
 from src.server.postgres.models import (
     TaskCategory,
     TaskStatus,
-    TaskWorkItemStatus,
 )
 from src.server.postgres.repositories import (
     TaskRepository,
@@ -131,19 +130,19 @@ async def update_task_status(
         if payload.status == TaskStatus.merged:
             if task.status == payload.status:
                 return TaskResponse.from_record(task)
-            if task.status != TaskStatus.waiting_for_merge:
+            if task.status != TaskStatus.waiting_for_review:
                 raise HTTPException(
                     status_code=409,
-                    detail="Only waiting_for_merge tasks can be updated to merged",
+                    detail="Only waiting_for_review tasks can be updated to merged",
                 )
             updated = await TaskRepository.set_merged(session, task_id)
         elif payload.status == TaskStatus.closed:
             if task.status == payload.status:
                 return TaskResponse.from_record(task)
-            if task.status not in {TaskStatus.waiting_for_review, TaskStatus.waiting_for_merge}:
+            if task.status != TaskStatus.waiting_for_review:
                 raise HTTPException(
                     status_code=409,
-                    detail="Only waiting_for_review or waiting_for_merge tasks can be closed",
+                    detail="Only waiting_for_review tasks can be closed",
                 )
             updated = await TaskRepository.set_closed(session, task_id)
         else:
@@ -154,21 +153,11 @@ async def update_task_status(
                     status_code=409,
                     detail="Only closed tasks can be reopened",
                 )
-            work_items = await TaskWorkItemRepository.list_by_task(session, task_id)
-            if work_items and all(
-                work_item.status == TaskWorkItemStatus.approved for work_item in work_items
-            ):
-                updated = await TaskRepository.set_waiting_for_merge(
-                    session,
-                    task_id,
-                    result=task.result,
-                )
-            else:
-                updated = await TaskRepository.set_waiting_for_review(
-                    session,
-                    task_id,
-                    result=task.result,
-                )
+            updated = await TaskRepository.set_waiting_for_review(
+                session,
+                task_id,
+                result=task.result,
+            )
 
     if updated is None:
         raise HTTPException(status_code=404, detail="Task not found")

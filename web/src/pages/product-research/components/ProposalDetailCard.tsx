@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { ApiFeature, ApiProductProposal } from '@/api/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,7 @@ export function ProposalDetailCard({
   proposal,
   relatedFeatures,
 }: ProposalDetailCardProps) {
+  const { t } = useTranslation();
   const statusMeta = PROPOSAL_STATUS_META[proposal.status];
   const isApproving =
     activeReview?.proposalId === proposal.id && activeReview.status === 'approved';
@@ -42,15 +44,15 @@ export function ProposalDetailCard({
           <div className="flex min-w-0 flex-col gap-2">
             <h2 className="text-2xl font-semibold tracking-tight">{proposal.title}</h2>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
-              <span>{proposal.repo ?? 'No repository'}</span>
-              <span>{proposal.project ?? 'No project'}</span>
-              <span>Updated {formatRelativeTime(proposal.updated_at)}</span>
+              <span>{proposal.repo ?? t('common.noRepository')}</span>
+              <span>{proposal.project ?? t('common.noProject')}</span>
+              <span>{t('common.updatedRelative', { time: formatRelativeTime(proposal.updated_at) })}</span>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <Badge variant={statusMeta.variant} className={statusMeta.className}>
-              {statusMeta.label}
+              {t(`productResearch.proposalStatus.${proposal.status}`)}
             </Badge>
           </div>
         </div>
@@ -58,23 +60,23 @@ export function ProposalDetailCard({
 
       <Tabs defaultValue="description" className="gap-3">
         <TabsList>
-          <TabsTrigger value="description">Description</TabsTrigger>
+          <TabsTrigger value="description">{t('common.description')}</TabsTrigger>
           <TabsTrigger value="plan-list" disabled={!hasPlanList}>
-            Plan List
+            {t('productResearch.planList')}
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="description" className="flex flex-col gap-8">
           <section className="flex flex-col gap-3">
             <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Summary
+              {t('productResearch.summary')}
             </h3>
             <MarkdownContent content={proposal.summary} />
           </section>
 
           <section className="flex flex-col gap-3">
             <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Suggested Plan
+              {t('productResearch.suggestedPlan')}
             </h3>
             <MarkdownContent content={proposal.answer} />
           </section>
@@ -94,14 +96,14 @@ export function ProposalDetailCard({
               disabled={isBusy}
               onClick={() => void onReview(proposal.id, 'rejected')}
             >
-              {isRejecting ? 'Rejecting...' : 'Reject'}
+              {isRejecting ? t('productResearch.rejecting') : t('productResearch.reject')}
             </Button>
             <Button
               type="button"
               disabled={isBusy}
               onClick={() => void onReview(proposal.id, 'approved')}
             >
-              {isApproving ? 'Approving...' : 'Approve'}
+              {isApproving ? t('productResearch.approving') : t('productResearch.approve')}
             </Button>
           </div>
         </footer>

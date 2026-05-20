@@ -6,7 +6,6 @@ export type ApiTaskStatus =
   | 'queued'
   | 'running'
   | 'waiting_for_review'
-  | 'waiting_for_merge'
   | 'merged'
   | 'closed'
   | 'failed';
@@ -71,7 +70,8 @@ export type ApiProductProposalStatus =
   | 'proposed'
   | 'approved'
   | 'rejected'
-  | 'planned';
+  | 'planned'
+  | 'completed';
 
 export type ApiFeatureStatus =
   | 'planned'

@@ -1,4 +1,5 @@
 import { startTransition, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Link,
   Navigate,
@@ -38,6 +39,7 @@ import {
 } from './utils';
 
 export default function ProductResearchPage() {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const { featureId, proposalId } = useParams<{
@@ -46,7 +48,7 @@ export default function ProductResearchPage() {
   }>();
   const { features, isLoading, loadError, proposals, reloadSnapshot } =
     useProductResearchSnapshot();
-  const [proposalFilter, setProposalFilter] = useState<ProposalFilter>('all');
+  const [proposalFilter, setProposalFilter] = useState<ProposalFilter>('accepted');
   const [proposalProjectFilter, setProposalProjectFilter] =
     useState<string>(ALL_PROJECTS);
   const [featureProjectFilter, setFeatureProjectFilter] =
@@ -63,11 +65,15 @@ export default function ProductResearchPage() {
       return true;
     }
     if (proposalFilter === 'accepted') {
-      return proposal.status === 'approved' || proposal.status === 'planned';
+      return (
+        proposal.status === 'approved' ||
+        proposal.status === 'planned' ||
+        proposal.status === 'completed'
+      );
     }
     return proposal.status === proposalFilter;
   });
-  const proposalProjectOptions = getProjectOptions(statusFilteredProposals);
+  const proposalProjectOptions = getProjectOptions(statusFilteredProposals, t);
   const activeProposalProjectFilter =
     proposalProjectFilter === ALL_PROJECTS ||
     proposalProjectOptions.some(option => option.value === proposalProjectFilter)
@@ -84,7 +90,7 @@ export default function ProductResearchPage() {
     const activeFeatures = features.filter(feature => feature.status !== 'closed');
     return activeFeatures.length > 0 ? activeFeatures : features;
   })();
-  const featureProjectOptions = getProjectOptions(trackedFeatures);
+  const featureProjectOptions = getProjectOptions(trackedFeatures, t);
   const activeFeatureProjectFilter =
     featureProjectFilter === ALL_PROJECTS ||
     featureProjectOptions.some(option => option.value === featureProjectFilter)
@@ -116,7 +122,8 @@ export default function ProductResearchPage() {
     if (
       proposalId &&
       (selectedProposal?.status === 'approved' ||
-        selectedProposal?.status === 'planned')
+        selectedProposal?.status === 'planned' ||
+        selectedProposal?.status === 'completed')
     ) {
       setProposalFilter('accepted');
       return;
@@ -146,14 +153,14 @@ export default function ProductResearchPage() {
     try {
       await updateProductProposalStatus(currentProposalId, { status });
       toast.success(
-        status === 'approved' ? 'Requirement approved' : 'Requirement rejected',
+        status === 'approved' ? t('productResearch.requirementApproved') : t('productResearch.requirementRejected'),
       );
       await reloadSnapshot('mutation');
       setProposalFilter(status === 'approved' ? 'accepted' : 'rejected');
       navigate('/product-research', { replace: true });
     } catch (error) {
-      toast.error('Failed to update proposal', {
-        description: getErrorDetail(error, 'Failed to update the selected proposal.'),
+      toast.error(t('productResearch.updateProposalFailed'), {
+        description: getErrorDetail(error, t('productResearch.updateProposalFailedDescription')),
       });
     } finally {
       startTransition(() => {
@@ -163,8 +170,8 @@ export default function ProductResearchPage() {
   }
 
   useAppLayout({
-    title: 'Product Research',
-    description: 'Review incoming requirements and inspect feature-level delivery progress.',
+    title: t('productResearch.title'),
+    description: t('productResearch.description'),
   });
 
   if (proposalId && !isLoading && !selectedProposal) {
@@ -180,12 +187,12 @@ export default function ProductResearchPage() {
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
           <Button asChild variant="ghost" size="sm">
-            <Link to="/product-research">Back to requirements</Link>
+            <Link to="/product-research">{t('productResearch.backToRequirements')}</Link>
           </Button>
         </div>
 
         {isLoading || !selectedProposal ? (
-          <LoadingPanel message="Loading proposal..." />
+          <LoadingPanel message={t('productResearch.loadingProposal')} />
         ) : (
           <ProposalDetailCard
             proposal={selectedProposal}
@@ -203,12 +210,12 @@ export default function ProductResearchPage() {
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
           <Button asChild variant="ghost" size="sm">
-            <Link to="/product-research/features">Back to features</Link>
+            <Link to="/product-research/features">{t('productResearch.backToFeatures')}</Link>
           </Button>
         </div>
 
         {isLoading || !selectedFeature ? (
-          <LoadingPanel message="Loading feature..." />
+          <LoadingPanel message={t('productResearch.loadingFeature')} />
         ) : (
           <FeatureDetailCard feature={selectedFeature} />
         )}
@@ -229,13 +236,14 @@ export default function ProductResearchPage() {
           />
 
           {isLoading ? (
-            <LoadingPanel message="Loading requirements..." />
+            <LoadingPanel message={t('productResearch.loadingRequirements')} />
           ) : filteredProposals.length === 0 ? (
             <EmptyPanel
               message={getProposalEmptyMessage({
                 loadError,
                 proposalFilter,
                 activeProjectFilter: activeProposalProjectFilter,
+                t,
               })}
             />
           ) : (
@@ -260,12 +268,13 @@ export default function ProductResearchPage() {
           />
 
           {isLoading ? (
-            <LoadingPanel message="Loading features..." />
+            <LoadingPanel message={t('productResearch.loadingFeatures')} />
           ) : filteredFeatures.length === 0 ? (
             <EmptyPanel
               message={getFeatureEmptyMessage({
                 loadError,
                 activeProjectFilter: activeFeatureProjectFilter,
+                t,
               })}
             />
           ) : (

@@ -104,43 +104,6 @@ class ProductProposalResponse(BaseModel):
         )
 
 
-class FeatureItemCreateRequest(BaseModel):
-    title: str = Field(min_length=1, max_length=255)
-    description: str = Field(min_length=1)
-
-    @field_validator("title", "description")
-    @classmethod
-    def validate_text(cls, value: str) -> str:
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("value cannot be empty")
-        return stripped
-
-
-class FeatureCreateRequest(BaseModel):
-    proposal_id: uuid.UUID | None = None
-    title: str = Field(min_length=1, max_length=255)
-    description: str = Field(min_length=1)
-    project: str | None = None
-    items: list[FeatureItemCreateRequest] = Field(min_length=1)
-
-    @field_validator("title", "description")
-    @classmethod
-    def validate_text(cls, value: str) -> str:
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("value cannot be empty")
-        return stripped
-
-
-class FeatureStatusUpdateRequest(BaseModel):
-    status: FeatureStatus
-
-
-class FeatureItemStatusUpdateRequest(BaseModel):
-    status: FeatureItemStatus
-
-
 class FeatureItemResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

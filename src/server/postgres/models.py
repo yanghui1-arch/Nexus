@@ -33,7 +33,6 @@ class TaskStatus(str, enum.Enum):
     queued = "queued"
     running = "running"
     waiting_for_review = "waiting_for_review"
-    waiting_for_merge = "waiting_for_merge"
     merged = "merged"
     closed = "closed"
     failed = "failed"
@@ -73,6 +72,7 @@ class ProductProposalStatus(str, enum.Enum):
     approved = "approved"
     rejected = "rejected"
     planned = "planned"
+    completed = "completed"
 
 
 class FeatureStatus(str, enum.Enum):
@@ -93,6 +93,7 @@ class GithubPullRequestFeedbackKind(str, enum.Enum):
     pr_comment = "pr_comment"
     pr_review = "pr_review"
     pr_review_comment = "pr_review_comment"
+    pr_merge_conflict = "pr_merge_conflict"
 
 
 class GithubPullRequestFeedbackStatus(str, enum.Enum):

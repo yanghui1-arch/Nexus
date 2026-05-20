@@ -1,5 +1,6 @@
 import { startTransition, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { AlertCircle, GitBranch } from 'lucide-react';
 import { ApiError, getErrorDetail } from '@/api/client';
 import { getTask } from '@/api/tasks';
@@ -48,27 +49,28 @@ function MetadataRow({
 }
 
 function LegacyTaskDetail({ task }: { task: LegacyTask }) {
+  const { t } = useTranslation();
   return (
     <Card className="h-fit max-w-3xl">
       <CardHeader>
-        <CardTitle>Metadata</CardTitle>
-        <CardDescription>Task routing and execution context.</CardDescription>
+        <CardTitle>{t('taskDetail.metadata')}</CardTitle>
+        <CardDescription>{t('taskDetail.legacyDescription')}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
-        <MetadataRow label="Agent" value={task.agentName} />
-        <MetadataRow label="Type" value={task.agentType} />
+        <MetadataRow label={t('taskDetail.agent')} value={task.agentName} />
+        <MetadataRow label={t('taskDetail.type')} value={task.agentType} />
         <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-          <span className="text-muted-foreground">Status</span>
-          <Badge variant="secondary">{task.status}</Badge>
+          <span className="text-muted-foreground">{t('taskDetail.status')}</span>
+          <Badge variant="secondary">{t(`status.${task.status}`)}</Badge>
         </div>
         {task.metadata?.repository ? (
-          <MetadataRow label="Repository" value={task.metadata.repository} />
+          <MetadataRow label={t('taskDetail.repository')} value={task.metadata.repository} />
         ) : null}
         {task.metadata?.branch ? (
           <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
             <span className="inline-flex items-center gap-1 text-muted-foreground">
               <GitBranch className="size-3.5" />
-              Branch
+              {t('taskDetail.branch')}
             </span>
             <code>{task.metadata.branch}</code>
           </div>
@@ -85,6 +87,7 @@ function LegacyTaskDetail({ task }: { task: LegacyTask }) {
 
 export default function TaskDetailPage() {
   const { taskId } = useParams<{ taskId: string }>();
+  const { t } = useTranslation();
   const legacyTask = useMemo(() => (taskId ? getTaskById(taskId) : undefined), [taskId]);
 
   const [task, setTask] = useState<ApiTask | null>(null);
@@ -129,7 +132,7 @@ export default function TaskDetailPage() {
 
       startTransition(() => {
         setTask(null);
-        setTaskError(getErrorDetail(error, 'Failed to load task.'));
+        setTaskError(getErrorDetail(error, t('taskDetail.failedToLoad')));
         setIsLoadingTask(false);
       });
     }
@@ -143,8 +146,8 @@ export default function TaskDetailPage() {
     title:
       useLegacyFallback && legacyTask
         ? legacyTask.title
-        : task?.question ?? 'Task Detail',
-    description: 'Task status and metadata.',
+        : task?.question ?? t('taskDetail.title'),
+    description: t('taskDetail.description'),
   });
 
   if (useLegacyFallback && legacyTask) {
@@ -155,8 +158,8 @@ export default function TaskDetailPage() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Loading task</CardTitle>
-          <CardDescription>Fetching the latest task details.</CardDescription>
+          <CardTitle>{t('taskDetail.loadingTitle')}</CardTitle>
+          <CardDescription>{t('taskDetail.loadingDescription')}</CardDescription>
         </CardHeader>
       </Card>
     );
@@ -168,10 +171,10 @@ export default function TaskDetailPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <AlertCircle className="size-4 text-destructive" />
-            Task not found
+            {t('taskDetail.notFoundTitle')}
           </CardTitle>
           <CardDescription>
-            {taskError ?? `The requested task ID does not exist: ${taskId}`}
+            {taskError ?? t('taskDetail.notFoundDescription', { taskId })}
           </CardDescription>
         </CardHeader>
       </Card>
@@ -181,34 +184,34 @@ export default function TaskDetailPage() {
   return (
     <Card className="h-fit max-w-3xl">
       <CardHeader>
-        <CardTitle>Metadata</CardTitle>
-        <CardDescription>Real task record returned by the backend.</CardDescription>
+        <CardTitle>{t('taskDetail.metadata')}</CardTitle>
+        <CardDescription>{t('taskDetail.backendDescription')}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
-        <MetadataRow label="Agent" value={task.agent} />
-        <MetadataRow label="Agent instance" value={task.agent_instance_id} />
+        <MetadataRow label={t('taskDetail.agent')} value={task.agent} />
+        <MetadataRow label={t('taskDetail.agentInstance')} value={task.agent_instance_id} />
         <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-          <span className="text-muted-foreground">Status</span>
+          <span className="text-muted-foreground">{t('taskDetail.status')}</span>
           <Badge variant={STATUS_META[task.status].badgeVariant}>
-            {STATUS_META[task.status].label}
+            {t(`status.${task.status}`)}
           </Badge>
         </div>
-        <MetadataRow label="Repository" value={detailValue(task.repo)} />
-        <MetadataRow label="Project" value={detailValue(task.project)} />
-        <MetadataRow label="Created" value={new Date(task.created_at).toLocaleString()} />
-        <MetadataRow label="Updated" value={new Date(task.updated_at).toLocaleString()} />
+        <MetadataRow label={t('taskDetail.repository')} value={detailValue(task.repo)} />
+        <MetadataRow label={t('taskDetail.project')} value={detailValue(task.project)} />
+        <MetadataRow label={t('taskDetail.created')} value={new Date(task.created_at).toLocaleString()} />
+        <MetadataRow label={t('taskDetail.updated')} value={new Date(task.updated_at).toLocaleString()} />
         <MetadataRow
-          label="Started"
+          label={t('taskDetail.started')}
           value={detailValue(task.started_at ? new Date(task.started_at).toLocaleString() : null)}
         />
         <MetadataRow
-          label="Finished"
+          label={t('taskDetail.finished')}
           value={detailValue(task.finished_at ? new Date(task.finished_at).toLocaleString() : null)}
         />
         {task.result ? (
           <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
             <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-              Result
+              {t('taskDetail.result')}
             </p>
             <p className="mt-2 whitespace-pre-wrap break-words">{task.result}</p>
           </div>

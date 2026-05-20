@@ -33,6 +33,14 @@ class GithubTools:
             "X-GitHub-Api-Version": "2022-11-28",
         }
 
+    async def _sync_main_branch(self, local_path: str) -> dict:
+        return await self._sandbox.run_shell(
+            f"git -C '{local_path}' fetch upstream main && "
+            f"git -C '{local_path}' checkout main && "
+            f"git -C '{local_path}' reset --hard upstream/main && "
+            f"git -C '{local_path}' push origin main --force-with-lease"
+        )
+
     @track(step_type="tool")
     async def fetch_from_github(
         self,
@@ -72,12 +80,21 @@ class GithubTools:
                 await self._sandbox.recreate()
                 check = {"stdout": "new"}
             else:
-                result = await self._sandbox.run_shell(
-                    f"git -C '{local_path}' fetch --all && "
-                    f"git -C '{local_path}' checkout {branch} && "
-                    f"git -C '{local_path}' pull origin {branch}"
-                )
-                message = f"Pulled latest on branch '{branch}' at {local_path}"
+                if upstream_url and branch == "main":
+                    await self._sandbox.run_shell(
+                        f"git -C '{local_path}' fetch --all && "
+                        f"git -C '{local_path}' remote add upstream '{upstream_url}' 2>/dev/null || "
+                        f"git -C '{local_path}' remote set-url upstream '{upstream_url}'"
+                    )
+                    result = await self._sync_main_branch(local_path)
+                    message = f"Synchronized 'main' with upstream at {local_path}"
+                else:
+                    result = await self._sandbox.run_shell(
+                        f"git -C '{local_path}' fetch --all && "
+                        f"git -C '{local_path}' checkout {branch} && "
+                        f"git -C '{local_path}' pull origin {branch}"
+                    )
+                    message = f"Pulled latest on branch '{branch}' at {local_path}"
 
         if "new" in check.get("stdout", ""):
             result = await self._sandbox.run_shell(
@@ -88,7 +105,13 @@ class GithubTools:
                     f"git -C '{local_path}' remote add upstream '{upstream_url}' 2>/dev/null || "
                     f"git -C '{local_path}' remote set-url upstream '{upstream_url}'"
                 )
-            message = f"Cloned '{repo_url}' (branch: {branch}) into {local_path}"
+                if branch == "main":
+                    result = await self._sync_main_branch(local_path)
+                    message = f"Cloned '{repo_url}' and synchronized 'main' with upstream into {local_path}"
+                else:
+                    message = f"Cloned '{repo_url}' (branch: {branch}) into {local_path}"
+            else:
+                message = f"Cloned '{repo_url}' (branch: {branch}) into {local_path}"
 
         if result is None:
             return {

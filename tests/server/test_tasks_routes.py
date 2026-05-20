@@ -74,7 +74,7 @@ def _make_task(
     started_at = created_at + timedelta(minutes=1)
     finished_at = (
         None
-        if status in {TaskStatus.queued, TaskStatus.running, TaskStatus.waiting_for_review, TaskStatus.waiting_for_merge}
+        if status in {TaskStatus.queued, TaskStatus.running, TaskStatus.waiting_for_review}
         else created_at + timedelta(minutes=4)
     )
     return SimpleNamespace(
@@ -210,7 +210,7 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
     agent_instance_id = uuid.uuid4()
     expected_task = _make_task(
         question='filtered task',
-        status=TaskStatus.waiting_for_merge,
+        status=TaskStatus.waiting_for_review,
         created_at=now,
         repo='owner/nexus',
         project='web',
@@ -232,7 +232,7 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
                 '/v1/tasks',
                 params={
                     'agent_instance_id': str(agent_instance_id),
-                    'status': 'waiting_for_merge',
+                    'status': 'waiting_for_review',
                     'category': 'coding',
                     'repo': 'owner/nexus',
                     'project': 'web',
@@ -266,7 +266,7 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
     assert captured == {
         'session': session_obj,
         'agent_instance_id': agent_instance_id,
-        'status': TaskStatus.waiting_for_merge,
+        'status': TaskStatus.waiting_for_review,
         'category': TaskCategory.coding,
         'repo': 'owner/nexus',
         'project': 'web',
@@ -398,12 +398,14 @@ def test_update_task_status_reopens_closed_task_for_review(monkeypatch: pytest.M
     assert captured['waiting_for_review_result'] is None
 
 
-def test_update_task_status_reopens_closed_task_for_merge(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_update_task_status_reopens_closed_task_for_review_when_work_items_are_all_approved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     now = datetime.now(timezone.utc)
     task = _make_task(question='reopen merge task', status=TaskStatus.closed, created_at=now)
     reopened_task = _make_task(
         question='reopen merge task',
-        status=TaskStatus.waiting_for_merge,
+        status=TaskStatus.waiting_for_review,
         created_at=now,
     )
     reopened_task.id = task.id
@@ -420,14 +422,14 @@ def test_update_task_status_reopens_closed_task_for_merge(monkeypatch: pytest.Mo
             SimpleNamespace(id=uuid.uuid4(), status=TaskWorkItemStatus.approved),
         ]
 
-    async def fake_set_waiting_for_merge(session, task_id, **kwargs):
-        captured['waiting_for_merge_task_id'] = task_id
-        captured['waiting_for_merge_result'] = kwargs.get('result')
+    async def fake_set_waiting_for_review(session, task_id, **kwargs):
+        captured['waiting_for_review_task_id'] = task_id
+        captured['waiting_for_review_result'] = kwargs.get('result')
         return reopened_task
 
     monkeypatch.setattr(TaskRepository, 'get', fake_get_task)
     monkeypatch.setattr(TaskWorkItemRepository, 'list_by_task', fake_list_work_items)
-    monkeypatch.setattr(TaskRepository, 'set_waiting_for_merge', fake_set_waiting_for_merge)
+    monkeypatch.setattr(TaskRepository, 'set_waiting_for_review', fake_set_waiting_for_review)
 
     async def run_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=_build_app())
@@ -440,9 +442,9 @@ def test_update_task_status_reopens_closed_task_for_merge(monkeypatch: pytest.Mo
     response = asyncio.run(run_request())
 
     assert response.status_code == 200
-    assert response.json()['status'] == 'waiting_for_merge'
-    assert captured['waiting_for_merge_task_id'] == task.id
-    assert captured['waiting_for_merge_result'] is None
+    assert response.json()['status'] == 'waiting_for_review'
+    assert captured['waiting_for_review_task_id'] == task.id
+    assert captured['waiting_for_review_result'] is None
 
 
 def test_consult_task_returns_process_reply(monkeypatch: pytest.MonkeyPatch) -> None:

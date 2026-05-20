@@ -559,24 +559,20 @@ def test_run_agent_workflow_processes_github_feedback_from_checkpoint(monkeypatc
     assert fake_agent.close_count == 1
 
 
-def test_mark_post_execution_wait_state_restores_waiting_for_merge(monkeypatch):
+def test_mark_post_execution_wait_state_restores_waiting_for_review(monkeypatch):
     task_id = "task-id"
     captured = {}
 
     async def fake_get(session, requested_task_id):
         assert requested_task_id == task_id
-        return SimpleNamespace(id=task_id, status=TaskStatus.waiting_for_review, resume_status=TaskStatus.waiting_for_merge)
+        return SimpleNamespace(id=task_id, status=TaskStatus.waiting_for_review, resume_status=None)
 
-    async def fake_waiting_for_merge(session, requested_task_id, *, result):
+    async def fake_waiting_for_review(session, requested_task_id, *, result):
         captured["task_id"] = requested_task_id
         captured["result"] = result
 
-    async def fail_waiting_for_review(session, requested_task_id, *, result):
-        raise AssertionError("waiting_for_review should not be used when resume_status is waiting_for_merge")
-
     monkeypatch.setattr(execution.TaskRepository, "get", fake_get)
-    monkeypatch.setattr(execution.TaskRepository, "set_waiting_for_merge", fake_waiting_for_merge)
-    monkeypatch.setattr(execution.TaskRepository, "set_waiting_for_review", fail_waiting_for_review)
+    monkeypatch.setattr(execution.TaskRepository, "set_waiting_for_review", fake_waiting_for_review)
 
     asyncio.run(
         execution._mark_post_execution_wait_state(

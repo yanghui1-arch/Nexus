@@ -1,12 +1,15 @@
+import { useTranslation } from 'react-i18next';
 import { useAppLayout } from '@/components/layout/AppLayout';
 import { useWorkspaceRecords } from '@/lib/useWorkspaceRecords';
 import { ProcessTrackingPanel } from './components/ProcessTrackingPanel';
 import { useProcessTracking } from './hooks/useProcessTracking';
 
 export default function ProcessTrackingPage() {
+  const { t } = useTranslation();
+
   useAppLayout({
-    title: 'Process Tracking',
-    description: 'Select an agent and running task, then ask for the latest process.',
+    title: t('processTracking.title'),
+    description: t('processTracking.description'),
     mainClassName: 'overflow-hidden p-0',
   });
 

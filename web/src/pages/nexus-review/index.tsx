@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { GitPullRequest, Loader2 } from 'lucide-react';
 import { FaGithub } from 'react-icons/fa';
 import { Link, Navigate, useParams } from 'react-router-dom';
@@ -17,38 +18,36 @@ import { TaskBoardRepoSelect } from '@/pages/task-board/components/TaskBoardRepo
 const ALL_REPOSITORIES = 'All repositories';
 const REVIEW_STATUSES = new Set<WorkspaceTaskView['status']>([
   'waiting_for_review',
-  'waiting_for_merge',
   'merged',
   'closed',
 ]);
 
 type QueueTab = {
   id: 'review' | 'merge' | 'close';
-  label: string;
+  labelKey: string;
   statuses: WorkspaceTaskView['status'][];
 };
 
 const QUEUE_TABS: QueueTab[] = [
   {
     id: 'review',
-    label: 'Review',
-    statuses: ['waiting_for_review', 'waiting_for_merge'],
+    labelKey: 'codeReview.review',
+    statuses: ['waiting_for_review'],
   },
   {
     id: 'merge',
-    label: 'Merge',
+    labelKey: 'codeReview.merge',
     statuses: ['merged'],
   },
   {
     id: 'close',
-    label: 'Close',
+    labelKey: 'codeReview.close',
     statuses: ['closed'],
   },
 ];
 
 const CODE_REVIEW_BADGE_CLASS_NAMES: Partial<Record<WorkspaceTaskView['status'], string>> = {
   waiting_for_review: 'border-transparent bg-emerald-600 text-white hover:bg-emerald-600',
-  waiting_for_merge: 'border-transparent bg-blue-600 text-white hover:bg-blue-600',
   merged: 'border-transparent bg-violet-100 text-violet-700 hover:bg-violet-100',
   closed: 'border-transparent bg-destructive text-destructive-foreground hover:bg-destructive',
 };
@@ -89,9 +88,11 @@ function sortNewestFirst(tasks: WorkspaceTaskView[]): WorkspaceTaskView[] {
 }
 
 export function NexusReviewPage() {
+  const { t } = useTranslation();
+
   useAppLayout({
-    title: 'Code Review',
-    description: 'View Nexus review tasks and jump to GitHub for review actions.',
+    title: t('codeReview.title'),
+    description: t('codeReview.description'),
   });
 
   const { taskId } = useParams<{ taskId?: string }>();
@@ -149,7 +150,7 @@ export function NexusReviewPage() {
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-2">
           <Button asChild variant="ghost" size="sm">
-            <Link to="/code-review/nexus">Back to queue</Link>
+            <Link to="/code-review/nexus">{t('codeReview.backToQueue')}</Link>
           </Button>
         </div>
 
@@ -160,55 +161,55 @@ export function NexusReviewPage() {
                 variant={statusMeta.badgeVariant}
                 className={badgeClassName}
               >
-                {statusMeta.label}
+                {t(`status.${selectedTask.status}`)}
               </Badge>
               <span className="text-sm text-muted-foreground">
-                Updated {timeAgo(selectedTask.updatedAt)}
+                {t('common.updatedRelative', { time: timeAgo(selectedTask.updatedAt) })}
               </span>
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight">
+            <h1 className="line-clamp-2 text-2xl font-normal tracking-tight">
               {selectedTask.question}
             </h1>
           </div>
 
           <div className="space-y-4">
             <div className="rounded-md border bg-background">
-              <div className="border-b px-4 py-3 text-sm font-semibold">Details</div>
+              <div className="border-b px-4 py-3 text-sm font-semibold">{t('common.details')}</div>
               <div className="grid gap-3 px-4 py-4 text-sm sm:grid-cols-2">
                 <div className="flex items-center justify-between gap-3 sm:block">
-                  <span className="text-muted-foreground">Repo</span>
+                  <span className="text-muted-foreground">{t('common.repository')}</span>
                   <div className="font-mono text-xs sm:mt-1">{selectedTask.repo ?? '-'}</div>
                 </div>
                 <div className="flex items-center justify-between gap-3 sm:block">
-                  <span className="text-muted-foreground">Project</span>
+                  <span className="text-muted-foreground">{t('common.project')}</span>
                   <div className="text-xs sm:mt-1">{selectedTask.project ?? '-'}</div>
                 </div>
                 <div className="flex items-center justify-between gap-3 sm:block">
-                  <span className="text-muted-foreground">Agent</span>
+                  <span className="text-muted-foreground">{t('common.agent')}</span>
                   <div className="text-xs sm:mt-1">{selectedTask.agentLabel}</div>
                 </div>
                 <div className="flex items-center justify-between gap-3 sm:block">
-                  <span className="text-muted-foreground">Status</span>
-                  <div className="text-xs sm:mt-1">{statusMeta.label}</div>
+                  <span className="text-muted-foreground">{t('common.status')}</span>
+                  <div className="text-xs sm:mt-1">{t(`status.${selectedTask.status}`)}</div>
                 </div>
                 <div className="flex items-center justify-between gap-3 sm:block">
-                  <span className="text-muted-foreground">Created</span>
+                  <span className="text-muted-foreground">{t('taskDetail.created')}</span>
                   <div className="text-xs sm:mt-1">{formatTimestamp(selectedTask.createdAt)}</div>
                 </div>
                 <div className="flex items-center justify-between gap-3 sm:block">
-                  <span className="text-muted-foreground">Updated</span>
+                  <span className="text-muted-foreground">{t('common.updated')}</span>
                   <div className="text-xs sm:mt-1">{formatTimestamp(selectedTask.updatedAt)}</div>
                 </div>
                 <div className="flex items-center justify-between gap-3 sm:block">
-                  <span className="text-muted-foreground">Started</span>
+                  <span className="text-muted-foreground">{t('taskDetail.started')}</span>
                   <div className="text-xs sm:mt-1">{formatTimestamp(selectedTask.startedAt)}</div>
                 </div>
                 <div className="flex items-center justify-between gap-3 sm:block">
-                  <span className="text-muted-foreground">Finished</span>
+                  <span className="text-muted-foreground">{t('taskDetail.finished')}</span>
                   <div className="text-xs sm:mt-1">{formatTimestamp(selectedTask.finishedAt)}</div>
                 </div>
                 <div className="flex items-center justify-between gap-3 sm:col-span-2 sm:block">
-                  <span className="text-muted-foreground">PR Link</span>
+                  <span className="text-muted-foreground">{t('codeReview.prLink')}</span>
                   <div className="text-xs sm:mt-1">
                     {selectedTask.externalPullRequestUrl ? (
                       <a
@@ -221,13 +222,13 @@ export function NexusReviewPage() {
                         {selectedTask.externalPullRequestUrl}
                       </a>
                     ) : (
-                      <span className="text-muted-foreground">No GitHub PR has been linked yet.</span>
+                      <span className="text-muted-foreground">{t('codeReview.noPrLinked')}</span>
                     )}
                   </div>
                 </div>
                 {selectedTask.externalIssueUrl ? (
                   <div className="flex items-center justify-between gap-3 sm:col-span-2 sm:block">
-                    <span className="text-muted-foreground">Issue Link</span>
+                    <span className="text-muted-foreground">{t('codeReview.issueLink')}</span>
                     <div className="text-xs sm:mt-1">
                       <a
                         href={selectedTask.externalIssueUrl}
@@ -273,7 +274,7 @@ export function NexusReviewPage() {
                   : 'border-transparent text-muted-foreground hover:text-foreground',
               )}
             >
-              <span>{tab.label}</span>
+              <span>{t(tab.labelKey)}</span>
               <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                 {repoVisibleTasks.filter(task => tab.statuses.includes(task.status)).length}
               </span>
@@ -285,11 +286,11 @@ export function NexusReviewPage() {
       {isLoading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
-          Loading review queue...
+          {t('codeReview.loadingQueue')}
         </div>
       ) : visibleTasks.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No Nexus tasks are in {activeQueueTab.label}.
+          {t('codeReview.emptyQueue', { queue: t(activeQueueTab.labelKey) })}
         </p>
       ) : (
         <div className="grid gap-3">
@@ -312,32 +313,32 @@ export function NexusReviewPage() {
                         className={cn('gap-1', badgeClassName)}
                       >
                         <StatusIcon className="size-3" />
-                        {statusMeta.label}
+                        {t(`status.${task.status}`)}
                       </Badge>
                       {task.externalPullRequestUrl ? (
                         <Badge variant="outline" className="gap-1">
                           <GitPullRequest className="size-3" />
-                          GitHub PR
+                          {t('codeReview.githubPr')}
                         </Badge>
                       ) : null}
                       {task.externalIssueUrl ? (
                         <Badge variant="outline" className="gap-1">
                           <FaGithub className="size-3" />
-                          GitHub Issue
+                          {t('codeReview.githubIssue')}
                         </Badge>
                       ) : null}
                     </div>
-                    <h2 className="mt-3 text-base font-semibold leading-snug">
+                    <h2 className="mt-3 line-clamp-2 text-base font-normal leading-snug">
                       {task.question}
                     </h2>
                     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                      <span>{task.repo ?? 'No repo'}</span>
-                      <span>{task.project ?? 'No project'}</span>
+                      <span>{task.repo ?? t('common.noRepository')}</span>
+                      <span>{task.project ?? t('common.noProject')}</span>
                       <span>{task.agentLabel}</span>
                     </div>
                   </div>
                   <div className="shrink-0 text-sm text-muted-foreground">
-                    Updated {timeAgo(task.updatedAt)}
+                    {t('common.updatedRelative', { time: timeAgo(task.updatedAt) })}
                   </div>
                 </div>
               </Link>

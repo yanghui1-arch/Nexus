@@ -67,11 +67,6 @@ export const STATUS_META: Record<
     icon: GitBranch,
     badgeVariant: 'secondary',
   },
-  waiting_for_merge: {
-    label: 'Waiting for Merge',
-    icon: GitBranch,
-    badgeVariant: 'default',
-  },
   merged: {
     label: 'Merged',
     icon: CheckCircle2,
@@ -92,11 +87,10 @@ export const STATUS_META: Record<
 const TRACKING_PRIORITY: Record<ApiTaskStatus, number> = {
   running: 0,
   waiting_for_review: 1,
-  waiting_for_merge: 2,
-  queued: 3,
-  merged: 4,
-  closed: 5,
-  failed: 6,
+  queued: 2,
+  merged: 3,
+  closed: 4,
+  failed: 5,
 };
 
 function shortId(id: string): string {

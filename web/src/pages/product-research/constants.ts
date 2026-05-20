@@ -55,6 +55,11 @@ export const PROPOSAL_STATUS_META: Record<
     variant: 'outline',
     className: 'border-black/10 bg-black/[0.05] text-black hover:bg-black/[0.08]',
   },
+  completed: {
+    label: 'Completed',
+    variant: 'outline',
+    className: 'border-black/18 bg-white text-black hover:bg-black/[0.03]',
+  },
 };
 
 export const FEATURE_STATUS_META: Record<ApiFeatureStatus, StatusBadgeMeta> = {

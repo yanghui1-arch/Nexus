@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { NavLink, Outlet, useMatch } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ChevronsUpDown, LogOut, Sparkles, Wallet } from 'lucide-react';
 import { SiGithub } from 'react-icons/si';
 import { getCurrentUser, logout } from '@/api/auth';
@@ -15,6 +16,7 @@ import type { ApiUser } from '@/api/types';
 import { WORKSPACE_NAV_ITEMS } from '@/lib/dashboard-nav';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { LanguageSwitch } from '@/components/LanguageSwitch';
 
 type AppLayoutState = {
   title?: string;
@@ -42,6 +44,7 @@ function formatCny(amount: string): string {
 }
 
 function SidebarNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number] }) {
+  const { t } = useTranslation();
   const isParentActive = useMatch({ path: item.to, end: false });
   const subItems = 'subItems' in item ? item.subItems : undefined;
 
@@ -59,7 +62,7 @@ function SidebarNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number] 
           )
         }
       >
-        {item.label}
+        {t(item.labelKey)}
       </NavLink>
       {subItems && isParentActive ? (
         <div className="ml-3 flex flex-col gap-1 border-l pl-3">
@@ -77,7 +80,7 @@ function SidebarNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number] 
                 )
               }
             >
-              {subItem.label}
+              {t(subItem.labelKey)}
             </NavLink>
           ))}
         </div>
@@ -87,6 +90,7 @@ function SidebarNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number] 
 }
 
 function SidebarAccount() {
+  const { t } = useTranslation();
   const [user, setUser] = useState<ApiUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -114,7 +118,7 @@ function SidebarAccount() {
                 className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-destructive transition-colors hover:bg-accent"
                 onClick={handleLogout}
               >
-                <LogOut className="size-4" /> Logout
+                <LogOut className="size-4" /> {t('auth.logout')}
               </button>
             </div>
           ) : null}
@@ -141,7 +145,7 @@ function SidebarAccount() {
             <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
               <SiGithub className="size-4" />
             </div>
-            <span className="truncate text-sm font-medium">{isLoading ? 'Loading account…' : 'Login with GitHub'}</span>
+            <span className="truncate text-sm font-medium">{isLoading ? t('auth.loadingAccount') : t('auth.loginWithGithub')}</span>
           </a>
         </Button>
       )}
@@ -173,6 +177,7 @@ export function useAppLayout(state: AppLayoutState) {
 }
 
 export function AppLayout() {
+  const { t } = useTranslation();
   const [layout, setLayout] = useState<AppLayoutState>(DEFAULT_LAYOUT_STATE);
   const layoutContextValue = useMemo<AppLayoutContextValue>(
     () => ({
@@ -195,8 +200,8 @@ export function AppLayout() {
                 <Sparkles className="size-4" />
               </div>
               <div className="flex flex-col">
-                <p className="text-sm font-semibold">Nexus</p>
-                <p className="text-xs text-muted-foreground">SaaS Control Center</p>
+                <p className="text-sm font-semibold">{t('app.name')}</p>
+                <p className="text-xs text-muted-foreground">{t('app.tagline')}</p>
               </div>
             </div>
 
@@ -223,9 +228,10 @@ export function AppLayout() {
                     ) : null}
                   </div>
 
-                  {layout.topActions ? (
-                    <div className="ml-auto flex items-center gap-2">{layout.topActions}</div>
-                  ) : null}
+                  <div className="ml-auto flex items-center gap-2">
+                    <LanguageSwitch />
+                    {layout.topActions}
+                  </div>
                 </div>
               </header>
             ) : null}

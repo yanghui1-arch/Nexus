@@ -1,4 +1,5 @@
 import { startTransition, useEffect, useEffectEvent, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { getErrorDetail } from '@/api/client';
 import type { ApiFeature, ApiProductProposal } from '@/api/types';
@@ -15,6 +16,7 @@ export type ProductResearchSnapshotState = {
 };
 
 export function useProductResearchSnapshot(): ProductResearchSnapshotState {
+  const { t } = useTranslation();
   const [proposals, setProposals] = useState<ApiProductProposal[]>([]);
   const [features, setFeatures] = useState<ApiFeature[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,13 +32,13 @@ export function useProductResearchSnapshot(): ProductResearchSnapshotState {
         setIsLoading(false);
       });
     } catch (error) {
-      const detail = getErrorDetail(error, 'Failed to load product research data.');
+      const detail = getErrorDetail(error, t('productResearch.loadDataFailedDescription'));
       startTransition(() => {
         setLoadError(detail);
         setIsLoading(false);
       });
       if (origin !== 'poll') {
-        toast.error('Failed to load product research', {
+        toast.error(t('productResearch.loadDataFailed'), {
           description: detail,
         });
       }
