@@ -198,6 +198,16 @@ async def execute_agent_task(
             return
         raise
     except Exception as exc:
+        if worker_shutting_down.is_set():
+            logger.warning(
+                "Task %s failed while worker was shutting down; queueing it for redispatch.",
+                task_id,
+            )
+            async with database.session() as session:
+                interrupted_task = await TaskRepository.get(session, task_id)
+                if interrupted_task is not None and interrupted_task.status != TaskStatus.failed:
+                    await TaskRepository.set_queued(session, task_id)
+            return
         logger.exception("Task %s failed in worker", task_id)
         await _mark_failed(database, task_id, str(exc))
         raise

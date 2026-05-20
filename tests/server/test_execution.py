@@ -707,3 +707,56 @@ def test_execute_agent_task_treats_shutdown_as_redispatch(monkeypatch):
 
     assert captured == {"task_id": task.id, "error": None}
     assert task.status == TaskStatus.queued
+
+
+def test_execute_agent_task_treats_shutdown_exception_as_redispatch(monkeypatch):
+    task = SimpleNamespace(id="task-id", status=TaskStatus.running, agent_instance_id="agent-id")
+    captured = {}
+
+    class FakeSessionContext:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, *args):
+            return None
+
+    async def fake_load_task(database, task_id):
+        assert task_id == task.id
+        return task
+
+    async def fake_load_binding(database, task):
+        return SimpleNamespace(github_repo="owner/repo", project=None, workspace_key="workspace")
+
+    async def fake_run_agent_workflow(**kwargs):
+        raise AttributeError("interrupted during worker shutdown")
+
+    async def fake_set_queued(session, task_id, *, error=None):
+        captured["task_id"] = task_id
+        captured["error"] = error
+        task.status = TaskStatus.queued
+        return task
+
+    async def fake_set_failed(*args, **kwargs):
+        raise AssertionError("shutdown-time exception should not mark task failed")
+
+    monkeypatch.setattr(execution.worker_shutting_down, "is_set", lambda: True)
+    monkeypatch.setattr(execution, "_load_task", fake_load_task)
+    monkeypatch.setattr(execution, "_load_binding", fake_load_binding)
+    monkeypatch.setattr(execution, "_set_workspace_running", AsyncMock())
+    monkeypatch.setattr(execution, "_claim_running", AsyncMock(return_value=True))
+    monkeypatch.setattr(execution, "_run_agent_workflow", fake_run_agent_workflow)
+    monkeypatch.setattr(execution, "_release_workspace", AsyncMock())
+    monkeypatch.setattr(execution.TaskRepository, "get", fake_load_task)
+    monkeypatch.setattr(execution.TaskRepository, "set_queued", fake_set_queued)
+    monkeypatch.setattr(execution.TaskRepository, "set_failed", fake_set_failed)
+
+    asyncio.run(
+        execution.execute_agent_task(
+            task_id=task.id,
+            settings=SimpleNamespace(database_url="sqlite+aiosqlite:///:memory:", task_dispatch_lease_seconds=5),
+            dispatch_token="dispatch-token",
+        )
+    )
+
+    assert captured == {"task_id": task.id, "error": None}
+    assert task.status == TaskStatus.queued
