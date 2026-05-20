@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from src.server.api.dependencies import get_current_user
 from src.server.api.routes.product import router as product_router
 from src.server.postgres.models import AgentName, ProductProposalStatus
-from src.server.postgres.repositories import AgentInstanceRepository, ProductProposalRepository, TaskRepository
+from src.server.postgres.repositories import AgentInstanceRepository, ProductProposalRepository, TaskRepository, WorkspaceRepository
 
 
 class FakeDatabase:
@@ -50,13 +50,16 @@ def _proposal(**overrides: Any) -> Any:
         "project": "nexus",
         "repo": "owner/repo",
         "status": ProductProposalStatus.proposed,
-        "user_id": uuid.uuid4(),
         "source_task_id": None,
         "created_at": now,
         "updated_at": now,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
+
+
+async def _fake_scopes(session, *, user_id):
+    return [("owner/repo", "nexus")]
 
 
 def test_approve_proposal_dispatches_planning_task(monkeypatch) -> None:
@@ -75,7 +78,7 @@ def test_approve_proposal_dispatches_planning_task(monkeypatch) -> None:
         captured["status"] = status
         return approved
 
-    async def fake_list_marc(session, *, agent, user_id, limit):
+    async def fake_list_marc(session, *, agent, user_id=None, scope=None, limit):
         captured["agent"] = agent
         captured["user_id"] = user_id
         captured["limit"] = limit
@@ -84,6 +87,7 @@ def test_approve_proposal_dispatches_planning_task(monkeypatch) -> None:
     monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
     monkeypatch.setattr(ProductProposalRepository, "set_status", fake_set_status)
     monkeypatch.setattr(AgentInstanceRepository, "list_by_active_task_load", fake_list_marc)
+    monkeypatch.setattr(WorkspaceRepository, "list_repo_project_scopes", _fake_scopes)
 
     async def run_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=_build_app(runner=runner, user_id=user_id))
@@ -138,13 +142,14 @@ def test_approve_proposal_marks_source_pm_task_merged(monkeypatch) -> None:
         captured["merged_task_id"] = task_id
         return SimpleNamespace(id=task_id)
 
-    async def fake_list_marc(session, *, agent, user_id, limit):
+    async def fake_list_marc(session, *, agent, user_id=None, scope=None, limit):
         return [SimpleNamespace(id=uuid.uuid4())]
 
     monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
     monkeypatch.setattr(ProductProposalRepository, "set_status", fake_set_status)
     monkeypatch.setattr(TaskRepository, "set_merged", fake_set_merged)
     monkeypatch.setattr(AgentInstanceRepository, "list_by_active_task_load", fake_list_marc)
+    monkeypatch.setattr(WorkspaceRepository, "list_repo_project_scopes", _fake_scopes)
 
     async def run_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=_build_app(runner=runner, user_id=user_id))
@@ -186,6 +191,7 @@ def test_reject_proposal_marks_source_pm_task_closed(monkeypatch) -> None:
     monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
     monkeypatch.setattr(ProductProposalRepository, "set_status", fake_set_status)
     monkeypatch.setattr(TaskRepository, "set_closed", fake_set_closed)
+    monkeypatch.setattr(WorkspaceRepository, "list_repo_project_scopes", _fake_scopes)
 
     async def run_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=_build_app(runner=runner, user_id=user_id))
@@ -210,6 +216,7 @@ def test_list_proposals_filters_current_user(monkeypatch) -> None:
         return [_proposal(user_id=user_id)]
 
     monkeypatch.setattr(ProductProposalRepository, "list", fake_list)
+    monkeypatch.setattr(WorkspaceRepository, "list_repo_project_scopes", _fake_scopes)
 
     async def run_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=_build_app(user_id=user_id))
@@ -219,16 +226,17 @@ def test_list_proposals_filters_current_user(monkeypatch) -> None:
     response = asyncio.run(run_request())
 
     assert response.status_code == 200
-    assert captured["user_id"] == user_id
+    assert captured["scopes"] == [("owner/repo", "nexus")]
 
 
-def test_get_proposal_hides_other_user_record(monkeypatch) -> None:
+def test_get_proposal_hides_unscoped_record(monkeypatch) -> None:
     proposal_id = uuid.uuid4()
 
     async def fake_get(session, pid):
-        return _proposal(id=pid, user_id=uuid.uuid4())
+        return _proposal(id=pid, repo="other/repo", project="other")
 
     monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
+    monkeypatch.setattr(WorkspaceRepository, "list_repo_project_scopes", _fake_scopes)
 
     async def run_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=_build_app(user_id=uuid.uuid4()))

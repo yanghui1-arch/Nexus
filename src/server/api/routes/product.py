@@ -18,6 +18,7 @@ from src.server.postgres.repositories import (
     FeatureItemRepository,
     FeatureRepository,
     TaskRepository,
+    WorkspaceRepository,
 )
 from src.server.runner import AgentTaskRunner
 from src.server.schemas import (
@@ -31,6 +32,16 @@ from src.server.schemas import (
 
 router = APIRouter(prefix="/v1/product", tags=["product"])
 
+ProposalScope = tuple[str | None, str | None]
+
+
+def _proposal_scope(proposal) -> ProposalScope:
+    return proposal.repo, proposal.project
+
+
+def _scope_allowed(scope: ProposalScope, scopes: list[ProposalScope]) -> bool:
+    return scope in scopes
+
 
 @router.post("/proposals", response_model=ProductProposalResponse, status_code=201)
 async def create_proposal(
@@ -40,6 +51,9 @@ async def create_proposal(
 ) -> ProductProposalResponse:
     database: Database = request.app.state.database
     async with database.session() as session:
+        scopes = await WorkspaceRepository.list_repo_project_scopes(session, user_id=user.id)
+        if not _scope_allowed((payload.repo, payload.project), scopes):
+            raise HTTPException(status_code=403, detail="Repo/project is not available for this user")
         proposal = await ProductProposalRepository.create(
             session,
             title=payload.title,
@@ -48,7 +62,6 @@ async def create_proposal(
             answer=payload.answer,
             project=payload.project,
             repo=payload.repo,
-            user_id=user.id,
             source_task_id=payload.source_task_id,
         )
     return ProductProposalResponse.from_record(proposal)
@@ -65,12 +78,13 @@ async def list_proposals(
 ) -> list[ProductProposalResponse]:
     database: Database = request.app.state.database
     async with database.session() as session:
+        scopes = await WorkspaceRepository.list_repo_project_scopes(session, user_id=user.id)
         proposals = await ProductProposalRepository.list(
             session,
             status=status,
             project=project,
             repo=repo,
-            user_id=user.id,
+            scopes=scopes,
             limit=limit,
         )
     return [ProductProposalResponse.from_record(proposal) for proposal in proposals]
@@ -85,7 +99,8 @@ async def get_proposal(
     database: Database = request.app.state.database
     async with database.session() as session:
         proposal = await ProductProposalRepository.get(session, proposal_id)
-    if proposal is None or proposal.user_id != user.id:
+        scopes = await WorkspaceRepository.list_repo_project_scopes(session, user_id=user.id)
+    if proposal is None or not _scope_allowed(_proposal_scope(proposal), scopes):
         raise HTTPException(status_code=404, detail="Proposal not found")
     return ProductProposalResponse.from_record(proposal)
 
@@ -100,7 +115,8 @@ async def update_proposal_status(
     database: Database = request.app.state.database
     async with database.session() as session:
         existing = await ProductProposalRepository.get(session, proposal_id)
-        if existing is None or existing.user_id != user.id:
+        scopes = await WorkspaceRepository.list_repo_project_scopes(session, user_id=user.id)
+        if existing is None or not _scope_allowed(_proposal_scope(existing), scopes):
             raise HTTPException(status_code=404, detail="Proposal not found")
         previous_status = existing.status
         proposal = await ProductProposalRepository.set_status(session, proposal_id, payload.status)
@@ -159,11 +175,12 @@ async def list_features(
 ) -> list[FeatureResponse]:
     database: Database = request.app.state.database
     async with database.session() as session:
+        scopes = await WorkspaceRepository.list_repo_project_scopes(session, user_id=user.id)
         features = await FeatureRepository.list(
             session,
             status=status,
             project=project,
-            user_id=user.id,
+            scopes=scopes,
             limit=limit,
         )
     return [FeatureResponse.from_record(feature) for feature in features]
@@ -183,7 +200,8 @@ async def get_feature(
         if feature.proposal_id is None:
             raise HTTPException(status_code=404, detail="Feature not found")
         proposal = await ProductProposalRepository.get(session, feature.proposal_id)
-        if proposal is None or proposal.user_id != user.id:
+        scopes = await WorkspaceRepository.list_repo_project_scopes(session, user_id=user.id)
+        if proposal is None or not _scope_allowed(_proposal_scope(proposal), scopes):
             raise HTTPException(status_code=404, detail="Feature not found")
         items = await FeatureItemRepository.list_by_feature(session, feature_id)
     return FeatureResponse.from_record(feature, items=items)

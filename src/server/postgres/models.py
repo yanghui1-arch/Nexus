@@ -301,15 +301,9 @@ class ProductProposalRecord(Base):
     __table_args__ = (
         Index("ix_product_proposal_status_created_at", "status", "created_at"),
         Index("ix_product_proposal_project_created_at", "project", "created_at"),
-        Index("ix_product_proposal_user_created_at", "user_id", "created_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("user_account.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     plan_type: Mapped[str] = mapped_column(String(32), nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False)

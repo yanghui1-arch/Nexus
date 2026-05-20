@@ -190,7 +190,6 @@ def test_create_proposal_uses_context_task_id_and_repo_default(monkeypatch):
         "answer": "Create a clearer onboarding flow.",
         "project": "nexus",
         "repo": "owner/repo",
-        "user_id": user_id,
         "source_task_id": task_id,
     }
 

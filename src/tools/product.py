@@ -102,7 +102,6 @@ class ProductTools:
                 answer=answer,
                 project=project,
                 repo=proposal_repo,
-                user_id=instance.user_id,
                 source_task_id=proposal_source_task_id,
             )
 
