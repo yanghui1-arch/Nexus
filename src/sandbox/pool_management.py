@@ -10,6 +10,10 @@ from src.logger import logger
 from .docker_sandbox import Sandbox, SandboxConfig
 
 
+_POOL_MANAGED_LABEL = "nexus.sandbox.managed"
+_POOL_KEY_LABEL = "nexus.sandbox.pool_key"
+
+
 def _sandbox_config_fingerprint(config: SandboxConfig) -> str:
     payload = {
         "image": config.image,
@@ -81,7 +85,8 @@ class SandboxPoolManager:
                     return entry.sandbox
 
             sandbox = Sandbox(config)
-            await sandbox.__aenter__()
+            labels = {_POOL_MANAGED_LABEL: "true", _POOL_KEY_LABEL: key}
+            await sandbox.start(labels=labels)
             now = time.time()
             entry = _SandboxPoolEntry(
                 key=key,

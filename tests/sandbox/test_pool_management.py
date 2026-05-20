@@ -9,14 +9,20 @@ from src.sandbox.pool_management import SandboxPoolManager, _sandbox_config_fing
 
 
 class DummySandbox:
+    start_calls = []
+
     def __init__(self, config) -> None:
         self.config = config
         self.enter_calls = 0
         self.exit_calls = 0
 
-    async def __aenter__(self):
+    async def start(self, *, labels=None):
         self.enter_calls += 1
+        self.start_calls.append(labels)
         return self
+
+    async def __aenter__(self):
+        return await self.start()
 
     async def __aexit__(self, *_):
         self.exit_calls += 1
@@ -24,6 +30,7 @@ class DummySandbox:
 
 @pytest.fixture
 def sandbox_stub(monkeypatch):
+    DummySandbox.start_calls = []
     monkeypatch.setattr(pool_management, "Sandbox", DummySandbox)
 
 
@@ -36,6 +43,18 @@ async def test_pool_reuses_released_sandbox_for_same_repo_and_config(sandbox_stu
     second = await manager.acquire(PYTHON_312, repo_url="https://github.com/owner/repo")
 
     assert second is first
+    await manager.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_pool_labels_new_sandboxes_for_cross_process_reuse(sandbox_stub):
+    manager = SandboxPoolManager()
+
+    await manager.acquire(PYTHON_312, repo_url="https://github.com/owner/repo")
+
+    labels = DummySandbox.start_calls[-1]
+    assert labels[pool_management._POOL_MANAGED_LABEL] == "true"
+    assert labels[pool_management._POOL_KEY_LABEL].startswith("https://github.com/owner/repo::")
     await manager.shutdown()
 
 
@@ -123,3 +142,4 @@ def test_sandbox_config_fingerprint_uses_sha256_of_canonical_payload():
     expected = hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
 
     assert _sandbox_config_fingerprint(PYTHON_312) == expected
+
