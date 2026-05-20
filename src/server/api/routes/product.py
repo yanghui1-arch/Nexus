@@ -48,6 +48,9 @@ async def create_proposal(
 ) -> ProductProposalResponse:
     database: Database = request.app.state.database
     async with database.session() as session:
+        # Product proposals do not store a user_id directly. Access is derived from
+        # the current user's agent workspaces, so users may only create proposals
+        # for repo/project pairs that one of their agent instances owns.
         workspaces = await WorkspaceRepository.list_for_user(session, user_id=user.id)
         if not any(workspace.github_repo == payload.repo and workspace.project == payload.project for workspace in workspaces):
             raise HTTPException(status_code=403, detail="Repo/project is not available for this user")
