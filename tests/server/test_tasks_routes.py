@@ -28,6 +28,7 @@ fake_celery_module.Celery = _FakeCelery
 sys.modules.setdefault('celery', fake_celery_module)
 
 import src.server.api.routes.tasks as tasks_routes
+from src.server.api.routes.auth import get_current_user
 from src.server.api.routes.tasks import router as tasks_router
 from src.server.postgres.models import (
     AgentName,
@@ -36,6 +37,7 @@ from src.server.postgres.models import (
     TaskWorkItemStatus,
 )
 from src.server.postgres.repositories import (
+    AgentInstanceRepository,
     TaskRepository,
     TaskWorkItemRepository,
 )
@@ -56,6 +58,7 @@ def _build_app(session_obj: object | None = None, runner_obj: object | None = No
     if runner_obj is not None:
         app.state.runner = runner_obj
     app.include_router(tasks_router)
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid.UUID("00000000-0000-0000-0000-000000000001"))
     return app
 
 
@@ -170,11 +173,16 @@ def test_create_task_returns_category_from_persisted_task(monkeypatch: pytest.Mo
     )
     runner = SimpleNamespace(submit_task=AsyncMock(return_value=created_task.id))
 
-    async def fake_get(session, task_id):
+    async def fake_get(session, task_id, **kwargs):
         assert task_id == created_task.id
         return created_task
 
+    async def fake_get_instance(session, agent_instance_id, **kwargs):
+        assert agent_instance_id == created_task.agent_instance_id
+        return SimpleNamespace(id=agent_instance_id)
+
     monkeypatch.setattr(TaskRepository, 'get', fake_get)
+    monkeypatch.setattr(AgentInstanceRepository, 'get', fake_get_instance)
 
     async def run_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=_build_app(runner_obj=runner))
@@ -270,6 +278,7 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
         'category': TaskCategory.coding,
         'repo': 'owner/nexus',
         'project': 'web',
+        'user_id': uuid.UUID('00000000-0000-0000-0000-000000000001'),
         'limit': 10,
     }
 
@@ -294,7 +303,7 @@ def test_list_task_work_items(monkeypatch: pytest.MonkeyPatch) -> None:
         finished_at=None,
     )
 
-    async def fake_get(session, task_id):
+    async def fake_get(session, task_id, **kwargs):
         assert task_id == task.id
         return task
 
@@ -325,7 +334,7 @@ def test_update_task_status_closes_reviewable_task(monkeypatch: pytest.MonkeyPat
     closed_task.id = task.id
     captured: dict[str, Any] = {}
 
-    async def fake_get_task(session, task_id):
+    async def fake_get_task(session, task_id, **kwargs):
         assert task_id == task.id
         return task
 
@@ -362,7 +371,7 @@ def test_update_task_status_reopens_closed_task_for_review(monkeypatch: pytest.M
     reopened_task.id = task.id
     captured: dict[str, Any] = {}
 
-    async def fake_get_task(session, task_id):
+    async def fake_get_task(session, task_id, **kwargs):
         assert task_id == task.id
         return task
 
@@ -411,7 +420,7 @@ def test_update_task_status_reopens_closed_task_for_review_when_work_items_are_a
     reopened_task.id = task.id
     captured: dict[str, Any] = {}
 
-    async def fake_get_task(session, task_id):
+    async def fake_get_task(session, task_id, **kwargs):
         assert task_id == task.id
         return task
 
@@ -462,7 +471,7 @@ def test_consult_task_returns_process_reply(monkeypatch: pytest.MonkeyPatch) -> 
         ],
     )
 
-    async def fake_get(session, task_id):
+    async def fake_get(session, task_id, **kwargs):
         assert task_id == task.id
         return task
 

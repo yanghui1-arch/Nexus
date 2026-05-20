@@ -5,17 +5,20 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from src.agents import Sophie, Tela
 from src.agents.base import Agent
+from src.server.api.routes.auth import get_current_user
 from src.server.config import get_settings
 from src.server.postgres.database import Database
 from src.server.postgres.models import (
     TaskCategory,
     TaskStatus,
+    UserRecord,
 )
 from src.server.postgres.repositories import (
+    AgentInstanceRepository,
     TaskRepository,
     TaskWorkItemRepository,
 )
@@ -41,16 +44,22 @@ available_agent_factory = {
 async def create_task(
     request: Request,
     payload: TaskCreateRequest,
+    user: UserRecord = Depends(get_current_user),
 ) -> TaskSubmitResponse:
     runner: AgentTaskRunner = request.app.state.runner
     database: Database = request.app.state.database
+    async with database.session() as session:
+        instance = await AgentInstanceRepository.get(session, payload.agent_instance_id, user_id=user.id)
+    if instance is None:
+        raise HTTPException(status_code=404, detail="Agent instance not found")
+
     try:
         task_id = await runner.submit_task(payload)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     async with database.session() as session:
-        task = await TaskRepository.get(session, task_id)
+        task = await TaskRepository.get(session, task_id, user_id=user.id)
     if task is None:
         raise HTTPException(status_code=500, detail="Created task could not be loaded")
 
@@ -71,6 +80,7 @@ async def list_tasks(
     repo: str | None = Query(default=None),
     project: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
+    user: UserRecord = Depends(get_current_user),
 ) -> list[TaskResponse]:
     database: Database = request.app.state.database
     async with database.session() as session:
@@ -81,6 +91,7 @@ async def list_tasks(
             category=category,
             repo=repo,
             project=project,
+            user_id=user.id,
             limit=limit,
         )
     tasks = sorted(tasks, key=lambda task: task.created_at, reverse=True)
@@ -91,10 +102,11 @@ async def list_tasks(
 async def get_task(
     request: Request,
     task_id: uuid.UUID,
+    user: UserRecord = Depends(get_current_user),
 ) -> TaskResponse:
     database: Database = request.app.state.database
     async with database.session() as session:
-        task = await TaskRepository.get(session, task_id)
+        task = await TaskRepository.get(session, task_id, user_id=user.id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return TaskResponse.from_record(task)
@@ -104,10 +116,11 @@ async def get_task(
 async def list_task_work_items(
     request: Request,
     task_id: uuid.UUID,
+    user: UserRecord = Depends(get_current_user),
 ) -> list[TaskWorkItemResponse]:
     database: Database = request.app.state.database
     async with database.session() as session:
-        task = await TaskRepository.get(session, task_id)
+        task = await TaskRepository.get(session, task_id, user_id=user.id)
         if task is None:
             raise HTTPException(status_code=404, detail="Task not found")
         work_items = await TaskWorkItemRepository.list_by_task(session, task_id)
@@ -119,11 +132,12 @@ async def update_task_status(
     request: Request,
     task_id: uuid.UUID,
     payload: TaskStatusUpdateRequest,
+    user: UserRecord = Depends(get_current_user),
 ) -> TaskResponse:
     database: Database = request.app.state.database
 
     async with database.session() as session:
-        task = await TaskRepository.get(session, task_id)
+        task = await TaskRepository.get(session, task_id, user_id=user.id)
         if task is None:
             raise HTTPException(status_code=404, detail="Task not found")
 
@@ -169,10 +183,11 @@ async def consult_task(
     request: Request,
     task_id: uuid.UUID,
     payload: TaskConsultRequest,
+    user: UserRecord = Depends(get_current_user),
 ) -> TaskConsultResponse:
     database: Database = request.app.state.database
     async with database.session() as session:
-        task = await TaskRepository.get(session, task_id)
+        task = await TaskRepository.get(session, task_id, user_id=user.id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     if task.agent.value not in available_agent_factory.keys():

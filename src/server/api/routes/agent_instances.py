@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
+from src.server.api.routes.auth import get_current_user
 from src.server.postgres.database import Database
-from src.server.postgres.models import AgentName, WorkspaceStatus
+from src.server.postgres.models import AgentName, UserRecord, WorkspaceStatus
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
     WorkspaceRepository,
@@ -26,6 +27,7 @@ router = APIRouter(prefix="/v1/agent-instances", tags=["agent-instances"])
 async def create_agent_instance(
     request: Request,
     payload: AgentInstanceCreateRequest,
+    user: UserRecord = Depends(get_current_user),
 ) -> AgentInstanceResponse:
     """Create an active agent instance and create a workspace for the agent instance."""
     database: Database = request.app.state.database
@@ -37,6 +39,7 @@ async def create_agent_instance(
             client_id=payload.client_id,
             display_name=payload.display_name,
             is_active=True,
+            user_id=user.id,
         )
         workspace = await WorkspaceRepository.ensure_for_agent_instance(session, instance)
 
@@ -49,6 +52,7 @@ async def list_agent_instances(
     agent: AgentKind | None = Query(default=None),
     client_id: str | None = Query(default=None),
     is_active: bool | None = Query(default=None),
+    user: UserRecord = Depends(get_current_user),
 ) -> list[AgentInstanceResponse]:
     database: Database = request.app.state.database
     async with database.session() as session:
@@ -57,6 +61,7 @@ async def list_agent_instances(
             agent=AgentName(agent.value) if agent else None,
             client_id=client_id,
             is_active=is_active,
+            user_id=user.id,
         )
 
         responses: list[AgentInstanceResponse] = []
@@ -70,10 +75,11 @@ async def list_agent_instances(
 async def get_agent_instance(
     request: Request,
     agent_instance_id: uuid.UUID,
+    user: UserRecord = Depends(get_current_user),
 ) -> AgentInstanceResponse:
     database: Database = request.app.state.database
     async with database.session() as session:
-        instance = await AgentInstanceRepository.get(session, agent_instance_id)
+        instance = await AgentInstanceRepository.get(session, agent_instance_id, user_id=user.id)
         if instance is None:
             raise HTTPException(status_code=404, detail="Agent instance not found")
         workspace = await WorkspaceRepository.get_by_agent_instance_id(session, instance.id)
@@ -85,6 +91,7 @@ async def set_agent_instance_status(
     request: Request,
     agent_instance_id: uuid.UUID,
     payload: AgentInstanceStatusUpdateRequest,
+    user: UserRecord = Depends(get_current_user),
 ) -> AgentInstanceResponse:
     database: Database = request.app.state.database
     async with database.session() as session:
@@ -92,6 +99,7 @@ async def set_agent_instance_status(
             session,
             agent_instance_id,
             is_active=payload.is_active,
+            user_id=user.id,
         )
         if instance is None:
             raise HTTPException(status_code=404, detail="Agent instance not found")
