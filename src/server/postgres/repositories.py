@@ -47,7 +47,8 @@ class AgentInstanceRepository:
         *,
         agent: AgentName,
         user_id: uuid.UUID | None = None,
-        scope: tuple[str | None, str | None] | None = None,
+        github_repo: str | None = None,
+        project: str | None = None,
         limit: int = 100,
     ) -> list[AgentInstanceRecord]:
         active_statuses = [
@@ -77,10 +78,10 @@ class AgentInstanceRepository:
         )
         if user_id is not None:
             query = query.where(AgentInstanceRecord.user_id == user_id)
-        if scope is not None:
+        if github_repo is not None or project is not None:
             query = query.join(WorkspaceRecord, WorkspaceRecord.agent_instance_id == AgentInstanceRecord.id).where(
-                WorkspaceRecord.github_repo == scope[0],
-                WorkspaceRecord.project == scope[1],
+                WorkspaceRecord.github_repo == github_repo,
+                WorkspaceRecord.project == project,
             )
         query = query.order_by(
             func.coalesce(load_query.c.active_task_count, 0).asc(),
@@ -205,18 +206,18 @@ class WorkspaceRepository:
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def list_repo_project_scopes(
+    async def list_for_user(
         session: AsyncSession,
         *,
         user_id: uuid.UUID,
-    ) -> list[tuple[str | None, str | None]]:
+    ) -> list[WorkspaceRecord]:
         query = (
-            select(WorkspaceRecord.github_repo, WorkspaceRecord.project)
+            select(WorkspaceRecord)
             .join(AgentInstanceRecord, AgentInstanceRecord.id == WorkspaceRecord.agent_instance_id)
             .where(AgentInstanceRecord.user_id == user_id)
         )
         result = await session.execute(query)
-        return [(row.github_repo, row.project) for row in result.all()]
+        return list(result.scalars().all())
 
     @staticmethod
     async def ensure_for_agent_instance(
@@ -360,18 +361,18 @@ class ProductProposalRepository:
         status: ProductProposalStatus | None = None,
         project: str | None = None,
         repo: str | None = None,
-        scopes: list[tuple[str | None, str | None]] | None = None,
+        workspaces: list[WorkspaceRecord] | None = None,
         limit: int = 200,
     ) -> list[ProductProposalRecord]:
         query = select(ProductProposalRecord)
-        if scopes is not None:
-            if not scopes:
+        if workspaces is not None:
+            if not workspaces:
                 return []
             query = query.where(
                 or_(
                     *(
-                        and_(ProductProposalRecord.repo == scope_repo, ProductProposalRecord.project == scope_project)
-                        for scope_repo, scope_project in scopes
+                        and_(ProductProposalRecord.repo == workspace.github_repo, ProductProposalRecord.project == workspace.project)
+                        for workspace in workspaces
                     )
                 )
             )
@@ -467,18 +468,18 @@ class FeatureRepository:
         *,
         status: FeatureStatus | None = None,
         project: str | None = None,
-        scopes: list[tuple[str | None, str | None]] | None = None,
+        workspaces: list[WorkspaceRecord] | None = None,
         limit: int = 200,
     ) -> list[FeatureRecord]:
         query = select(FeatureRecord)
-        if scopes is not None:
-            if not scopes:
+        if workspaces is not None:
+            if not workspaces:
                 return []
             query = query.join(ProductProposalRecord, ProductProposalRecord.id == FeatureRecord.proposal_id).where(
                 or_(
                     *(
-                        and_(ProductProposalRecord.repo == scope_repo, ProductProposalRecord.project == scope_project)
-                        for scope_repo, scope_project in scopes
+                        and_(ProductProposalRecord.repo == workspace.github_repo, ProductProposalRecord.project == workspace.project)
+                        for workspace in workspaces
                     )
                 )
             )
@@ -559,18 +560,15 @@ class FeatureItemRepository:
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_proposal_scope(session: AsyncSession, item_id: uuid.UUID) -> tuple[str | None, str | None] | None:
+    async def get_proposal(session: AsyncSession, item_id: uuid.UUID) -> ProductProposalRecord | None:
         query = (
-            select(ProductProposalRecord.repo, ProductProposalRecord.project)
+            select(ProductProposalRecord)
             .join(FeatureRecord, FeatureRecord.proposal_id == ProductProposalRecord.id)
             .join(FeatureItemRecord, FeatureItemRecord.feature_id == FeatureRecord.id)
             .where(FeatureItemRecord.id == item_id)
         )
         result = await session.execute(query)
-        row = result.one_or_none()
-        if row is None:
-            return None
-        return row.repo, row.project
+        return result.scalar_one_or_none()
 
     @staticmethod
     async def list_unassigned_by_proposal(
