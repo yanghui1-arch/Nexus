@@ -28,7 +28,7 @@ fake_celery_module.Celery = _FakeCelery
 sys.modules.setdefault('celery', fake_celery_module)
 
 import src.server.api.routes.tasks as tasks_routes
-from src.server.api.routes.auth import get_current_user
+from src.server.api.dependencies import get_current_user
 from src.server.api.routes.tasks import router as tasks_router
 from src.server.postgres.models import (
     AgentName,

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from src.agents import Sophie, Tela
 from src.agents.base import Agent
-from src.server.api.routes.auth import get_current_user
+from src.server.api.dependencies import get_current_user
 from src.server.config import get_settings
 from src.server.postgres.database import Database
 from src.server.postgres.models import (

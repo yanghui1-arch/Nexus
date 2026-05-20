@@ -6,7 +6,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from src.server.api.routes.auth import get_current_user
+from src.server.api.dependencies import get_current_user
 from src.server.postgres.database import Database
 from src.server.postgres.models import AgentName, UserRecord, WorkspaceStatus
 from src.server.postgres.repositories import (

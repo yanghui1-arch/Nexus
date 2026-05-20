@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import secrets
 import uuid
 from datetime import timedelta
@@ -14,12 +13,12 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 
+from src.server.api.dependencies import get_current_user, hash_token
 from src.server.config import get_settings
 from src.server.postgres.database import Database
 from src.server.postgres.models import AgentName, UserRecord
 from src.server.postgres.repositories import (
     AgentPurchaseRepository,
-    AuthSessionRepository,
     UserRepository,
     utc_now,
 )
@@ -33,22 +32,6 @@ from src.server.schemas import (
 router = APIRouter(prefix="/v1", tags=["auth"])
 AGENT_PRICES = {AgentName.tela: Decimal("5500.00"), AgentName.sophie: Decimal("6000.00")}
 
-
-def _hash_token(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
-
-
-async def get_current_user(request: Request) -> UserRecord:
-    settings = get_settings()
-    token = request.cookies.get(settings.auth_session_cookie_name)
-    if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    database: Database = request.app.state.database
-    async with database.session() as session:
-        user = await AuthSessionRepository.get_user_by_token_hash(session, _hash_token(token))
-    if user is None:
-        raise HTTPException(status_code=401, detail="Invalid or expired session")
-    return user
 
 
 @router.get("/auth/github/login")
@@ -102,7 +85,7 @@ async def github_callback(request: Request, code: str) -> RedirectResponse:
         )
         await AuthSessionRepository.create(
             session,
-            token_hash=_hash_token(session_token),
+            token_hash=hash_token(session_token),
             user_id=user.id,
             expires_at=expires_at,
         )
@@ -135,7 +118,7 @@ async def logout(request: Request, response: Response) -> None:
     if token:
         database: Database = request.app.state.database
         async with database.session() as session:
-            await AuthSessionRepository.delete(session, _hash_token(token))
+            await AuthSessionRepository.delete(session, hash_token(token))
     response.delete_cookie(settings.auth_session_cookie_name)
 
 

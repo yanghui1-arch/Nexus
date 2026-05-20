@@ -10,7 +10,8 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from src.server.api.routes.auth import get_current_user, router as auth_router
+from src.server.api.dependencies import get_current_user
+from src.server.api.routes.auth import router as auth_router
 from sqlalchemy import select
 
 from src.server.postgres.models import AgentInstanceRecord, AgentName, AgentPurchaseRecord, WorkspaceRecord, WorkspaceStatus
