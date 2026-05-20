@@ -145,9 +145,15 @@ class AgentInstanceRecord(Base):
     __tablename__ = "agent_instance"
     __table_args__ = (
         Index("ix_agent_instance_agent_client", "agent", "client_id"),
+        Index("ix_agent_instance_user_agent", "user_id", "agent"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("user_account.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     agent: Mapped[AgentName] = mapped_column(
         Enum(AgentName, native_enum=False),
         nullable=False,

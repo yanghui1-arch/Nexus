@@ -14,7 +14,7 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
     "user_account": {"id", "github_id", "github_login", "balance"},
     "auth_session": {"token_hash", "user_id", "expires_at"},
     "agent_purchase": {"id", "user_id", "agent", "price", "agent_instance_id"},
-    "agent_instance": {"id", "agent", "client_id", "is_active", "expires_at"},
+    "agent_instance": {"id", "user_id", "agent", "client_id", "is_active", "expires_at"},
     "workspace": {
         "id",
         "agent_instance_id",
@@ -225,6 +225,8 @@ class Database:
             )
             await conn.execute(text("ALTER TABLE agent_purchase ALTER COLUMN price SET NOT NULL"))
             await conn.execute(text("ALTER TABLE agent_instance ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ"))
+            await conn.execute(text("ALTER TABLE agent_instance ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES user_account(id) ON DELETE CASCADE"))
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_agent_instance_user_id ON agent_instance (user_id)"))
             await conn.execute(text("ALTER TABLE agent_purchase ADD COLUMN IF NOT EXISTS agent_instance_id UUID REFERENCES agent_instance(id) ON DELETE SET NULL"))
             await conn.execute(text("ALTER TABLE agent_purchase DROP COLUMN IF EXISTS expires_at"))
             await conn.execute(

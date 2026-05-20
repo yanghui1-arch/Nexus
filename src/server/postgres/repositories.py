@@ -86,8 +86,10 @@ class AgentInstanceRepository:
         client_id: str,
         display_name: str | None,
         is_active: bool = True,
+        user_id: uuid.UUID | None = None,
     ) -> AgentInstanceRecord:
         instance = AgentInstanceRecord(
+            user_id=user_id,
             agent=agent,
             client_id=client_id,
             display_name=display_name,
@@ -138,8 +140,17 @@ class AgentInstanceRepository:
         return [instance for instance in instances if instance.id not in blocked_ids]
 
     @staticmethod
-    async def get(session: AsyncSession, instance_id: uuid.UUID) -> AgentInstanceRecord | None:
-        return await session.get(AgentInstanceRecord, instance_id)
+    async def get(
+        session: AsyncSession,
+        instance_id: uuid.UUID,
+        *,
+        user_id: uuid.UUID | None = None,
+    ) -> AgentInstanceRecord | None:
+        query = select(AgentInstanceRecord).where(AgentInstanceRecord.id == instance_id)
+        if user_id is not None:
+            query = query.where(AgentInstanceRecord.user_id == user_id)
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
 
     @staticmethod
     async def list(
@@ -148,9 +159,12 @@ class AgentInstanceRepository:
         agent: AgentName | None = None,
         client_id: str | None = None,
         is_active: bool | None = None,
+        user_id: uuid.UUID | None = None,
         limit: int = 500,
     ) -> list[AgentInstanceRecord]:
         query = select(AgentInstanceRecord)
+        if user_id is not None:
+            query = query.where(AgentInstanceRecord.user_id == user_id)
         if agent is not None:
             query = query.where(AgentInstanceRecord.agent == agent)
         if client_id is not None:
@@ -167,8 +181,9 @@ class AgentInstanceRepository:
         instance_id: uuid.UUID,
         *,
         is_active: bool,
+        user_id: uuid.UUID | None = None,
     ) -> AgentInstanceRecord | None:
-        instance = await session.get(AgentInstanceRecord, instance_id)
+        instance = await AgentInstanceRepository.get(session, instance_id, user_id=user_id)
         if instance is None:
             return None
         instance.is_active = is_active
@@ -646,8 +661,19 @@ class TaskRepository:
         return task
 
     @staticmethod
-    async def get(session: AsyncSession, task_id: uuid.UUID) -> TaskRecord | None:
-        return await session.get(TaskRecord, task_id)
+    async def get(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+        *,
+        user_id: uuid.UUID | None = None,
+    ) -> TaskRecord | None:
+        query = select(TaskRecord).where(TaskRecord.id == task_id)
+        if user_id is not None:
+            query = query.join(AgentInstanceRecord, AgentInstanceRecord.id == TaskRecord.agent_instance_id).where(
+                AgentInstanceRecord.user_id == user_id
+            )
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
 
     @staticmethod
     async def list(
@@ -658,9 +684,14 @@ class TaskRepository:
         category: TaskCategory | None = None,
         repo: str | None = None,
         project: str | None = None,
+        user_id: uuid.UUID | None = None,
         limit: int = 200,
     ) -> list[TaskRecord]:
         query = select(TaskRecord)
+        if user_id is not None:
+            query = query.join(AgentInstanceRecord, AgentInstanceRecord.id == TaskRecord.agent_instance_id).where(
+                AgentInstanceRecord.user_id == user_id
+            )
 
         if agent_instance_id is not None:
             query = query.where(TaskRecord.agent_instance_id == agent_instance_id)
@@ -1573,6 +1604,7 @@ class AgentPurchaseRepository:
             user.balance -= price
             user.updated_at = utc_now()
             agent_instance = AgentInstanceRecord(
+                user_id=user_id,
                 agent=agent,
                 client_id=f"purchase-{user_id.hex[:8]}-{uuid.uuid4().hex[:8]}",
                 display_name=f"{agent.value.title()} subscription",
