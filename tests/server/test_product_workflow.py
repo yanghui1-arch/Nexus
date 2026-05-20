@@ -32,7 +32,8 @@ def _settings(**overrides):
 
 def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
     item = SimpleNamespace(id="feature-item-id", title="Knowledge base", description="Add search.")
-    feature = SimpleNamespace(project="nexus")
+    user_id = uuid.uuid4()
+    feature = SimpleNamespace(project="nexus", user_id=user_id)
     tela_instance_id = uuid.uuid4()
     tela = SimpleNamespace(id=tela_instance_id)
     runner = FakeRunner()
@@ -43,8 +44,9 @@ def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
         calls["item"] += 1
         return item if calls["item"] == 1 else None
 
-    async def fake_list_agents(session, *, agent, limit):
+    async def fake_list_agents(session, *, agent, user_id, limit):
         captured["agent"] = agent
+        captured["user_id"] = user_id
         captured["limit"] = limit
         return [tela]
 
@@ -76,6 +78,7 @@ def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
 
     assert result == 1
     assert captured["agent"] == AgentName.tela
+    assert captured["user_id"] == user_id
     assert captured["limit"] == 1
     assert captured["feature_item_id"] == "feature-item-id"
     assert captured["repo_item_id"] == "feature-item-id"

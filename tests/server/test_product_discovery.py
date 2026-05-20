@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 from src.server.product_discovery import ProductDiscoveryPoller
 from src.server.postgres.models import AgentName, TaskCategory, TaskRecord, TaskStatus
-from src.server.postgres.repositories import AgentInstanceRepository, WorkspaceRepository
+from src.server.postgres.repositories import AgentInstanceRepository, UserRepository, WorkspaceRepository
 
 
 class FakeDatabase:
@@ -145,11 +145,15 @@ def test_product_discovery_poller_start_and_stop(monkeypatch):
 
 
 async def test_product_discovery_candidates_allow_waiting_for_review_pm_tasks(db_session):
+    user = await UserRepository.upsert_github_user(
+        db_session, github_id="discovery-waiting", github_login="marc-waiting", email=None
+    )
     instance = await AgentInstanceRepository.create(
         db_session,
         agent=AgentName.marc,
         client_id="marc-waiting-review",
         display_name="Marc Waiting Review",
+        user_id=user.id,
     )
     db_session.add(
         TaskRecord(
@@ -168,11 +172,15 @@ async def test_product_discovery_candidates_allow_waiting_for_review_pm_tasks(db
 
 
 async def test_product_discovery_candidates_block_running_pm_tasks(db_session):
+    user = await UserRepository.upsert_github_user(
+        db_session, github_id="discovery-running", github_login="marc-running", email=None
+    )
     instance = await AgentInstanceRepository.create(
         db_session,
         agent=AgentName.marc,
         client_id="marc-running",
         display_name="Marc Running",
+        user_id=user.id,
     )
     db_session.add(
         TaskRecord(
