@@ -56,20 +56,21 @@ class ProductWorkflowPoller:
             item = await FeatureItemRepository.get_next_unassigned(session)
             if item is None:
                 return False
+            feature = await FeatureItemRepository.get_feature(session, item.id)
+            if feature is None:
+                logger.warning("Skip feature item %s because its feature is missing.", item.id)
+                return False
             tela_instances = await AgentInstanceRepository.list_by_active_task_load(
                 session,
                 agent=AgentName.tela,
+                user_id=feature.user_id,
                 limit=1,
             )
             if not tela_instances:
-                logger.warning("Skip feature item task publishing because no active Tela instance is available.")
+                logger.warning("Skip feature item task publishing because no active Tela agent instance is available.")
                 return False
-            feature = await FeatureItemRepository.get_feature(session, item.id)
             repo = await FeatureItemRepository.get_repo(session, item.id)
 
-        if feature is None:
-            logger.warning("Skip feature item %s because its feature is missing.", item.id)
-            return False
         if not repo:
             logger.warning("Skip feature item %s because repo is missing.", item.id)
             return False

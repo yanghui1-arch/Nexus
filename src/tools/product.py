@@ -8,8 +8,8 @@ from openai import pydantic_function_tool
 from pydantic import BaseModel, Field
 
 from src.server.postgres.database import Database
-from src.server.postgres.models import ProductProposalStatus
-from src.server.postgres.repositories import FeatureItemRepository, FeatureRepository, ProductProposalRepository
+from src.server.postgres.models import AgentInstanceRecord, ProductProposalStatus
+from src.server.postgres.repositories import FeatureItemRepository, FeatureRepository, ProductProposalRepository, TaskRepository
 from src.tools.nexus import NexusTaskContext
 
 
@@ -88,6 +88,12 @@ class ProductTools:
         proposal_source_task_id = self._context.task_id if self._context else None
 
         async with self._database.session() as session:
+            task = await TaskRepository.get(session, proposal_source_task_id) if proposal_source_task_id else None
+            if task is None:
+                return {"success": False, "message": "Product proposal requires a task context."}
+            instance = await session.get(AgentInstanceRecord, task.agent_instance_id)
+            if instance is None:
+                return {"success": False, "message": "Task agent instance not found."}
             proposal = await ProductProposalRepository.create(
                 session,
                 title=title,
@@ -96,6 +102,7 @@ class ProductTools:
                 answer=answer,
                 project=project,
                 repo=proposal_repo,
+                user_id=instance.user_id,
                 source_task_id=proposal_source_task_id,
             )
 
@@ -136,6 +143,7 @@ class ProductTools:
                 title=title,
                 description=description,
                 project=proposal.project,
+                user_id=proposal.user_id,
             )
 
         return {

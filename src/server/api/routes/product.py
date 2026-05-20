@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
+from src.server.api.dependencies import get_current_user
 from src.server.postgres.database import Database
 from src.server.postgres.models import (
     AgentName,
     ProductProposalStatus,
     FeatureStatus,
+    UserRecord,
 )
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
@@ -34,6 +36,7 @@ router = APIRouter(prefix="/v1/product", tags=["product"])
 async def create_proposal(
     request: Request,
     payload: ProductProposalCreateRequest,
+    user: UserRecord = Depends(get_current_user),
 ) -> ProductProposalResponse:
     database: Database = request.app.state.database
     async with database.session() as session:
@@ -45,6 +48,7 @@ async def create_proposal(
             answer=payload.answer,
             project=payload.project,
             repo=payload.repo,
+            user_id=user.id,
             source_task_id=payload.source_task_id,
         )
     return ProductProposalResponse.from_record(proposal)
@@ -57,6 +61,7 @@ async def list_proposals(
     project: str | None = Query(default=None),
     repo: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
+    user: UserRecord = Depends(get_current_user),
 ) -> list[ProductProposalResponse]:
     database: Database = request.app.state.database
     async with database.session() as session:
@@ -65,6 +70,7 @@ async def list_proposals(
             status=status,
             project=project,
             repo=repo,
+            user_id=user.id,
             limit=limit,
         )
     return [ProductProposalResponse.from_record(proposal) for proposal in proposals]
@@ -74,11 +80,12 @@ async def list_proposals(
 async def get_proposal(
     request: Request,
     proposal_id: uuid.UUID,
+    user: UserRecord = Depends(get_current_user),
 ) -> ProductProposalResponse:
     database: Database = request.app.state.database
     async with database.session() as session:
         proposal = await ProductProposalRepository.get(session, proposal_id)
-    if proposal is None:
+    if proposal is None or proposal.user_id != user.id:
         raise HTTPException(status_code=404, detail="Proposal not found")
     return ProductProposalResponse.from_record(proposal)
 
@@ -88,11 +95,12 @@ async def update_proposal_status(
     request: Request,
     proposal_id: uuid.UUID,
     payload: ProductProposalStatusUpdateRequest,
+    user: UserRecord = Depends(get_current_user),
 ) -> ProductProposalResponse:
     database: Database = request.app.state.database
     async with database.session() as session:
         existing = await ProductProposalRepository.get(session, proposal_id)
-        if existing is None:
+        if existing is None or existing.user_id != user.id:
             raise HTTPException(status_code=404, detail="Proposal not found")
         previous_status = existing.status
         proposal = await ProductProposalRepository.set_status(session, proposal_id, payload.status)
@@ -111,6 +119,7 @@ async def update_proposal_status(
             marc_instances = await AgentInstanceRepository.list_by_active_task_load(
                 session,
                 agent=AgentName.marc,
+                user_id=user.id,
                 limit=1,
             )
         if not marc_instances:
@@ -146,6 +155,7 @@ async def list_features(
     status: FeatureStatus | None = Query(default=None),
     project: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
+    user: UserRecord = Depends(get_current_user),
 ) -> list[FeatureResponse]:
     database: Database = request.app.state.database
     async with database.session() as session:
@@ -153,6 +163,7 @@ async def list_features(
             session,
             status=status,
             project=project,
+            user_id=user.id,
             limit=limit,
         )
     return [FeatureResponse.from_record(feature) for feature in features]
@@ -162,11 +173,12 @@ async def list_features(
 async def get_feature(
     request: Request,
     feature_id: uuid.UUID,
+    user: UserRecord = Depends(get_current_user),
 ) -> FeatureResponse:
     database: Database = request.app.state.database
     async with database.session() as session:
         feature = await FeatureRepository.get(session, feature_id)
-        if feature is None:
+        if feature is None or feature.user_id != user.id:
             raise HTTPException(status_code=404, detail="Feature not found")
         items = await FeatureItemRepository.list_by_feature(session, feature_id)
     return FeatureResponse.from_record(feature, items=items)
