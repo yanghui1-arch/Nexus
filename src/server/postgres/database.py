@@ -39,6 +39,7 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
     },
     "product_proposal": {
         "id",
+        "user_id",
         "title",
         "plan_type",
         "summary",
@@ -50,6 +51,7 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
     },
     "feature": {
         "id",
+        "user_id",
         "proposal_id",
         "title",
         "description",
@@ -236,6 +238,26 @@ class Database:
             )
             await conn.execute(text("ALTER TABLE agent_instance ALTER COLUMN user_id SET NOT NULL"))
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_agent_instance_user_id ON agent_instance (user_id)"))
+            await conn.execute(text("ALTER TABLE product_proposal ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES user_account(id) ON DELETE CASCADE"))
+            await conn.execute(
+                text(
+                    "UPDATE product_proposal pp SET user_id = ai.user_id "
+                    "FROM task t JOIN agent_instance ai ON ai.id = t.agent_instance_id "
+                    "WHERE pp.source_task_id = t.id AND pp.user_id IS NULL"
+                )
+            )
+            await conn.execute(text("ALTER TABLE product_proposal ALTER COLUMN user_id SET NOT NULL"))
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_product_proposal_user_id ON product_proposal (user_id)"))
+            await conn.execute(text("ALTER TABLE feature ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES user_account(id) ON DELETE CASCADE"))
+            await conn.execute(
+                text(
+                    "UPDATE feature f SET user_id = pp.user_id "
+                    "FROM product_proposal pp "
+                    "WHERE f.proposal_id = pp.id AND f.user_id IS NULL"
+                )
+            )
+            await conn.execute(text("ALTER TABLE feature ALTER COLUMN user_id SET NOT NULL"))
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_feature_user_id ON feature (user_id)"))
             await conn.execute(text("ALTER TABLE agent_purchase DROP COLUMN IF EXISTS expires_at"))
             await conn.execute(
                 text(

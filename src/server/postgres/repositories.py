@@ -46,6 +46,7 @@ class AgentInstanceRepository:
         session: AsyncSession,
         *,
         agent: AgentName,
+        user_id: uuid.UUID | None = None,
         limit: int = 100,
     ) -> list[AgentInstanceRecord]:
         active_statuses = [
@@ -72,9 +73,13 @@ class AgentInstanceRepository:
                 AgentInstanceRecord.agent == agent,
                 AgentInstanceRecord.is_active.is_(True),
             )
-            .order_by(func.coalesce(load_query.c.active_task_count, 0).asc(), AgentInstanceRecord.created_at.asc())
-            .limit(limit)
         )
+        if user_id is not None:
+            query = query.where(AgentInstanceRecord.user_id == user_id)
+        query = query.order_by(
+            func.coalesce(load_query.c.active_task_count, 0).asc(),
+            AgentInstanceRecord.created_at.asc(),
+        ).limit(limit)
         result = await session.execute(query)
         return list(result.scalars().all())
 
@@ -307,9 +312,11 @@ class ProductProposalRepository:
         answer: str,
         project: str | None,
         repo: str | None,
+        user_id: uuid.UUID,
         source_task_id: uuid.UUID | None = None,
     ) -> ProductProposalRecord:
         proposal = ProductProposalRecord(
+            user_id=user_id,
             title=title,
             plan_type=plan_type,
             summary=summary,
@@ -335,9 +342,12 @@ class ProductProposalRepository:
         status: ProductProposalStatus | None = None,
         project: str | None = None,
         repo: str | None = None,
+        user_id: uuid.UUID | None = None,
         limit: int = 200,
     ) -> list[ProductProposalRecord]:
         query = select(ProductProposalRecord)
+        if user_id is not None:
+            query = query.where(ProductProposalRecord.user_id == user_id)
         if status is not None:
             query = query.where(ProductProposalRecord.status == status)
         if project is not None:
@@ -402,8 +412,10 @@ class FeatureRepository:
         title: str,
         description: str,
         project: str | None,
+        user_id: uuid.UUID,
     ) -> FeatureRecord:
         feature = FeatureRecord(
+            user_id=user_id,
             proposal_id=proposal_id,
             title=title,
             description=description,
@@ -430,9 +442,12 @@ class FeatureRepository:
         *,
         status: FeatureStatus | None = None,
         project: str | None = None,
+        user_id: uuid.UUID | None = None,
         limit: int = 200,
     ) -> list[FeatureRecord]:
         query = select(FeatureRecord)
+        if user_id is not None:
+            query = query.where(FeatureRecord.user_id == user_id)
         if status is not None:
             query = query.where(FeatureRecord.status == status)
         if project is not None:
