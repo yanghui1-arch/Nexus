@@ -60,10 +60,14 @@ class ProductWorkflowPoller:
             if feature is None:
                 logger.warning("Skip feature item %s because its feature is missing.", item.id)
                 return False
+            proposal_user_id = await FeatureItemRepository.get_proposal_user_id(session, item.id)
+            if proposal_user_id is None:
+                logger.warning("Skip feature item %s because its proposal owner is missing.", item.id)
+                return False
             tela_instances = await AgentInstanceRepository.list_by_active_task_load(
                 session,
                 agent=AgentName.tela,
-                user_id=feature.user_id,
+                user_id=proposal_user_id,
                 limit=1,
             )
             if not tela_instances:

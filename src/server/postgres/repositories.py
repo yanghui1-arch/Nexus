@@ -412,10 +412,8 @@ class FeatureRepository:
         title: str,
         description: str,
         project: str | None,
-        user_id: uuid.UUID,
     ) -> FeatureRecord:
         feature = FeatureRecord(
-            user_id=user_id,
             proposal_id=proposal_id,
             title=title,
             description=description,
@@ -447,7 +445,9 @@ class FeatureRepository:
     ) -> list[FeatureRecord]:
         query = select(FeatureRecord)
         if user_id is not None:
-            query = query.where(FeatureRecord.user_id == user_id)
+            query = query.join(ProductProposalRecord, ProductProposalRecord.id == FeatureRecord.proposal_id).where(
+                ProductProposalRecord.user_id == user_id
+            )
         if status is not None:
             query = query.where(FeatureRecord.status == status)
         if project is not None:
@@ -517,6 +517,17 @@ class FeatureItemRepository:
     async def get_repo(session: AsyncSession, item_id: uuid.UUID) -> str | None:
         query = (
             select(ProductProposalRecord.repo)
+            .join(FeatureRecord, FeatureRecord.proposal_id == ProductProposalRecord.id)
+            .join(FeatureItemRecord, FeatureItemRecord.feature_id == FeatureRecord.id)
+            .where(FeatureItemRecord.id == item_id)
+        )
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_proposal_user_id(session: AsyncSession, item_id: uuid.UUID) -> uuid.UUID | None:
+        query = (
+            select(ProductProposalRecord.user_id)
             .join(FeatureRecord, FeatureRecord.proposal_id == ProductProposalRecord.id)
             .join(FeatureItemRecord, FeatureItemRecord.feature_id == FeatureRecord.id)
             .where(FeatureItemRecord.id == item_id)

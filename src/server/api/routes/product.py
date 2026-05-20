@@ -178,7 +178,12 @@ async def get_feature(
     database: Database = request.app.state.database
     async with database.session() as session:
         feature = await FeatureRepository.get(session, feature_id)
-        if feature is None or feature.user_id != user.id:
+        if feature is None:
+            raise HTTPException(status_code=404, detail="Feature not found")
+        if feature.proposal_id is None:
+            raise HTTPException(status_code=404, detail="Feature not found")
+        proposal = await ProductProposalRepository.get(session, feature.proposal_id)
+        if proposal is None or proposal.user_id != user.id:
             raise HTTPException(status_code=404, detail="Feature not found")
         items = await FeatureItemRepository.list_by_feature(session, feature_id)
     return FeatureResponse.from_record(feature, items=items)

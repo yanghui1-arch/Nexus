@@ -246,12 +246,11 @@ def test_create_feature_for_product_proposal_requires_approved_proposal(monkeypa
 
 def test_create_feature_for_product_proposal_from_approved_proposal(monkeypatch):
     proposal_id = uuid.uuid4()
-    feature_user_id = uuid.uuid4()
     feature = _feature(id=uuid.uuid4(), proposal_id=proposal_id)
     captured = {}
 
     async def fake_get(session, pid):
-        return _proposal(id=pid, user_id=feature_user_id, status=ProductProposalStatus.approved)
+        return _proposal(id=pid, status=ProductProposalStatus.approved)
 
     async def fake_create(session, **kwargs):
         captured.update(kwargs)
@@ -284,7 +283,6 @@ def test_create_feature_for_product_proposal_from_approved_proposal(monkeypatch)
         "title": "RAG",
         "description": "Add RAG capability.",
         "project": "nexus",
-        "user_id": feature_user_id,
     }
 
 

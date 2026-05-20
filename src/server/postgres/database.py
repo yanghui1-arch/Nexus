@@ -51,7 +51,6 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
     },
     "feature": {
         "id",
-        "user_id",
         "proposal_id",
         "title",
         "description",
@@ -248,16 +247,6 @@ class Database:
             )
             await conn.execute(text("ALTER TABLE product_proposal ALTER COLUMN user_id SET NOT NULL"))
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_product_proposal_user_id ON product_proposal (user_id)"))
-            await conn.execute(text("ALTER TABLE feature ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES user_account(id) ON DELETE CASCADE"))
-            await conn.execute(
-                text(
-                    "UPDATE feature f SET user_id = pp.user_id "
-                    "FROM product_proposal pp "
-                    "WHERE f.proposal_id = pp.id AND f.user_id IS NULL"
-                )
-            )
-            await conn.execute(text("ALTER TABLE feature ALTER COLUMN user_id SET NOT NULL"))
-            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_feature_user_id ON feature (user_id)"))
             await conn.execute(text("ALTER TABLE agent_purchase DROP COLUMN IF EXISTS expires_at"))
             await conn.execute(
                 text(

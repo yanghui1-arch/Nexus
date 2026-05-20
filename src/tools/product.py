@@ -143,7 +143,6 @@ class ProductTools:
                 title=title,
                 description=description,
                 project=proposal.project,
-                user_id=proposal.user_id,
             )
 
         return {
