@@ -97,6 +97,8 @@ async def update_proposal_status(
         previous_status = existing.status
         proposal = await ProductProposalRepository.set_status(session, proposal_id, payload.status)
         if proposal is not None and proposal.source_task_id is not None:
+            # Once a PM-reviewed proposal reaches a terminal outcome, move its source task
+            # out of active states so the hourly discovery poller can schedule new proposals.
             if payload.status == ProductProposalStatus.approved:
                 await TaskRepository.set_merged(session, proposal.source_task_id)
             elif payload.status == ProductProposalStatus.rejected:
