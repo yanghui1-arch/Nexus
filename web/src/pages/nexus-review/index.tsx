@@ -167,7 +167,7 @@ export function NexusReviewPage() {
                 {t('common.updatedRelative', { time: timeAgo(selectedTask.updatedAt) })}
               </span>
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight">
+            <h1 className="line-clamp-2 text-2xl font-normal tracking-tight">
               {selectedTask.question}
             </h1>
           </div>
@@ -328,7 +328,7 @@ export function NexusReviewPage() {
                         </Badge>
                       ) : null}
                     </div>
-                    <h2 className="mt-3 text-base font-semibold leading-snug">
+                    <h2 className="mt-3 line-clamp-2 text-base font-normal leading-snug">
                       {task.question}
                     </h2>
                     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">

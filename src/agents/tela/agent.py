@@ -121,7 +121,7 @@ class Tela(CodeAgent):
             self._sandbox_pool_manager = None
         await self.close()
 
-    @track(tags=["exec", "tela"], step_type="llm", llm_provider=LLMProvider.OPENAI, system_prompt="Tela/step@0.1")
+    @track(tags=["exec", "tela"], step_type="llm", llm_provider=LLMProvider.OPENAI)
     async def step(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> BaseAgentStepResult:
         if self._sandbox is None:
             raise RuntimeError("Tela must be used as an async context manager (async with Tela(...) as tela:)")

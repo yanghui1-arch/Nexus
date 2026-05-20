@@ -93,6 +93,7 @@ class GithubPullRequestFeedbackKind(str, enum.Enum):
     pr_comment = "pr_comment"
     pr_review = "pr_review"
     pr_review_comment = "pr_review_comment"
+    pr_merge_conflict = "pr_merge_conflict"
 
 
 class GithubPullRequestFeedbackStatus(str, enum.Enum):
