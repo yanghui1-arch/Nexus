@@ -8,9 +8,11 @@ from src.server.api.dependencies import get_current_user
 from src.server.postgres.database import Database
 from src.server.postgres.models import (
     AgentName,
+    ProductProposalRecord,
     ProductProposalStatus,
     FeatureStatus,
     UserRecord,
+    WorkspaceRecord,
 )
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
@@ -33,7 +35,23 @@ from src.server.schemas import (
 router = APIRouter(prefix="/v1/product", tags=["product"])
 
 
-def _proposal_accessible_to_user_workspaces(proposal, workspaces) -> bool:
+def _proposal_accessible_to_user_workspaces(
+    proposal: ProductProposalRecord,
+    workspaces: list[WorkspaceRecord],
+) -> bool:
+    """Check whether a proposal belongs to one of the user's workspaces.
+
+    Product proposals do not store user ownership directly. A user can access a
+    proposal only when the proposal's repo/project pair matches a workspace owned
+    by one of the user's agent instances.
+
+    Args:
+        proposal: Product proposal being accessed.
+        workspaces: Workspaces owned by the current user's agent instances.
+
+    Returns:
+        True when the proposal repo/project is visible to the user; otherwise False.
+    """
     return any(
         workspace.github_repo == proposal.repo and workspace.project == proposal.project
         for workspace in workspaces
