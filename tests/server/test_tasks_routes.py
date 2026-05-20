@@ -170,6 +170,27 @@ def test_list_tasks_returns_newest_first(monkeypatch: pytest.MonkeyPatch) -> Non
     }
 
 
+def test_list_tasks_can_filter_to_coding_category(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+
+    async def fake_list(session, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(TaskRepository, 'list', fake_list)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app())
+        async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
+            return await client.get('/v1/tasks', params={'category': 'coding'})
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 200
+    assert response.json() == []
+    assert captured['category'] == TaskCategory.coding
+
+
 def test_create_task_returns_category_from_persisted_task(monkeypatch: pytest.MonkeyPatch) -> None:
     now = datetime.now(timezone.utc)
     created_task = _make_task(
