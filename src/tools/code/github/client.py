@@ -17,9 +17,21 @@ class GithubTools:
         self,
         sandbox: Sandbox,
         nexus_task_context: NexusTaskContext | None = None,
+        token: str | None = None,
     ) -> None:
         self._sandbox = sandbox
         self._nexus_task_context = nexus_task_context
+        self._token = token
+
+    def _headers(self, token: str | None = None) -> dict[str, str]:
+        resolved_token = token or self._token
+        if not resolved_token:
+            raise ValueError("GitHub token is not configured for this tool.")
+        return {
+            "Authorization": f"Bearer {resolved_token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
 
     async def _sync_main_branch(self, local_path: str) -> dict:
         return await self._sandbox.run_shell(
@@ -122,21 +134,17 @@ class GithubTools:
     @track(step_type="tool")
     async def create_github_issue(
         self,
-        token: str,
         repo: str,
         title: str,
         body: str,
         labels: list[str] | None = None,
+        token: str | None = None,
     ) -> dict:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(
                     f"https://api.github.com/repos/{repo}/issues",
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Accept": "application/vnd.github+json",
-                        "X-GitHub-Api-Version": "2022-11-28",
-                    },
+                    headers=self._headers(token),
                     json={"title": title, "body": body, "labels": labels or []},
                 )
                 response.raise_for_status()
@@ -160,7 +168,6 @@ class GithubTools:
     @track(step_type="tool")
     async def pr_to_github(
         self,
-        token: str,
         repo: str,
         branch: str,
         title: str,
@@ -170,6 +177,7 @@ class GithubTools:
         closes_issues: list[int] | None = None,
         local_path: str | None = None,
         draft: bool = False,
+        token: str | None = None,
     ) -> dict:
         if closes_issues:
             body = body + "\n\n" + "\n".join(f"Closes #{n}" for n in closes_issues)
@@ -202,11 +210,7 @@ class GithubTools:
             try:
                 response = await client.post(
                     f"https://api.github.com/repos/{repo}/pulls",
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Accept": "application/vnd.github+json",
-                        "X-GitHub-Api-Version": "2022-11-28",
-                    },
+                    headers=self._headers(token),
                     json={"title": title, "body": body, "head": head, "base": base, "draft": draft},
                 )
                 response.raise_for_status()
@@ -248,21 +252,17 @@ class GithubTools:
     @track(step_type="tool")
     async def get_issue_comments(
         self,
-        token: str,
         repo: str,
         issue_number: int,
         per_page: int = 30,
+        token: str | None = None,
     ) -> dict:
         """Fetch all comments on a specific issue."""
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(
                     f"https://api.github.com/repos/{repo}/issues/{issue_number}/comments",
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Accept": "application/vnd.github+json",
-                        "X-GitHub-Api-Version": "2022-11-28",
-                    },
+                    headers=self._headers(token),
                     params={"per_page": per_page},
                 )
                 response.raise_for_status()
@@ -296,21 +296,17 @@ class GithubTools:
     @track(step_type="tool")
     async def reply_to_issue(
         self,
-        token: str,
         repo: str,
         issue_number: int,
         body: str,
+        token: str | None = None,
     ) -> dict:
         """Add a comment to an issue."""
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(
                     f"https://api.github.com/repos/{repo}/issues/{issue_number}/comments",
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Accept": "application/vnd.github+json",
-                        "X-GitHub-Api-Version": "2022-11-28",
-                    },
+                    headers=self._headers(token),
                     json={"body": body},
                 )
                 response.raise_for_status()
@@ -333,20 +329,16 @@ class GithubTools:
     @track(step_type="tool")
     async def get_pr_reviews(
         self,
-        token: str,
         repo: str,
         pull_number: int,
+        token: str | None = None,
     ) -> dict:
         """Fetch all reviews on a pull request."""
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(
                     f"https://api.github.com/repos/{repo}/pulls/{pull_number}/reviews",
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Accept": "application/vnd.github+json",
-                        "X-GitHub-Api-Version": "2022-11-28",
-                    },
+                    headers=self._headers(token),
                 )
                 response.raise_for_status()
                 reviews = response.json()
@@ -379,20 +371,16 @@ class GithubTools:
     @track(step_type="tool")
     async def get_pr_review_comments(
         self,
-        token: str,
         repo: str,
         pull_number: int,
+        token: str | None = None,
     ) -> dict:
         """Fetch inline review comments on a pull request."""
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(
                     f"https://api.github.com/repos/{repo}/pulls/{pull_number}/comments",
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Accept": "application/vnd.github+json",
-                        "X-GitHub-Api-Version": "2022-11-28",
-                    },
+                    headers=self._headers(token),
                 )
                 response.raise_for_status()
                 comments = response.json()
@@ -428,11 +416,11 @@ class GithubTools:
     @track(step_type="tool")
     async def reply_to_pr_review_comment(
         self,
-        token: str,
         repo: str,
         pull_number: int,
         comment_id: int,
         body: str,
+        token: str | None = None,
     ) -> dict:
         """Reply to a specific inline review comment on a PR.
         
@@ -442,11 +430,7 @@ class GithubTools:
             try:
                 response = await client.post(
                     f"https://api.github.com/repos/{repo}/pulls/{pull_number}/comments/{comment_id}/replies",
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Accept": "application/vnd.github+json",
-                        "X-GitHub-Api-Version": "2022-11-28",
-                    },
+                    headers=self._headers(token),
                     json={"body": body},
                 )
                 response.raise_for_status()
@@ -469,9 +453,9 @@ class GithubTools:
     @track(step_type="tool")
     async def get_pr_comments(
         self,
-        token: str,
         repo: str,
         pull_number: int,
+        token: str | None = None,
     ) -> dict:
         """Fetch general (non-review) comments on a pull request."""
         async with httpx.AsyncClient() as client:
@@ -479,11 +463,7 @@ class GithubTools:
                 # PR comments are accessed via the issues endpoint
                 response = await client.get(
                     f"https://api.github.com/repos/{repo}/issues/{pull_number}/comments",
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Accept": "application/vnd.github+json",
-                        "X-GitHub-Api-Version": "2022-11-28",
-                    },
+                    headers=self._headers(token),
                 )
                 response.raise_for_status()
                 comments = response.json()
@@ -516,34 +496,30 @@ class GithubTools:
     @track(step_type="tool")
     async def reply_to_pr(
         self,
-        token: str,
         repo: str,
         pull_number: int,
         body: str,
+        token: str | None = None,
     ) -> dict:
         """Add a general comment to a pull request."""
         # PR comments use the same endpoint as issue comments
-        return await self.reply_to_issue(token, repo, pull_number, body)
+        return await self.reply_to_issue(repo, pull_number, body, token=token)
 
 
     @track(step_type="tool")
     async def get_my_open_prs(
         self,
-        token: str,
         repo: str,
         creator: str,
         per_page: int = 10,
+        token: str | None = None,
     ) -> dict:
         """List open pull requests created by a specific user."""
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(
                     f"https://api.github.com/repos/{repo}/pulls",
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Accept": "application/vnd.github+json",
-                        "X-GitHub-Api-Version": "2022-11-28",
-                    },
+                    headers=self._headers(token),
                     params={
                         "state": "open",
                         "creator": creator,
@@ -583,22 +559,18 @@ class GithubTools:
     @track(step_type="tool")
     async def get_my_issues(
         self,
-        token: str,
         repo: str,
         creator: str,
         state: str = "open",
         per_page: int = 10,
+        token: str | None = None,
     ) -> dict:
         """List issues created by a specific user."""
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(
                     f"https://api.github.com/repos/{repo}/issues",
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Accept": "application/vnd.github+json",
-                        "X-GitHub-Api-Version": "2022-11-28",
-                    },
+                    headers=self._headers(token),
                     params={
                         "state": state,
                         "creator": creator,
@@ -639,21 +611,17 @@ class GithubTools:
     @track(step_type="tool")
     async def get_notifications(
         self,
-        token: str,
         all: bool = False,
         participating: bool = False,
         per_page: int = 30,
+        token: str | None = None,
     ) -> dict:
         """Fetch GitHub notifications."""
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(
                     "https://api.github.com/notifications",
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Accept": "application/vnd.github+json",
-                        "X-GitHub-Api-Version": "2022-11-28",
-                    },
+                    headers=self._headers(token),
                     params={
                         "all": str(all).lower(),
                         "participating": str(participating).lower(),

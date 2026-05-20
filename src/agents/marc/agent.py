@@ -46,10 +46,12 @@ class Marc(Agent):
     async def __aenter__(self) -> "Marc":
         repo_url = self.repo_url or (f"https://github.com/{self.github_repo}" if self.github_repo else None)
         self._sandbox_pool_manager = get_sandbox_pool_manager()
+        sandbox_env = {"GITHUB_TOKEN": self.github_token} if self.github_token else None
         self._sandbox = await self._sandbox_pool_manager.acquire(
             config=self.sandbox_config,
             repo_url=repo_url,
             workspace_key=self.sandbox_workspace_key,
+            env=sandbox_env,
         )
         sandbox_tools = SandboxToolKit(self._sandbox)
         github_readonly_tools = GithubReadOnlyTools(
@@ -77,7 +79,11 @@ class Marc(Agent):
             if repo_url:
                 repo_lines.append(f"- GitHub repo URL: {repo_url}")
             if self.github_token:
-                repo_lines.append(f"- GitHub token: {self.github_token}")
+                repo_lines.append(
+                    "- GitHub token: configured for tool authentication when needed; value intentionally omitted. "
+                    "GitHub tools use it automatically. For repository clone/fetch/pull, use normal git commands "
+                    "against HTTPS GitHub URLs; the sandbox is preconfigured with non-interactive git authentication."
+                )
             self.system_prompt = self.system_prompt + "\n".join(repo_lines) + "\n"
         return self
 

@@ -3,9 +3,8 @@ from openai import pydantic_function_tool
 
 class PrToGithub(BaseModel):
     """Push the current local branch to GitHub and open a pull request.
-    Requires a GitHub personal access token with repo scope."""
+    Uses the configured GitHub token automatically."""
 
-    token: str = Field(description="GitHub personal access token with repo scope")
     repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
     branch: str = Field(description="Branch that to push.")
     title: str = Field(description="Pull request title")
@@ -23,7 +22,6 @@ class GetPRReviews(BaseModel):
     """Fetch all reviews on a specific pull request. Reviews include
     approval status (APPROVED, CHANGES_REQUESTED, COMMENTED) and review body."""
 
-    token: str = Field(description="GitHub personal access token with repo scope")
     repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
     pull_number: int = Field(description="Pull request number to fetch reviews for")
 
@@ -32,7 +30,6 @@ class GetPRReviewComments(BaseModel):
     """Fetch inline review comments on a pull request. These are the
     line-specific comments made during code review, separate from general PR comments."""
 
-    token: str = Field(description="GitHub personal access token with repo scope")
     repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
     pull_number: int = Field(description="Pull request number to fetch review comments for")
 
@@ -41,7 +38,6 @@ class ReplyToPRReviewComment(BaseModel):
     """Reply to a specific inline review comment on a pull request.
     Use this to respond to line-specific feedback during code review."""
 
-    token: str = Field(description="GitHub personal access token with repo scope")
     repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
     pull_number: int = Field(description="Pull request number")
     comment_id: int = Field(description="ID of the review comment to reply to")
@@ -52,7 +48,6 @@ class GetPRComments(BaseModel):
     """Fetch general (non-review) comments on a pull request.
     These are the discussion comments, not inline code review comments."""
 
-    token: str = Field(description="GitHub personal access token with repo scope")
     repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
     pull_number: int = Field(description="Pull request number to fetch comments for")
 
@@ -61,7 +56,6 @@ class ReplyToPR(BaseModel):
     """Add a general comment to a pull request discussion.
     Use this to respond to general PR feedback or provide updates."""
 
-    token: str = Field(description="GitHub personal access token with repo scope")
     repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
     pull_number: int = Field(description="Pull request number to comment on")
     body: str = Field(description="Comment body in markdown format")
@@ -71,7 +65,6 @@ class GetMyOpenPRs(BaseModel):
     """List open pull requests created by you in a repository.
     Useful for checking status of your PRs and finding new comments."""
 
-    token: str = Field(description="GitHub personal access token with repo scope")
     repo: str = Field(description="Repository in owner/repo format (e.g. acme/my-project)")
     creator: str = Field(description="GitHub username to filter PRs by (your username)")
     per_page: int = Field(default=10, description="Number of PRs to fetch (default: 10)")

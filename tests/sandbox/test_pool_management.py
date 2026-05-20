@@ -9,8 +9,9 @@ from src.sandbox.pool_management import SandboxPoolManager, _sandbox_config_fing
 
 
 class DummySandbox:
-    def __init__(self, config) -> None:
+    def __init__(self, config, env=None) -> None:
         self.config = config
+        self.env = env or {}
         self.enter_calls = 0
         self.exit_calls = 0
 
@@ -123,3 +124,26 @@ def test_sandbox_config_fingerprint_uses_sha256_of_canonical_payload():
     expected = hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
 
     assert _sandbox_config_fingerprint(PYTHON_312) == expected
+
+
+@pytest.mark.asyncio
+async def test_pool_passes_environment_to_new_sandbox(sandbox_stub):
+    manager = SandboxPoolManager()
+
+    sandbox = await manager.acquire(PYTHON_312, repo_url="https://github.com/owner/repo", env={"GITHUB_TOKEN": "secret"})
+
+    assert sandbox.env == {"GITHUB_TOKEN": "secret"}
+    await manager.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_pool_separates_sandboxes_by_environment_names_without_secret_values(sandbox_stub):
+    manager = SandboxPoolManager()
+
+    first = await manager.acquire(PYTHON_312, repo_url="https://github.com/owner/repo")
+    await manager.release(first)
+    second = await manager.acquire(PYTHON_312, repo_url="https://github.com/owner/repo", env={"GITHUB_TOKEN": "secret"})
+
+    assert second is not first
+    assert "secret" not in next(iter(manager._entries_by_key))
+    await manager.shutdown()

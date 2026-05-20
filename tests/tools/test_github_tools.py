@@ -1,4 +1,4 @@
-﻿"""Tests for GitHub tools including review and comment interaction."""
+"""Tests for GitHub tools including review and comment interaction."""
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -32,7 +32,7 @@ def mock_sandbox():
 @pytest.fixture
 def github_kit(mock_sandbox):
     """Create a GithubTools instance with mock sandbox."""
-    return GithubTools(mock_sandbox)
+    return GithubTools(mock_sandbox, token="test-token")
 
 
 class TestGetIssueComments:
@@ -56,7 +56,6 @@ class TestGetIssueComments:
         with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_response
             result = await github_kit.get_issue_comments(
-                token="test-token",
                 repo="test/repo",
                 issue_number=1,
             )
@@ -77,7 +76,6 @@ class TestGetIssueComments:
         with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_response
             result = await github_kit.get_issue_comments(
-                token="test-token",
                 repo="test/repo",
                 issue_number=1,
             )
@@ -97,7 +95,6 @@ class TestGetIssueComments:
         with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_response
             result = await github_kit.get_issue_comments(
-                token="test-token",
                 repo="test/repo",
                 issue_number=999,
             )
@@ -122,7 +119,6 @@ class TestReplyToIssue:
         with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
             mock_post.return_value = mock_response
             result = await github_kit.reply_to_issue(
-                token="test-token",
                 repo="test/repo",
                 issue_number=1,
                 body="Thank you for the feedback!",
@@ -163,7 +159,6 @@ class TestGetPRReviews:
         with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_response
             result = await github_kit.get_pr_reviews(
-                token="test-token",
                 repo="test/repo",
                 pull_number=1,
             )
@@ -199,7 +194,6 @@ class TestGetPRReviewComments:
         with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_response
             result = await github_kit.get_pr_review_comments(
-                token="test-token",
                 repo="test/repo",
                 pull_number=1,
             )
@@ -225,7 +219,6 @@ class TestReplyToPRReviewComment:
         with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
             mock_post.return_value = mock_response
             result = await github_kit.reply_to_pr_review_comment(
-                token="test-token",
                 repo="test/repo",
                 pull_number=1,
                 comment_id=100,
@@ -258,7 +251,6 @@ class TestGetPRComments:
         with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_response
             result = await github_kit.get_pr_comments(
-                token="test-token",
                 repo="test/repo",
                 pull_number=1,
             )
@@ -291,7 +283,6 @@ class TestGetMyOpenPRs:
         with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_response
             result = await github_kit.get_my_open_prs(
-                token="test-token",
                 repo="test/repo",
                 creator="testuser",
             )
@@ -334,7 +325,6 @@ class TestGetMyIssues:
         with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_response
             result = await github_kit.get_my_issues(
-                token="test-token",
                 repo="test/repo",
                 creator="testuser",
             )
@@ -371,9 +361,7 @@ class TestGetNotifications:
 
         with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_response
-            result = await github_kit.get_notifications(
-                token="test-token",
-            )
+            result = await github_kit.get_notifications()
 
         assert result["success"] is True
         assert result["notification_count"] == 1
@@ -389,7 +377,6 @@ class TestGetNotifications:
         with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_response
             result = await github_kit.get_notifications(
-                token="test-token",
                 participating=True,
             )
 
@@ -429,3 +416,10 @@ class TestToolDefinitions:
             assert "name" in func
             assert "description" in func
             assert "parameters" in func
+
+    def test_tool_definitions_do_not_expose_token(self):
+        """GitHub auth is provided by the server, not model-visible schemas."""
+        for tool_def in GITHUB_TOOLS_SCHEMA:
+            params = tool_def["function"]["parameters"]
+            assert "token" not in params.get("properties", {})
+            assert "token" not in params.get("required", [])

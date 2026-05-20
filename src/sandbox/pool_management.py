@@ -33,9 +33,11 @@ def _build_pool_key(
     config: SandboxConfig,
     repo_url: str | None,
     workspace_key: str | None,
+    env: dict[str, str] | None = None,
 ) -> str:
     base_key = workspace_key or ("__no_repo__" if repo_url is None else repo_url)
-    return f"{base_key}::{_sandbox_config_fingerprint(config)}"
+    env_names = ",".join(sorted((env or {}).keys()))
+    return f"{base_key}::{_sandbox_config_fingerprint(config)}::{env_names}"
 
 
 @dataclass
@@ -69,8 +71,9 @@ class SandboxPoolManager:
         config: SandboxConfig,
         repo_url: str | None = None,
         workspace_key: str | None = None,
+        env: dict[str, str] | None = None,
     ) -> Sandbox:
-        key = _build_pool_key(config=config, repo_url=repo_url, workspace_key=workspace_key)
+        key = _build_pool_key(config=config, repo_url=repo_url, workspace_key=workspace_key, env=env)
 
         async with self._lock:
             for entry in self._entries_by_key.get(key, []):
@@ -80,7 +83,7 @@ class SandboxPoolManager:
                     logger.info(f"Reusing sandbox from pool with key={key}")
                     return entry.sandbox
 
-            sandbox = Sandbox(config)
+            sandbox = Sandbox(config, env=env)
             await sandbox.__aenter__()
             now = time.time()
             entry = _SandboxPoolEntry(
