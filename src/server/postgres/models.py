@@ -149,9 +149,9 @@ class AgentInstanceRecord(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID | None] = mapped_column(
+    user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("user_account.id", ondelete="CASCADE"),
-        nullable=True,
+        nullable=False,
         index=True,
     )
     agent: Mapped[AgentName] = mapped_column(

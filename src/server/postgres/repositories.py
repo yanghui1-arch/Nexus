@@ -85,8 +85,8 @@ class AgentInstanceRepository:
         agent: AgentName,
         client_id: str,
         display_name: str | None,
+        user_id: uuid.UUID,
         is_active: bool = True,
-        user_id: uuid.UUID | None = None,
     ) -> AgentInstanceRecord:
         instance = AgentInstanceRecord(
             user_id=user_id,
