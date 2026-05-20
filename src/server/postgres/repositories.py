@@ -129,7 +129,6 @@ class AgentInstanceRepository:
                     [
                         TaskStatus.queued,
                         TaskStatus.running,
-                        TaskStatus.waiting_for_review,
                     ]
                 ),
             )

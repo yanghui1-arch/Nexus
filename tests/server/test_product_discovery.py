@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from src.server.product_discovery import ProductDiscoveryPoller
-from src.server.postgres.models import AgentName
+from src.server.postgres.models import AgentName, TaskCategory, TaskRecord, TaskStatus
 from src.server.postgres.repositories import AgentInstanceRepository, WorkspaceRepository
 
 
@@ -142,3 +142,49 @@ def test_product_discovery_poller_start_and_stop(monkeypatch):
         assert poller._task is None
 
     asyncio.run(run())
+
+
+async def test_product_discovery_candidates_allow_waiting_for_review_pm_tasks(db_session):
+    instance = await AgentInstanceRepository.create(
+        db_session,
+        agent=AgentName.marc,
+        client_id="marc-waiting-review",
+        display_name="Marc Waiting Review",
+    )
+    db_session.add(
+        TaskRecord(
+            agent=AgentName.marc,
+            agent_instance_id=instance.id,
+            category=TaskCategory.pm,
+            question="产品提案",
+            status=TaskStatus.waiting_for_review,
+        )
+    )
+    await db_session.commit()
+
+    candidates = await AgentInstanceRepository.list_product_discovery_candidates(db_session)
+
+    assert [candidate.id for candidate in candidates] == [instance.id]
+
+
+async def test_product_discovery_candidates_block_running_pm_tasks(db_session):
+    instance = await AgentInstanceRepository.create(
+        db_session,
+        agent=AgentName.marc,
+        client_id="marc-running",
+        display_name="Marc Running",
+    )
+    db_session.add(
+        TaskRecord(
+            agent=AgentName.marc,
+            agent_instance_id=instance.id,
+            category=TaskCategory.pm,
+            question="产品提案",
+            status=TaskStatus.running,
+        )
+    )
+    await db_session.commit()
+
+    candidates = await AgentInstanceRepository.list_product_discovery_candidates(db_session)
+
+    assert candidates == []
