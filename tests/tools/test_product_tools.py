@@ -14,7 +14,7 @@ from src.server.postgres.models import (
     ProductProposalRecord,
     ProductProposalStatus,
 )
-from src.server.postgres.repositories import FeatureItemRepository, FeatureRepository, ProductProposalRepository, TaskRepository
+from src.server.postgres.repositories import FeatureItemRepository, FeatureRepository, ProductProposalRepository
 from src.tools.nexus import NexusTaskContext
 from src.tools.product import ProductTools
 
@@ -133,15 +133,7 @@ def _feature_item(**overrides):
 
 def test_create_proposal_uses_context_task_id_and_repo_default(monkeypatch):
     task_id = uuid.uuid4()
-    user_id = uuid.uuid4()
     captured = {}
-
-    class SessionWithAgentInstance:
-        async def get(self, model, object_id):
-            return SimpleNamespace(user_id=user_id)
-
-    async def fake_get_task(session, tid):
-        return SimpleNamespace(agent_instance_id=uuid.uuid4())
 
     async def fake_create(session, **kwargs):
         captured["session"] = session
@@ -158,9 +150,8 @@ def test_create_proposal_uses_context_task_id_and_repo_default(monkeypatch):
         )
 
     monkeypatch.setattr(ProductProposalRepository, "create", fake_create)
-    monkeypatch.setattr(TaskRepository, "get", fake_get_task)
     context = NexusTaskContext(task_id=task_id, database=FakeDatabase(), repo="owner/repo")
-    tools = ProductTools(database=FakeDatabase(SessionWithAgentInstance()), context=context)
+    tools = ProductTools(database=FakeDatabase(), context=context)
 
     async def run():
         return await tools.create_proposal(
@@ -182,8 +173,8 @@ def test_create_proposal_uses_context_task_id_and_repo_default(monkeypatch):
         "repo": "owner/repo",
         "message": "Product proposal was created for human review.",
     }
-    assert isinstance(captured.pop("session"), SessionWithAgentInstance)
     assert captured == {
+        "session": "session",
         "title": "Improve onboarding",
         "plan_type": "growth",
         "summary": "Help users reach value faster.",
@@ -215,8 +206,9 @@ def test_create_proposal_without_context_has_no_source_task(monkeypatch):
 
     result = anyio.run(run)
 
-    assert result == {"success": False, "message": "Product proposal requires a task context."}
-    assert captured == {}
+    assert result["success"] is True
+    assert captured["source_task_id"] is None
+    assert captured["repo"] == "owner/default"
 
 
 def test_create_feature_for_product_proposal_requires_approved_proposal(monkeypatch):
