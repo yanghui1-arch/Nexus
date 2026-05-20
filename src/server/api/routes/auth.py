@@ -19,6 +19,7 @@ from src.server.postgres.database import Database
 from src.server.postgres.models import AgentName, UserRecord
 from src.server.postgres.repositories import (
     AgentPurchaseRepository,
+    AuthSessionRepository,
     UserRepository,
     utc_now,
 )
