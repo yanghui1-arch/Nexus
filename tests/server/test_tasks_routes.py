@@ -179,7 +179,10 @@ def test_create_task_returns_category_from_persisted_task(monkeypatch: pytest.Mo
 
     async def fake_get_instance(session, agent_instance_id, **kwargs):
         assert agent_instance_id == created_task.agent_instance_id
-        return SimpleNamespace(id=agent_instance_id)
+        return SimpleNamespace(
+            id=agent_instance_id,
+            user_id=uuid.UUID('00000000-0000-0000-0000-000000000001'),
+        )
 
     monkeypatch.setattr(TaskRepository, 'get', fake_get)
     monkeypatch.setattr(AgentInstanceRepository, 'get', fake_get_instance)

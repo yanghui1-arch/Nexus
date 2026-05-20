@@ -49,8 +49,8 @@ async def create_task(
     runner: AgentTaskRunner = request.app.state.runner
     database: Database = request.app.state.database
     async with database.session() as session:
-        instance = await AgentInstanceRepository.get(session, payload.agent_instance_id, user_id=user.id)
-    if instance is None:
+        instance = await AgentInstanceRepository.get(session, payload.agent_instance_id)
+    if instance is None or instance.user_id != user.id:
         raise HTTPException(status_code=404, detail="Agent instance not found")
 
     try:

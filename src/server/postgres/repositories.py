@@ -140,17 +140,8 @@ class AgentInstanceRepository:
         return [instance for instance in instances if instance.id not in blocked_ids]
 
     @staticmethod
-    async def get(
-        session: AsyncSession,
-        instance_id: uuid.UUID,
-        *,
-        user_id: uuid.UUID | None = None,
-    ) -> AgentInstanceRecord | None:
-        query = select(AgentInstanceRecord).where(AgentInstanceRecord.id == instance_id)
-        if user_id is not None:
-            query = query.where(AgentInstanceRecord.user_id == user_id)
-        result = await session.execute(query)
-        return result.scalar_one_or_none()
+    async def get(session: AsyncSession, instance_id: uuid.UUID) -> AgentInstanceRecord | None:
+        return await session.get(AgentInstanceRecord, instance_id)
 
     @staticmethod
     async def list(
@@ -181,9 +172,8 @@ class AgentInstanceRepository:
         instance_id: uuid.UUID,
         *,
         is_active: bool,
-        user_id: uuid.UUID | None = None,
     ) -> AgentInstanceRecord | None:
-        instance = await AgentInstanceRepository.get(session, instance_id, user_id=user_id)
+        instance = await AgentInstanceRepository.get(session, instance_id)
         if instance is None:
             return None
         instance.is_active = is_active
