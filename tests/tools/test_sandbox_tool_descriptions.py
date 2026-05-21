@@ -42,13 +42,14 @@ class _FakeSandbox:
         return {"success": True, "path": path, "error": None}
 
 
-async def test_sandbox_toolkit_keeps_write_file_alias_for_internal_callers() -> None:
+async def test_sandbox_toolkit_exposes_create_file_without_write_file_tool() -> None:
     sandbox = _FakeSandbox()
     toolkit = SandboxToolKit(sandbox)  # type: ignore[arg-type]
 
-    result = await toolkit.write_file("/workspace/new.py", "print('hi')\n")
+    result = await toolkit.create_file("/workspace/new.py", "print('hi')\n")
 
     assert result == {"success": True, "path": "/workspace/new.py", "error": None}
     assert sandbox.calls == [("/workspace/new.py", "print('hi')\n")]
+    assert not hasattr(toolkit, "write_file")
     assert "WriteFile" not in toolkit.all_tools
     assert "CreateFile" in toolkit.all_tools
