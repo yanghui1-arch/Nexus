@@ -19,10 +19,12 @@ class RunCommand(BaseModel):
 
 
 class WriteFile(BaseModel):
-    """Write (overwrite) a text file at the given path inside the sandbox workspace."""
+    """Create a new text file or completely replace an existing file in the sandbox workspace.
+    For small edits to existing files, prefer EditFile.
+    """
 
     path: str = Field(description="Absolute path under /workspace, e.g. /workspace/src/main.py")
-    content: str = Field(description="Complete file content to write")
+    content: str = Field(description="Complete file content for the new or fully overwritten file")
 
 
 class ReadFile(BaseModel):
@@ -39,13 +41,17 @@ class AppendFile(BaseModel):
 
 
 class EditFile(BaseModel):
-    """Replace the first occurrence of old_str with new_str inside a file.
+    """Replace the first occurrence of old_str with new_str inside an existing file.
     Use a unique, multi-line old_str to avoid ambiguity.
+    Examples:
+    - Change: old_str='x = 1', new_str='x = 2'.
+    - Delete: old_str='debug = True\n', new_str=''.
+    - Insert: old_str='def run():\n', new_str='def run():\n    print("start")\n'.
     """
 
     path: str = Field(description="Absolute path under /workspace")
-    old_str: str = Field(description="Exact substring to find and replace (must be unique in the file)")
-    new_str: str = Field(description="Replacement string (may be empty to delete old_str)")
+    old_str: str = Field(description="Exact substring to find and replace; prefer a unique, multi-line block")
+    new_str: str = Field(description="Replacement string; leave empty to delete old_str, or include old_str plus inserted text to insert")
 
 
 class ListFiles(BaseModel):
