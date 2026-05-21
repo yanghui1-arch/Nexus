@@ -12,6 +12,30 @@ export type ApiTaskStatus =
 
 export type ApiWorkspaceStatus = 'idle' | 'running' | 'inactive';
 
+export type ApiEntitlementStatus = 'active' | 'expired';
+
+export interface ApiAccountUser {
+  github_login: string;
+  github_name: string | null;
+  github_avatar_url: string | null;
+}
+
+export interface ApiAgentEntitlement {
+  id: string;
+  agent: ApiAgentKind;
+  display_name: string;
+  purchased_at: string;
+  expires_at: string;
+  status: ApiEntitlementStatus;
+}
+
+export interface ApiAccountOverview {
+  user: ApiAccountUser;
+  balance_cents: number;
+  currency: string;
+  entitlements: ApiAgentEntitlement[];
+}
+
 export interface ApiTaskCreateRequest {
   agent_instance_id: string;
   agent: ApiAgentKind;

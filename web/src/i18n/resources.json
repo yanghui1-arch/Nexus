@@ -12,6 +12,7 @@
         "tagline": "SaaS 控制中心"
       },
       "nav": {
+        "account": "账户",
         "taskBoard": "任务看板",
         "publishTask": "发布任务",
         "processTracking": "进度追踪",
@@ -260,6 +261,7 @@
         "tagline": "SaaS Control Center"
       },
       "nav": {
+        "account": "Account",
         "taskBoard": "Task Board",
         "publishTask": "Publish Task",
         "processTracking": "Process Tracking",
