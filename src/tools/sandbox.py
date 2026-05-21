@@ -95,6 +95,11 @@ class SandboxToolKit:
         return await self._sandbox.write_file(path, content)
 
 
+    async def write_file(self, path: str, content: str) -> dict:
+        """Backward-compatible alias for internal callers; agents use CreateFile."""
+        return await self.create_file(path, content)
+
+
     @track(step_type="tool")
     async def read_file(self, path: str) -> dict:
         return await self._sandbox.read_file(path)
