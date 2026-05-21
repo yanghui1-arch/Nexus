@@ -18,7 +18,7 @@ class RunCommand(BaseModel):
     cmd: str = Field(description="Shell command string to execute via /bin/sh -c")
 
 
-class WriteFile(BaseModel):
+class CreateFile(BaseModel):
     """Create a new text file or completely replace an existing file in the sandbox workspace.
     For small edits to existing files, prefer EditFile.
     """
@@ -63,14 +63,14 @@ class ListFiles(BaseModel):
 
 RUN_CODE    = pydantic_function_tool(RunCode)
 RUN_SHELL = pydantic_function_tool(RunCommand)
-WRITE_FILE  = pydantic_function_tool(WriteFile)
+CREATE_FILE = pydantic_function_tool(CreateFile)
 READ_FILE   = pydantic_function_tool(ReadFile)
 APPEND_FILE = pydantic_function_tool(AppendFile)
 EDIT_FILE   = pydantic_function_tool(EditFile)
 LIST_FILES  = pydantic_function_tool(ListFiles)
 
 SANDBOX_TOOL_DEFINITIONS: list = [
-    RUN_CODE, RUN_SHELL, WRITE_FILE, READ_FILE, APPEND_FILE, EDIT_FILE, LIST_FILES,
+    RUN_CODE, RUN_SHELL, CREATE_FILE, READ_FILE, APPEND_FILE, EDIT_FILE, LIST_FILES,
 ]
 
 
@@ -91,7 +91,7 @@ class SandboxToolKit:
 
 
     @track(step_type="tool")
-    async def write_file(self, path: str, content: str) -> dict:
+    async def create_file(self, path: str, content: str) -> dict:
         return await self._sandbox.write_file(path, content)
 
 
@@ -121,7 +121,7 @@ class SandboxToolKit:
         return {
             "RunCode":    self.run_code,
             "RunCommand": self.run_shell,
-            "WriteFile":  self.write_file,
+            "CreateFile": self.create_file,
             "ReadFile":   self.read_file,
             "AppendFile": self.append_file,
             "EditFile":   self.edit_file,

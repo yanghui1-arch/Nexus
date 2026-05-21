@@ -1,4 +1,4 @@
-from src.tools.sandbox import EDIT_FILE, WRITE_FILE
+from src.tools.sandbox import CREATE_FILE, EDIT_FILE
 
 
 def _description(tool: dict) -> str:
@@ -9,8 +9,8 @@ def _parameter_description(tool: dict, name: str) -> str:
     return tool["function"]["parameters"]["properties"][name]["description"]
 
 
-def test_write_file_description_guides_create_or_full_overwrite() -> None:
-    description = _description(WRITE_FILE)
+def test_create_file_description_guides_create_or_full_overwrite() -> None:
+    description = _description(CREATE_FILE)
 
     assert "Create a new text file" in description
     assert "completely replace" in description

@@ -24,7 +24,7 @@ FORBIDDEN_MUTATING_TOOLS = {
     "RunCode",
     "ReadFile",
     "ListFiles",
-    "WriteFile",
+    "CreateFile",
     "AppendFile",
     "EditFile",
     "pr_to_github",

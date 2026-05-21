@@ -121,7 +121,7 @@ class TestSophieAsyncContext:
         mock_sandbox_tools.all_tools = {
             "RunCode": AsyncMock(),
             "RunCommand": AsyncMock(),
-            "WriteFile": AsyncMock(),
+            "CreateFile": AsyncMock(),
             "ReadFile": AsyncMock(),
             "AppendFile": AsyncMock(),
             "EditFile": AsyncMock(),
@@ -264,7 +264,7 @@ class TestSophieToolAccess:
                 mock_sandbox_tools.all_tools = {
                     "RunCode": AsyncMock(),
                     "RunCommand": AsyncMock(),
-                    "WriteFile": AsyncMock(),
+                    "CreateFile": AsyncMock(),
                     "ReadFile": AsyncMock(),
                     "AppendFile": AsyncMock(),
                     "EditFile": AsyncMock(),
@@ -283,7 +283,7 @@ class TestSophieToolAccess:
                 async with sophie as s:
                     assert "RunCode" in s.tool_kits
                     assert "RunCommand" in s.tool_kits
-                    assert "WriteFile" in s.tool_kits
+                    assert "CreateFile" in s.tool_kits
                     assert "ReadFile" in s.tool_kits
                     assert "EditFile" in s.tool_kits
                     assert "ListFiles" in s.tool_kits
