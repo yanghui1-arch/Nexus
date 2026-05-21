@@ -18,7 +18,8 @@ export type TaskBoardData = {
 };
 
 export function useTaskBoardData(): TaskBoardData {
-  const { taskViews, isLoading } = useWorkspaceRecords();
+  const taskParams = useMemo(() => ({ category: 'coding' as const, limit: 200 }), []);
+  const { taskViews, isLoading } = useWorkspaceRecords(taskParams);
   const [repoFilter, setRepoFilter] = useState(DEFAULT_TASK_BOARD_REPO);
 
   const repoOptions = useMemo(

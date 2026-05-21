@@ -4,6 +4,7 @@ import { getErrorDetail } from '@/api/client';
 import { listAgentInstances } from '@/api/agentInstances';
 import { listTasks } from '@/api/tasks';
 import type { ApiAgentInstance, ApiTask } from '@/api/types';
+import type { ListTasksParams } from '@/api/tasks';
 import {
   toWorkspaceAgentOption,
   toWorkspaceTaskView,
@@ -18,10 +19,12 @@ type WorkspaceRecordsLoadResult = {
   tasksError: string | null;
 };
 
-async function loadWorkspaceRecords(): Promise<WorkspaceRecordsLoadResult> {
+async function loadWorkspaceRecords(
+  taskParams: ListTasksParams = { limit: 200 },
+): Promise<WorkspaceRecordsLoadResult> {
   const [nextAgents, nextTasks] = await Promise.allSettled([
     listAgentInstances({ is_active: true }),
-    listTasks({ limit: 200 }),
+    listTasks(taskParams),
   ]);
 
   return {
@@ -48,7 +51,9 @@ export type WorkspaceRecordsData = {
   reload: () => Promise<void>;
 };
 
-export function useWorkspaceRecords(): WorkspaceRecordsData {
+export function useWorkspaceRecords(
+  taskParams: ListTasksParams = { limit: 200 },
+): WorkspaceRecordsData {
   const [agentInstances, setAgentInstances] = useState<ApiAgentInstance[]>([]);
   const [tasks, setTasks] = useState<ApiTask[]>([]);
   const [isLoadingAgents, setIsLoadingAgents] = useState(true);
@@ -86,11 +91,11 @@ export function useWorkspaceRecords(): WorkspaceRecordsData {
   };
 
   useEffect(() => {
-    void loadWorkspaceRecords().then(applyResult);
-  }, []);
+    void loadWorkspaceRecords(taskParams).then(applyResult);
+  }, [taskParams]);
 
   const reload = async () => {
-    const result = await loadWorkspaceRecords();
+    const result = await loadWorkspaceRecords(taskParams);
     applyResult(result);
   };
 

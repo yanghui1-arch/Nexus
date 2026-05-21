@@ -28,7 +28,12 @@ export function deriveTaskBoardRepoOptions(
   const repoOptions = [DEFAULT_TASK_BOARD_REPO];
 
   for (const task of tasks) {
-    if (!task.repo || seen.has(task.repo) || task.repo === DEFAULT_TASK_BOARD_REPO) {
+    if (
+      task.category !== 'coding' ||
+      !task.repo ||
+      seen.has(task.repo) ||
+      task.repo === DEFAULT_TASK_BOARD_REPO
+    ) {
       continue;
     }
 
@@ -43,9 +48,9 @@ export function getVisibleTaskBoardTasks(
   tasks: WorkspaceTaskView[],
   repoFilter: string,
 ): WorkspaceTaskView[] {
-  return sortTaskViewsByNewest(tasks.filter(task => task.repo === repoFilter)).filter(
-    task => isTaskBoardStatus(task.status),
-  );
+  return sortTaskViewsByNewest(
+    tasks.filter(task => task.category === 'coding' && task.repo === repoFilter),
+  ).filter(task => isTaskBoardStatus(task.status));
 }
 
 export function groupTaskBoardTasks(
