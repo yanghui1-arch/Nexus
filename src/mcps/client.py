@@ -14,16 +14,19 @@ class MCPClient:
     """
 
     def __init__(self, server_params: StdioServerParameters) -> None:
+        """Initialize the object."""
         self._server_params = server_params
         self._session: ClientSession | None = None
         self._stdio_ctx = None
         self._session_ctx = None
 
     async def __aenter__(self) -> "MCPClient":
+        """Enter the async context manager."""
         await self.connect()
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
+        """Exit the async context manager."""
         await self.close()
 
     async def connect(self) -> None:

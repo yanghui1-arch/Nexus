@@ -20,6 +20,7 @@ class ProductWorkflowPoller:
         database: Database,
         runner: AgentTaskRunner,
     ) -> None:
+        """Initialize the service component."""
         self._settings = settings
         self._database = database
         self._runner = runner
@@ -27,6 +28,7 @@ class ProductWorkflowPoller:
         self._task: asyncio.Task[Any] | None = None
 
     def start(self) -> None:
+        """Start the background poller."""
         if self._settings.product_discovery_poll_interval_seconds <= 0:
             logger.info("Product workflow poller is disabled.")
             return
@@ -36,6 +38,7 @@ class ProductWorkflowPoller:
         logger.info("Product workflow poller starts.")
 
     async def stop(self) -> None:
+        """Stop the background poller."""
         self._stop_event.set()
         if self._task is None:
             return
@@ -43,6 +46,7 @@ class ProductWorkflowPoller:
         self._task = None
 
     async def poll_once(self) -> int:
+        """Run one polling cycle."""
         published_count = 0
         while not self._stop_event.is_set():
             published = await self._publish_one_feature_item()
@@ -52,6 +56,7 @@ class ProductWorkflowPoller:
         return published_count
 
     async def _publish_one_feature_item(self) -> bool:
+        """Publish one pending feature item as a coding task."""
         async with self._database.session() as session:
             item = await FeatureItemRepository.get_next_unassigned(session)
             if item is None:
@@ -95,6 +100,7 @@ class ProductWorkflowPoller:
         return True
 
     async def _run_loop(self) -> None:
+        """Run the background polling loop."""
         while not self._stop_event.is_set():
             try:
                 await self.poll_once()
@@ -113,4 +119,5 @@ class ProductWorkflowPoller:
 
 
 def _build_feature_item_coding_question(item: Any) -> str:
+    """Build the coding prompt for a feature item."""
     return f"Implement product feature item: {item.title}\n\n{item.description}"

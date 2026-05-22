@@ -21,31 +21,39 @@ from src.tools.product import ProductTools
 
 class FakeDatabase:
     def __init__(self, session_obj="session"):
+        """Initialize the test helper."""
         self._session_obj = session_obj
 
     @asynccontextmanager
     async def session(self):
+        """Return a fake database session."""
         yield self._session_obj
 
 
 class FakeSession:
     def __init__(self, max_order_index: int):
+        """Initialize the test helper."""
         self._max_order_index = max_order_index
         self.added = None
 
     async def execute(self, query):
+        """Execute a fake database operation."""
         return SimpleNamespace(scalar_one=lambda: self._max_order_index)
 
     def add(self, item):
+        """Record an added model."""
         self.added = item
 
     async def flush(self):
+        """Flush the fake session."""
         return None
 
     async def commit(self):
+        """Commit the fake session."""
         return None
 
     async def refresh(self, item):
+        """Refresh a fake model."""
         return None
 
 
@@ -58,6 +66,7 @@ class FakeFeatureItemSyncSession:
         item_statuses: list[FeatureItemStatus],
         sibling_feature_statuses: list[FeatureStatus],
     ) -> None:
+        """Initialize the test helper."""
         self.feature = feature
         self.proposal = proposal
         self.item_statuses = item_statuses
@@ -65,6 +74,7 @@ class FakeFeatureItemSyncSession:
         self.execute_call_count = 0
 
     async def get(self, model, object_id):
+        """Return a fake stored value."""
         if model is FeatureRecord and object_id == self.feature.id:
             return self.feature
         if model is ProductProposalRecord and object_id == self.proposal.id:
@@ -72,17 +82,22 @@ class FakeFeatureItemSyncSession:
         return None
 
     async def execute(self, query):
+        """Execute a fake database operation."""
         del query
         self.execute_call_count += 1
-        statuses = (
-            self.item_statuses
-            if self.execute_call_count == 1
-            else [self.feature.status, *self.sibling_feature_statuses]
-        )
-        return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: list(statuses)))
+        if self.execute_call_count == 1:
+            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: list(self.item_statuses)))
+        if self.execute_call_count == 2:
+            rows = [
+                (self.feature.id, self.feature.status),
+                *[(uuid.uuid4(), status) for status in self.sibling_feature_statuses],
+            ]
+            return SimpleNamespace(all=lambda: rows)
+        return SimpleNamespace(scalar_one=lambda: len(self.item_statuses))
 
 
 def _proposal(**overrides):
+    """Create a product proposal record."""
     now = datetime.now(timezone.utc)
     values = {
         "id": uuid.uuid4(),
@@ -103,6 +118,7 @@ def _proposal(**overrides):
 
 
 def _feature(**overrides):
+    """Create a feature record."""
     now = datetime.now(timezone.utc)
     values = {
         "id": uuid.uuid4(),
@@ -119,6 +135,7 @@ def _feature(**overrides):
 
 
 def _feature_item(**overrides):
+    """Create a feature item record."""
     values = {
         "id": uuid.uuid4(),
         "feature_id": uuid.uuid4(),
@@ -132,10 +149,12 @@ def _feature_item(**overrides):
 
 
 def test_create_proposal_uses_context_task_id_and_repo_default(monkeypatch):
+    """Verify create proposal uses context task id and repo default."""
     task_id = uuid.uuid4()
     captured = {}
 
     async def fake_create(session, **kwargs):
+        """Provide a fake create."""
         captured["session"] = session
         captured.update(kwargs)
         return _proposal(
@@ -154,6 +173,7 @@ def test_create_proposal_uses_context_task_id_and_repo_default(monkeypatch):
     tools = ProductTools(database=FakeDatabase(), context=context)
 
     async def run():
+        """Run the async test body."""
         return await tools.create_proposal(
             title="Improve onboarding",
             plan_type="growth",
@@ -186,9 +206,11 @@ def test_create_proposal_uses_context_task_id_and_repo_default(monkeypatch):
 
 
 def test_create_proposal_without_context_has_no_source_task(monkeypatch):
+    """Verify create proposal without context has no source task."""
     captured = {}
 
     async def fake_create(session, **kwargs):
+        """Provide a fake create."""
         captured.update(kwargs)
         return _proposal(source_task_id=kwargs["source_task_id"], repo=kwargs["repo"])
 
@@ -196,6 +218,7 @@ def test_create_proposal_without_context_has_no_source_task(monkeypatch):
     tools = ProductTools(database=FakeDatabase())
 
     async def run():
+        """Run the async test body."""
         return await tools.create_proposal(
             title="Title",
             plan_type="feature",
@@ -212,15 +235,18 @@ def test_create_proposal_without_context_has_no_source_task(monkeypatch):
 
 
 def test_create_feature_for_product_proposal_requires_approved_proposal(monkeypatch):
+    """Verify create feature for product proposal requires approved proposal."""
     proposal_id = uuid.uuid4()
 
     async def fake_get(session, pid):
+        """Provide a fake get."""
         return _proposal(id=pid, status=ProductProposalStatus.proposed)
 
     monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
     tools = ProductTools(database=FakeDatabase())
 
     async def run():
+        """Run the async test body."""
         return await tools.create_feature_for_product_proposal(
             proposal_id=proposal_id,
             title="RAG",
@@ -236,14 +262,17 @@ def test_create_feature_for_product_proposal_requires_approved_proposal(monkeypa
 
 
 def test_create_feature_for_product_proposal_from_approved_proposal(monkeypatch):
+    """Verify create feature for product proposal from approved proposal."""
     proposal_id = uuid.uuid4()
     feature = _feature(id=uuid.uuid4(), proposal_id=proposal_id)
     captured = {}
 
     async def fake_get(session, pid):
+        """Provide a fake get."""
         return _proposal(id=pid, status=ProductProposalStatus.approved)
 
     async def fake_create(session, **kwargs):
+        """Provide a fake create."""
         captured.update(kwargs)
         return feature
 
@@ -252,6 +281,7 @@ def test_create_feature_for_product_proposal_from_approved_proposal(monkeypatch)
     tools = ProductTools(database=FakeDatabase())
 
     async def run():
+        """Run the async test body."""
         return await tools.create_feature_for_product_proposal(
             proposal_id=proposal_id,
             title="RAG",
@@ -278,13 +308,16 @@ def test_create_feature_for_product_proposal_from_approved_proposal(monkeypatch)
 
 
 def test_create_feature_for_product_proposal_from_planned_proposal(monkeypatch):
+    """Verify create feature for product proposal from planned proposal."""
     proposal_id = uuid.uuid4()
     feature = _feature(id=uuid.uuid4(), proposal_id=proposal_id)
 
     async def fake_get(session, pid):
+        """Provide a fake get."""
         return _proposal(id=pid, user_id=uuid.uuid4(), status=ProductProposalStatus.planned)
 
     async def fake_create(session, **kwargs):
+        """Provide a fake create."""
         return feature
 
     monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
@@ -292,6 +325,7 @@ def test_create_feature_for_product_proposal_from_planned_proposal(monkeypatch):
     tools = ProductTools(database=FakeDatabase())
 
     async def run():
+        """Run the async test body."""
         return await tools.create_feature_for_product_proposal(
             proposal_id=proposal_id,
             title="Follow-up slice",
@@ -305,15 +339,18 @@ def test_create_feature_for_product_proposal_from_planned_proposal(monkeypatch):
 
 
 def test_create_feature_item_requires_existing_feature(monkeypatch):
+    """Verify create feature item requires existing feature."""
     feature_id = uuid.uuid4()
 
     async def fake_get(session, fid):
+        """Provide a fake get."""
         return None
 
     monkeypatch.setattr(FeatureRepository, "get", fake_get)
     tools = ProductTools(database=FakeDatabase())
 
     async def run():
+        """Run the async test body."""
         return await tools.create_feature_item(
             feature_id=feature_id,
             title="Knowledge base",
@@ -329,15 +366,18 @@ def test_create_feature_item_requires_existing_feature(monkeypatch):
 
 
 def test_create_feature_item_from_feature(monkeypatch):
+    """Verify create feature item from feature."""
     feature_id = uuid.uuid4()
     feature = _feature(id=feature_id)
     item = _feature_item(feature_id=feature_id, order_index=2)
     captured = {}
 
     async def fake_get(session, fid):
+        """Provide a fake get."""
         return feature
 
     async def fake_create(session, **kwargs):
+        """Provide a fake create."""
         captured.update(kwargs)
         return item
 
@@ -346,6 +386,7 @@ def test_create_feature_item_from_feature(monkeypatch):
     tools = ProductTools(database=FakeDatabase())
 
     async def run():
+        """Run the async test body."""
         return await tools.create_feature_item(
             feature_id=feature_id,
             title="Knowledge base",
@@ -371,11 +412,13 @@ def test_create_feature_item_from_feature(monkeypatch):
 
 
 def test_feature_item_repository_create_assigns_next_order_index(monkeypatch):
+    """Verify feature item repository create assigns next order index."""
     session = FakeSession(max_order_index=3)
     feature_id = uuid.uuid4()
     captured = {}
 
     async def fake_sync_status_from_items(current_session, current_feature_id):
+        """Provide a fake sync status from items."""
         captured["session"] = current_session
         captured["feature_id"] = current_feature_id
         return None
@@ -383,6 +426,7 @@ def test_feature_item_repository_create_assigns_next_order_index(monkeypatch):
     monkeypatch.setattr(FeatureRepository, "sync_status_from_items", fake_sync_status_from_items)
 
     async def run():
+        """Run the async test body."""
         return await FeatureItemRepository.create(
             session,
             feature_id=feature_id,
@@ -400,6 +444,7 @@ def test_feature_item_repository_create_assigns_next_order_index(monkeypatch):
 
 
 def test_feature_repository_sync_status_from_items_marks_linked_proposal_completed():
+    """Verify feature repository sync status from items marks linked proposal completed."""
     proposal = _proposal(status=ProductProposalStatus.planned)
     feature = _feature(proposal_id=proposal.id, status=FeatureStatus.in_progress)
     session = FakeFeatureItemSyncSession(
@@ -410,6 +455,7 @@ def test_feature_repository_sync_status_from_items_marks_linked_proposal_complet
     )
 
     async def run():
+        """Run the async test body."""
         return await FeatureRepository.sync_status_from_items(session, feature.id)
 
     updated = anyio.run(run)
@@ -419,6 +465,7 @@ def test_feature_repository_sync_status_from_items_marks_linked_proposal_complet
 
 
 def test_feature_repository_sync_status_from_items_reopens_linked_proposal_when_work_remains():
+    """Verify feature repository sync status from items reopens linked proposal when work remains."""
     proposal = _proposal(status=ProductProposalStatus.completed)
     feature = _feature(proposal_id=proposal.id, status=FeatureStatus.completed)
     session = FakeFeatureItemSyncSession(
@@ -429,6 +476,7 @@ def test_feature_repository_sync_status_from_items_reopens_linked_proposal_when_
     )
 
     async def run():
+        """Run the async test body."""
         return await FeatureRepository.sync_status_from_items(session, feature.id)
 
     updated = anyio.run(run)

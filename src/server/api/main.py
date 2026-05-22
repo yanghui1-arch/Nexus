@@ -18,6 +18,7 @@ from src.server.runner import AgentTaskRunner
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Manage application startup and shutdown resources."""
     settings = get_settings()
     database = Database(settings.database_url)
     await database.connect()
@@ -95,6 +96,7 @@ app.include_router(product_router)
 
 @app.get("/health")
 async def health(request: Request) -> dict[str, Any]:
+    """Return database and Redis health status."""
     db_ok = await request.app.state.database.ping()
     redis_ok = await request.app.state.redis_client.ping()
     return {

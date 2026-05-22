@@ -44,6 +44,7 @@ class Settings:
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    """Return cached application settings."""
     redis_url = os.getenv("NEXUS_REDIS_URL", "redis://localhost:6379/0")
     tela_github_token = os.getenv("NEXUS_GITHUB_TOKEN")
     sophie_github_token = os.getenv("NEXUS_SOPHIE_GITHUB_TOKEN")

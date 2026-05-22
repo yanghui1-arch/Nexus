@@ -48,6 +48,14 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
         "status",
         "source_task_id",
     },
+    "proposal_planning_run": {
+        "id",
+        "proposal_id",
+        "task_id",
+        "attempt",
+        "status",
+        "error",
+    },
     "feature": {
         "id",
         "proposal_id",
@@ -103,11 +111,13 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
 
 class Database:
     def __init__(self, database_url: str) -> None:
+        """Initialize the repository object."""
         self._database_url = database_url
         self._engine: AsyncEngine | None = None
         self._session_factory: async_sessionmaker[AsyncSession] | None = None
 
     async def connect(self) -> None:
+        """Open database connections and initialize the engine."""
         if self._engine is not None:
             return
         self._engine = create_async_engine(
@@ -117,6 +127,7 @@ class Database:
         self._session_factory = async_sessionmaker(self._engine, expire_on_commit=False)
 
     async def create_schema(self) -> None:
+        """Create database schema objects when needed."""
         if self._engine is None:
             raise RuntimeError("Database engine is not initialized. Call connect() first.")
 
@@ -184,12 +195,20 @@ class Database:
                 text(
                     "UPDATE product_proposal p "
                     "SET status = CASE "
-                    "WHEN EXISTS (SELECT 1 FROM feature f WHERE f.proposal_id = p.id) "
+                    "WHEN EXISTS ("
+                    "SELECT 1 FROM feature_item fi "
+                    "JOIN feature f ON fi.feature_id = f.id "
+                    "WHERE f.proposal_id = p.id"
+                    ") "
                     "AND NOT EXISTS ("
                     "SELECT 1 FROM feature f "
                     "WHERE f.proposal_id = p.id AND f.status NOT IN ('completed', 'closed')"
                     ") THEN 'completed' "
-                    "WHEN EXISTS (SELECT 1 FROM feature f WHERE f.proposal_id = p.id) THEN 'planned' "
+                    "WHEN EXISTS ("
+                    "SELECT 1 FROM feature_item fi "
+                    "JOIN feature f ON fi.feature_id = f.id "
+                    "WHERE f.proposal_id = p.id"
+                    ") THEN 'planned' "
                     "ELSE p.status "
                     "END "
                     "WHERE p.status <> 'rejected'"
@@ -247,6 +266,7 @@ class Database:
 
     @staticmethod
     def _assert_schema_compatible(sync_conn) -> None:
+        """Validate that the existing database schema is compatible."""
         inspector = inspect(sync_conn)
 
         for table_name, required_columns in _REQUIRED_SCHEMA.items():
@@ -266,12 +286,14 @@ class Database:
 
     @asynccontextmanager
     async def session(self) -> AsyncIterator[AsyncSession]:
+        """Yield a transactional database session."""
         if self._session_factory is None:
             raise RuntimeError("Session factory is not initialized. Call connect() first.")
         async with self._session_factory() as session:
             yield session
 
     async def ping(self) -> bool:
+        """Check whether the database connection is healthy."""
         if self._engine is None:
             return False
         try:
@@ -282,6 +304,7 @@ class Database:
             return False
 
     async def disconnect(self) -> None:
+        """Close database connections and release resources."""
         if self._engine is not None:
             await self._engine.dispose()
             self._engine = None

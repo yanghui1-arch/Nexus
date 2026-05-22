@@ -23,6 +23,7 @@ class ProductDiscoveryPoller:
         database: Database,
         runner: AgentTaskRunner,
     ) -> None:
+        """Initialize the service component."""
         self._settings = settings
         self._database = database
         self._runner = runner
@@ -44,6 +45,7 @@ class ProductDiscoveryPoller:
         logger.info("Product discovery poller starts.")
 
     async def stop(self) -> None:
+        """Stop the background poller."""
         self._stop_event.set()
         if self._task is None:
             return
@@ -51,6 +53,7 @@ class ProductDiscoveryPoller:
         self._task = None
 
     async def poll_once(self) -> int:
+        """Run one polling cycle."""
         async with self._database.session() as session:
             candidates = await AgentInstanceRepository.list_product_discovery_candidates(
                 session,
@@ -109,6 +112,7 @@ class ProductDiscoveryPoller:
         return dispatched_count
 
     async def _run_loop(self) -> None:
+        """Run the background polling loop."""
         while not self._stop_event.is_set():
             try:
                 await self.poll_once()
