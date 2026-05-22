@@ -6,9 +6,14 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from src.server.product_discovery import ProductDiscoveryPoller
-from src.server.postgres.models import AgentName, TaskCategory, TaskRecord, TaskStatus
-from src.server.postgres.repositories import AgentInstanceRepository, UserRepository, WorkspaceRepository
+from src.server.product_discovery import ProductDiscoveryPoller, build_product_discovery_prompt
+from src.server.postgres.models import AgentName, ProductProposalStatus, TaskCategory, TaskRecord, TaskStatus
+from src.server.postgres.repositories import (
+    AgentInstanceRepository,
+    ProductProposalRepository,
+    UserRepository,
+    WorkspaceRepository,
+)
 
 
 class FakeDatabase:
@@ -55,8 +60,19 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
         """Provide a fake workspace."""
         return SimpleNamespace(github_repo="owner/repo", project="nexus")
 
+    async def fake_proposals(session, **kwargs):
+        """Provide fake proposal metrics."""
+        return [
+            SimpleNamespace(
+                title="Improve onboarding",
+                status=ProductProposalStatus.proposed,
+                summary="Guide new users through setup.",
+            )
+        ]
+
     monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
     monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
+    monkeypatch.setattr(ProductProposalRepository, "list", fake_proposals)
 
     poller = ProductDiscoveryPoller(
         settings=_settings(),
@@ -72,6 +88,45 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
     payload = runner.submit_task.await_args.args[0]
     assert payload.agent_instance_id == candidate.id
     assert payload.agent == AgentName.marc
+    assert "repo=owner/repo" in payload.question
+    assert "project=nexus" in payload.question
+    assert "pending(proposed)=1" in payload.question
+    assert "Improve onboarding / proposed / Guide new users through setup." in payload.question
+    assert "不要重复已有 proposal" in payload.question
+
+
+def test_build_product_discovery_prompt_falls_back_without_optional_metrics():
+    """Verify prompt builder still returns safe instructions without metrics."""
+    prompt = build_product_discovery_prompt(project="nexus")
+
+    assert "project=nexus" in prompt
+    assert "计数不可用" in prompt
+    assert "最近 proposal 信息不可用" in prompt
+    assert "优先发现不同且高价值" in prompt
+
+
+def test_build_product_discovery_prompt_includes_status_counts_and_recent_proposals():
+    """Verify prompt builder includes proposal metrics when available."""
+    prompt = build_product_discovery_prompt(
+        project="nexus",
+        repo="owner/repo",
+        proposal_counts={
+            ProductProposalStatus.proposed: 2,
+            ProductProposalStatus.approved: 1,
+            ProductProposalStatus.rejected: 3,
+        },
+        recent_proposals=[
+            SimpleNamespace(
+                title="Existing proposal",
+                status=ProductProposalStatus.rejected,
+                summary="Already considered.",
+            )
+        ],
+    )
+
+    assert "repo=owner/repo, project=nexus" in prompt
+    assert "pending(proposed)=2, approved=1, rejected=3" in prompt
+    assert "Existing proposal / rejected / Already considered." in prompt
 
 
 def test_poll_once_skips_when_stop_requested(monkeypatch):
