@@ -24,6 +24,7 @@ import { ProposalFilters } from './components/ProposalFilters';
 import { ProposalTable } from './components/ProposalTable';
 import { ALL_PROJECTS } from './constants';
 import { useProductResearchSnapshot } from './hooks/useProductResearchSnapshot';
+import { getProposalReviewCounts } from './view-model/proposalReviewCounts';
 import type {
   ProposalFilter,
   ReviewActionState,
@@ -59,6 +60,7 @@ export default function ProductResearchPage() {
 
   const isFeatureRoute = location.pathname.startsWith('/product-research/features');
   const viewMode = isFeatureRoute ? 'features' : 'proposals';
+  const proposalCounts = getProposalReviewCounts(proposals);
 
   const statusFilteredProposals = proposals.filter(proposal => {
     if (proposalFilter === 'all') {
@@ -154,6 +156,9 @@ export default function ProductResearchPage() {
       await updateProductProposalStatus(currentProposalId, { status });
       toast.success(
         status === 'approved' ? t('productResearch.requirementApproved') : t('productResearch.requirementRejected'),
+        status === 'approved'
+          ? { description: t('productResearch.requirementApprovedDescription') }
+          : undefined,
       );
       await reloadSnapshot('mutation');
       setProposalFilter(status === 'approved' ? 'accepted' : 'rejected');
@@ -227,7 +232,22 @@ export default function ProductResearchPage() {
     <section className="flex flex-col gap-6">
       {viewMode === 'proposals' ? (
         <div className="flex flex-col gap-4">
+          <div className="rounded-[28px] border border-black/10 bg-white p-5 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-black/45">
+              {t('productResearch.pendingReviewKicker')}
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-black">
+              {t('productResearch.pendingReviewTitle', {
+                count: proposalCounts.proposed,
+              })}
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm text-black/60">
+              {t('productResearch.pendingReviewDescription')}
+            </p>
+          </div>
+
           <ProposalFilters
+            proposalCounts={proposalCounts}
             proposalFilter={proposalFilter}
             projectFilter={activeProposalProjectFilter}
             projectOptions={proposalProjectOptions}
