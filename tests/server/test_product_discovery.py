@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 from src.server.product_discovery import ProductDiscoveryPoller
 from src.server.postgres.models import AgentName, TaskCategory, TaskRecord, TaskStatus
-from src.server.postgres.repositories import AgentInstanceRepository, UserRepository, WorkspaceRepository
+from src.server.postgres.repositories import AgentInstanceRepository, TaskRepository, UserRepository, WorkspaceRepository
 
 
 class FakeDatabase:
@@ -53,10 +53,21 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
 
     async def fake_workspace(session, agent_instance_id):
         """Provide a fake workspace."""
-        return SimpleNamespace(github_repo="owner/repo", project="nexus")
+        return SimpleNamespace(
+            id=uuid.uuid4(),
+            github_repo="owner/repo",
+            project="nexus",
+            last_used_at="2026-01-01T00:00:00+00:00",
+            updated_at="2026-01-01T00:00:00+00:00",
+        )
+
+    async def fake_pending_count(session, *, agent_instance_id):
+        """Provide a fake active PM task count."""
+        return 0
 
     monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
     monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
+    monkeypatch.setattr(TaskRepository, "count_active_pm_tasks", fake_pending_count)
 
     poller = ProductDiscoveryPoller(
         settings=_settings(),
@@ -117,12 +128,23 @@ def test_poll_once_continues_after_submit_failure(monkeypatch):
 
     async def fake_workspace(session, agent_instance_id):
         """Provide a fake workspace."""
-        return SimpleNamespace(github_repo="owner/repo", project="nexus")
+        return SimpleNamespace(
+            id=uuid.uuid4(),
+            github_repo="owner/repo",
+            project="nexus",
+            last_used_at="2026-01-01T00:00:00+00:00",
+            updated_at="2026-01-01T00:00:00+00:00",
+        )
+
+    async def fake_pending_count(session, *, agent_instance_id):
+        """Provide a fake active PM task count."""
+        return 0
 
     runner = FakeRunner()
     runner.submit_task = AsyncMock(side_effect=fake_submit)
     monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
     monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
+    monkeypatch.setattr(TaskRepository, "count_active_pm_tasks", fake_pending_count)
 
     poller = ProductDiscoveryPoller(
         settings=_settings(),
