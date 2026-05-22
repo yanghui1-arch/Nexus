@@ -26,7 +26,10 @@ from src.server.postgres.repositories import (
 class FakeDatabase:
     def __init__(self, session_obj: object | None = None) -> None:
         """Initialize the test helper."""
-        self._session_obj = session_obj if session_obj is not None else SimpleNamespace(commit=AsyncMock())
+        self._session_obj = session_obj if session_obj is not None else SimpleNamespace(
+            commit=AsyncMock(),
+            get=AsyncMock(return_value=SimpleNamespace(id=uuid.uuid4())),
+        )
 
     @asynccontextmanager
     async def session(self):
@@ -61,6 +64,7 @@ def _proposal(**overrides: Any) -> Any:
         "repo": "owner/repo",
         "status": ProductProposalStatus.proposed,
         "source_task_id": None,
+        "latest_planning_task_exists": None,
         "created_at": now,
         "updated_at": now,
     }
@@ -163,6 +167,7 @@ def test_approve_proposal_dispatches_planning_task(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "approved"
+    assert response.json()["latest_planning_task_exists"] is True
     assert captured == {
         "proposal_id": proposal_id,
         "status": ProductProposalStatus.approved,
@@ -181,7 +186,11 @@ def test_approve_proposal_dispatches_planning_task(monkeypatch) -> None:
     assert "Title: Add RAG capability" in payload.question
     assert "Summary: Improve answer quality with retrieval." in payload.question
     assert "Answer: Build RAG in small slices." in payload.question
-    runner.dispatch_existing_task.assert_awaited_once_with(planning_task_id, recovered=False, mark_failed=True)
+    runner.dispatch_existing_task.assert_awaited_once_with(
+        planning_task_id,
+        recovered=False,
+        fail_task_on_dispatch_error=True,
+    )
     assert response.json()["latest_planning_run"]["task_id"] == str(planning_task_id)
 
 
@@ -354,3 +363,196 @@ def test_get_proposal_hides_unscoped_record(monkeypatch) -> None:
     response = asyncio.run(run_request())
 
     assert response.status_code == 404
+
+
+def test_retry_planning_dispatches_new_task_for_failed_run(monkeypatch) -> None:
+    proposal_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    marc_instance_id = uuid.uuid4()
+    planning_task_id = uuid.uuid4()
+    approved = _proposal(id=proposal_id, user_id=user_id, status=ProductProposalStatus.approved)
+    latest_run = _planning_run(
+        proposal_id=proposal_id,
+        task_id=planning_task_id,
+        status="queued",
+    )
+    captured = {}
+    runner = SimpleNamespace(
+        create_task_record=AsyncMock(return_value=SimpleNamespace(id=planning_task_id)),
+        dispatch_existing_task=AsyncMock(return_value=True),
+    )
+    state = {"get_calls": 0}
+
+    async def fake_get(session, pid):
+        state["get_calls"] += 1
+        if state["get_calls"] == 1:
+            return approved
+        return approved
+
+    async def fake_list_marc(session, *, agent, user_id=None, github_repo=None, project=None, limit=1):
+        captured["agent"] = agent
+        captured["user_id"] = user_id
+        captured["github_repo"] = github_repo
+        captured["project"] = project
+        captured["limit"] = limit
+        return [SimpleNamespace(id=marc_instance_id)]
+
+    async def fake_create_pending(session, *, proposal_id, task_id):
+        captured["planning_run_proposal_id"] = proposal_id
+        captured["planning_run_task_id"] = task_id
+        return latest_run
+
+    async def fake_get_latest_by_proposal(session, proposal_id):
+        if captured.get("planning_run_task_id") is None:
+            return _planning_run(proposal_id=proposal_id, status="failed")
+        return latest_run
+
+    monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
+    monkeypatch.setattr(AgentInstanceRepository, "list_by_active_task_load", fake_list_marc)
+    monkeypatch.setattr(ProposalPlanningRunRepository, "create_pending", fake_create_pending)
+    monkeypatch.setattr(ProposalPlanningRunRepository, "get_latest_by_proposal", fake_get_latest_by_proposal)
+    monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(runner=runner, user_id=user_id))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(f"/v1/product/proposals/{proposal_id}/retry-planning")
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 200
+    assert response.json()["latest_planning_run"]["task_id"] == str(planning_task_id)
+    payload = runner.create_task_record.await_args.args[0]
+    assert payload.agent_instance_id == marc_instance_id
+    assert payload.agent.value == "marc"
+    runner.dispatch_existing_task.assert_awaited_once_with(
+        planning_task_id,
+        recovered=False,
+        fail_task_on_dispatch_error=True,
+    )
+
+
+def test_retry_planning_rejects_when_planning_is_already_running(monkeypatch) -> None:
+    proposal_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    approved = _proposal(id=proposal_id, user_id=user_id, status=ProductProposalStatus.approved)
+
+    async def fake_get(session, pid):
+        return approved
+
+    async def fake_get_latest_by_proposal(session, proposal_id):
+        return _planning_run(proposal_id=proposal_id, status="running")
+
+    monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
+    monkeypatch.setattr(ProposalPlanningRunRepository, "get_latest_by_proposal", fake_get_latest_by_proposal)
+    monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(user_id=user_id))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(f"/v1/product/proposals/{proposal_id}/retry-planning")
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Planning is already in progress"
+
+
+def test_retry_planning_dispatches_new_task_when_run_record_is_missing(monkeypatch) -> None:
+    proposal_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    approved = _proposal(id=proposal_id, user_id=user_id, status=ProductProposalStatus.approved)
+    planning_task_id = uuid.uuid4()
+    runner = SimpleNamespace(
+        create_task_record=AsyncMock(return_value=SimpleNamespace(id=planning_task_id)),
+        dispatch_existing_task=AsyncMock(return_value=True),
+    )
+
+    async def fake_get(session, pid):
+        return approved
+
+    async def fake_get_latest_by_proposal(session, proposal_id):
+        if proposal_id == approved.id and getattr(fake_get_latest_by_proposal, "called", False):
+            return _planning_run(proposal_id=proposal_id, task_id=planning_task_id, status="queued")
+        fake_get_latest_by_proposal.called = True
+        return None
+
+    async def fake_list_marc(session, *, agent, user_id=None, github_repo=None, project=None, limit=1):
+        return [SimpleNamespace(id=uuid.uuid4())]
+
+    async def fake_create_pending(session, *, proposal_id, task_id):
+        return _planning_run(proposal_id=proposal_id, task_id=task_id, status="queued")
+
+    monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
+    monkeypatch.setattr(ProposalPlanningRunRepository, "get_latest_by_proposal", fake_get_latest_by_proposal)
+    monkeypatch.setattr(AgentInstanceRepository, "list_by_active_task_load", fake_list_marc)
+    monkeypatch.setattr(ProposalPlanningRunRepository, "create_pending", fake_create_pending)
+    monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(runner=runner, user_id=user_id))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(f"/v1/product/proposals/{proposal_id}/retry-planning")
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 200
+    runner.dispatch_existing_task.assert_awaited_once_with(
+        planning_task_id,
+        recovered=False,
+        fail_task_on_dispatch_error=True,
+    )
+
+
+def test_retry_planning_dispatches_new_task_when_planning_task_is_missing(monkeypatch) -> None:
+    proposal_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    old_task_id = uuid.uuid4()
+    new_task_id = uuid.uuid4()
+    approved = _proposal(id=proposal_id, user_id=user_id, status=ProductProposalStatus.approved)
+    runner = SimpleNamespace(
+        create_task_record=AsyncMock(return_value=SimpleNamespace(id=new_task_id)),
+        dispatch_existing_task=AsyncMock(return_value=True),
+    )
+    state = {"latest_calls": 0}
+
+    async def fake_get_proposal(session, pid):
+        return approved
+
+    async def fake_get_latest_by_proposal(session, proposal_id):
+        state["latest_calls"] += 1
+        if state["latest_calls"] == 1:
+            return _planning_run(proposal_id=proposal_id, task_id=old_task_id, status="queued")
+        return _planning_run(proposal_id=proposal_id, task_id=new_task_id, status="queued")
+
+    async def fake_get_task(session, task_id):
+        if task_id == old_task_id:
+            return None
+        return SimpleNamespace(id=task_id)
+
+    async def fake_list_marc(session, *, agent, user_id=None, github_repo=None, project=None, limit=1):
+        return [SimpleNamespace(id=uuid.uuid4())]
+
+    async def fake_create_pending(session, *, proposal_id, task_id):
+        return _planning_run(proposal_id=proposal_id, task_id=task_id, status="queued")
+
+    monkeypatch.setattr(ProductProposalRepository, "get", fake_get_proposal)
+    monkeypatch.setattr(ProposalPlanningRunRepository, "get_latest_by_proposal", fake_get_latest_by_proposal)
+    monkeypatch.setattr(TaskRepository, "get", fake_get_task)
+    monkeypatch.setattr(AgentInstanceRepository, "list_by_active_task_load", fake_list_marc)
+    monkeypatch.setattr(ProposalPlanningRunRepository, "create_pending", fake_create_pending)
+    monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(runner=runner, user_id=user_id))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(f"/v1/product/proposals/{proposal_id}/retry-planning")
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 200
+    runner.dispatch_existing_task.assert_awaited_once_with(
+        new_task_id,
+        recovered=False,
+        fail_task_on_dispatch_error=True,
+    )

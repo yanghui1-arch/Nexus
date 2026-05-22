@@ -21,6 +21,14 @@ export type StatusBadgeMeta = {
   variant: BadgeVariant;
   className?: string;
 };
+export type ProposalPlanningDisplayStatus =
+  | 'queued'
+  | 'running'
+  | 'failed'
+  | 'completed'
+  | 'missing_run'
+  | 'missing_task';
+
 export type ProjectOption = {
   value: string;
   label: string;
