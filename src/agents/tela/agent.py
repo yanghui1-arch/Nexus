@@ -57,9 +57,19 @@ class Tela(CodeAgent):
     _nexus_task_context: NexusTaskContext | None = PrivateAttr(default=None)
 
     def set_nexus_task_context(self, context: NexusTaskContext | None) -> None:
+        """Attach Nexus task context for tool calls.
+
+        Args:
+            context: Nexus task context, or None to clear it.
+        """
         self._nexus_task_context = context
 
     async def __aenter__(self) -> "Tela":
+        """Start Tela sandbox resources and initialize tool kits.
+
+        Returns:
+            The initialized Tela instance.
+        """
         repo_url = f"https://github.com/{self.github_repo}" if self.github_repo else None
         self._sandbox_pool_manager = get_sandbox_pool_manager()
         self._sandbox = await self._sandbox_pool_manager.acquire(
@@ -112,6 +122,11 @@ class Tela(CodeAgent):
         return await super()._ensure_fork(token, upstream_repo)
 
     async def __aexit__(self, *args) -> None:
+        """Release sandbox resources and close clients.
+
+        Args:
+            *args: Async context manager exit arguments.
+        """
         if self._sandbox:
             if self._sandbox_pool_manager:
                 await self._sandbox_pool_manager.release(self._sandbox)

@@ -30,6 +30,11 @@ load_dotenv()
 
 
 def _on_progress(status: WorkTempStatus) -> None:
+    """Log Sophie progress updates.
+
+    Args:
+        status: Current temporary work status emitted by the agent.
+    """
     process = status["process"]
     content = status.get("agent_content")
     tools = status.get("current_use_tool")
@@ -50,6 +55,11 @@ def _on_progress(status: WorkTempStatus) -> None:
 
 
 async def run(task: str) -> None:
+    """Run Sophie for a task from environment configuration.
+
+    Args:
+        task: Task description passed from the command line.
+    """
     base_url = os.environ.get("NEXUS_BASE_URL", "https://api.openai.com/v1")
     api_key = os.environ.get("NEXUS_API_KEY")
     model = os.environ.get("NEXUS_MODEL", "gpt-4o")
@@ -88,6 +98,7 @@ async def run(task: str) -> None:
 
 
 def main() -> None:
+    """Parse command-line arguments and start Sophie."""
     if len(sys.argv) < 2:
         logger.error("Usage: python sophie.py <task>")
         sys.exit(1)

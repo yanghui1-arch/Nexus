@@ -89,6 +89,11 @@ class Agent(BaseModel):
 
     @model_validator(mode="after")
     def init_openai_client(self):
+        """Initialize the OpenAI client after model validation.
+
+        Returns:
+            The current agent instance with an initialized client when configured.
+        """
         if self.base_url and self.api_key:
             self.openai_client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
         return self
@@ -322,10 +327,27 @@ class Agent(BaseModel):
         callback: Callable[[WorkTempStatus], None] | None,
         work_temp_status: WorkTempStatus,
     ):
+        """Invoke a progress callback when one is configured.
+
+        Args:
+            callback: Optional callback receiving work status updates.
+            work_temp_status: Status payload to pass to the callback.
+        """
         if callback:
             callback(work_temp_status)
 
     async def _create_chat_completion_stream(self, kwargs: Dict[str, Any]) -> StreamCompletionResult:
+        """Create a streaming chat completion and collect its final message.
+
+        Args:
+            kwargs: Keyword arguments for the chat completion request.
+
+        Returns:
+            Aggregated stream result including message, reasoning, and usage.
+
+        Raises:
+            RuntimeError: If the OpenAI client has not been initialized.
+        """
         if self.openai_client is None:
             raise RuntimeError(f"Agent `{self.name}` is missing an initialized OpenAI client.")
 
@@ -382,6 +404,15 @@ class Agent(BaseModel):
         tool_calls_state: dict[int, dict[str, str]],
         tc: ChoiceDeltaToolCall,
     ) -> dict[int, dict[str, str]]:
+        """Merge a streamed tool-call delta into accumulated state.
+
+        Args:
+            tool_calls_state: Current tool-call fragments keyed by index.
+            tc: Incoming streamed tool-call delta.
+
+        Returns:
+            Updated tool-call state.
+        """
         if tc.index not in tool_calls_state:
             tool_calls_state[tc.index] = {"id": "", "name": "", "arguments": ""}
         state = tool_calls_state[tc.index]
@@ -395,6 +426,14 @@ class Agent(BaseModel):
         return tool_calls_state
 
     def _build_tool_calls(self, tool_calls_state: dict[int, dict[str, str]]) -> list[ChatCompletionMessageToolCall]:
+        """Build final tool-call objects from accumulated stream state.
+
+        Args:
+            tool_calls_state: Tool-call fragments keyed by stream index.
+
+        Returns:
+            Ordered complete tool calls with names and arguments.
+        """
         return [
             ChatCompletionMessageToolCall(
                 id=state["id"],
@@ -406,6 +445,7 @@ class Agent(BaseModel):
         ]
 
     async def close(self) -> None:
+        """Close the agent OpenAI client if it is open."""
         if self.openai_client is None:
             return
 
@@ -417,17 +457,40 @@ class Agent(BaseModel):
             self.openai_client = None
 
     async def step(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> BaseAgentStepResult:
-        
+        """Execute one agent step.
+
+        Args:
+            current_turn_ctx: Current conversation context.
+
+        Raises:
+            NotImplementedError: Always raised by the base class.
+        """
         raise NotImplementedError(f"Agent `{self.name}` doesn't implement step function.")
 
     def last_report_current_process(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> str:
+        """Return a last-known progress report for unfinished work.
 
+        Args:
+            current_turn_ctx: Current conversation context.
+
+        Raises:
+            NotImplementedError: Always raised by the base class.
+        """
         raise NotImplementedError(f"Agent `{self.name}` doesn't implement last_report_current_process function.")
 
     @staticmethod
     def create(cls, *args, **kwargs) -> "Agent":
-        
-        raise NotImplemented(f"Agent `{cls.__name__}` doesn't implement create().")
+        """Create an agent instance from subclass-specific configuration.
+
+        Args:
+            cls: Agent subclass to construct.
+            *args: Positional arguments for the subclass factory.
+            **kwargs: Keyword arguments for the subclass factory.
+
+        Raises:
+            NotImplementedError: Always raised by the base class.
+        """
+        raise NotImplementedError(f"Agent `{cls.__name__}` doesn't implement create().")
     
     @track(tags=["compact"], step_type="llm")
     async def compact(self, current_turn_ctx: List[ChatCompletionMessageParam]) -> List[ChatCompletionMessageParam]:
@@ -589,6 +652,15 @@ class Agent(BaseModel):
         system_message: ChatCompletionMessageParam,
         summary: str,
     ) -> ChatCompletionSystemMessageParam:
+        """Inject compacted work summary into a system message.
+
+        Args:
+            system_message: Existing system message to update.
+            summary: New summary text to append.
+
+        Returns:
+            Updated system message with summary content.
+        """
         base_content, previous_work = self._spilt_base_and_previous_work_from_system_message(system_message)
         parts: List[str] = []
         if base_content:
