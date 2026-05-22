@@ -71,6 +71,7 @@ export default function ProductResearchPage() {
   const proposalFilterSelectedRef = useRef(false);
 
   function handleReviewPendingProposals(): void {
+    proposalFilterSelectedRef.current = true;
     setProposalFilter('proposed');
     setProposalPage(1);
     navigate('/product-research', { replace: true });
