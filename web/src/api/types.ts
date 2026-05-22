@@ -100,9 +100,16 @@ export interface ApiProductProposal {
   status: ApiProductProposalStatus;
   source_task_id: string | null;
   latest_planning_run: ApiProposalPlanningRun | null;
+  latest_planning_task_exists: boolean | null;
   created_at: string;
   updated_at: string;
 }
+
+export type ApiProposalPlanningRunStatus =
+  | 'queued'
+  | 'running'
+  | 'failed'
+  | 'completed';
 
 export interface ApiProposalPlanningRun {
   id: string;
@@ -110,7 +117,7 @@ export interface ApiProposalPlanningRun {
   task_id: string;
   attempt: number;
   // Operational status of one planning attempt for the approved proposal.
-  status: 'queued' | 'running' | 'failed' | 'completed';
+  status: ApiProposalPlanningRunStatus;
   error: string | null;
   created_at: string;
   updated_at: string;

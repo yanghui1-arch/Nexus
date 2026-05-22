@@ -1003,6 +1003,18 @@ class TaskRepository:
         return await session.get(TaskRecord, task_id)
 
     @staticmethod
+    async def list_existing_ids(
+        session: AsyncSession,
+        task_ids: list[uuid.UUID],
+    ) -> set[uuid.UUID]:
+        if not task_ids:
+            return set()
+        result = await session.execute(
+            select(TaskRecord.id).where(TaskRecord.id.in_(task_ids))
+        )
+        return set(result.scalars().all())
+
+    @staticmethod
     async def list(
         session: AsyncSession,
         *,

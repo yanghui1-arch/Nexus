@@ -36,6 +36,14 @@ export function updateProductProposalStatus(
   });
 }
 
+export function retryProductProposalPlanning(
+  proposalId: string,
+): Promise<ApiProductProposal> {
+  return apiRequest<ApiProductProposal>(`/v1/product/proposals/${proposalId}/retry-planning`, {
+    method: 'POST',
+  });
+}
+
 export function listProductFeatures(
   params: ListProductFeaturesParams = {},
 ): Promise<ApiFeature[]> {
