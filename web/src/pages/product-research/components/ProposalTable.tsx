@@ -11,6 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
+  PROPOSAL_PLANNING_STATUS_META,
   PROPOSAL_STATUS_META,
   TABLE_BODY_CLASS,
   TABLE_CARD_CLASS,
@@ -18,7 +19,11 @@ import {
   TABLE_HEADER_ROW_CLASS,
   TABLE_ROW_CLASS,
 } from '../constants';
-import { formatRelativeTime, getProjectLabel } from '../utils';
+import {
+  formatRelativeTime,
+  getProjectLabel,
+  getProposalPlanningDisplayStatus,
+} from '../utils';
 import { TablePaginationFooter } from './TablePaginationFooter';
 
 type ProposalTableProps = {
@@ -46,6 +51,10 @@ export function ProposalTable({ page, pageCount, proposals, totalCount, onSelect
         <TableBody className={TABLE_BODY_CLASS}>
           {proposals.map(proposal => {
             const statusMeta = PROPOSAL_STATUS_META[proposal.status];
+            const planningStatus =
+              proposal.status === 'approved'
+                ? getProposalPlanningDisplayStatus(proposal)
+                : null;
             return (
               <TableRow key={proposal.id} tabIndex={0} className={TABLE_ROW_CLASS} onClick={() => onSelect(proposal.id)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(proposal.id); } }}>
                 <TableCell>
@@ -55,7 +64,21 @@ export function ProposalTable({ page, pageCount, proposals, totalCount, onSelect
                   </div>
                 </TableCell>
                 <TableCell className="truncate text-sm text-black/55">{getProjectLabel(proposal.project, t)}</TableCell>
-                <TableCell><Badge variant={statusMeta.variant} className={statusMeta.className}>{t(`productResearch.proposalStatus.${proposal.status}`)}</Badge></TableCell>
+                <TableCell>
+                  <div className="flex flex-col items-start gap-2">
+                    <Badge variant={statusMeta.variant} className={statusMeta.className}>
+                      {t(`productResearch.proposalStatus.${proposal.status}`)}
+                    </Badge>
+                    {planningStatus ? (
+                      <Badge
+                        variant={PROPOSAL_PLANNING_STATUS_META[planningStatus].variant}
+                        className={PROPOSAL_PLANNING_STATUS_META[planningStatus].className}
+                      >
+                        {t(`productResearch.planningRunStatus.${planningStatus}`)}
+                      </Badge>
+                    ) : null}
+                  </div>
+                </TableCell>
                 <TableCell className="text-right text-sm text-black/45">{formatRelativeTime(proposal.created_at)}</TableCell>
               </TableRow>
             );
