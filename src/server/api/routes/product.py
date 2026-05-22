@@ -60,6 +60,7 @@ def _proposal_accessible_to_user_workspaces(
 
 
 def _build_planning_question(proposal: ProductProposalRecord) -> str:
+    """Build the Marc planning prompt for an approved proposal."""
     return (
         "Plan the approved product proposal below. "
         "Create one or more features, then create one or more feature items for each feature.\n\n"
@@ -77,6 +78,7 @@ async def _proposal_response(
     session,
     proposal: ProductProposalRecord,
 ) -> ProductProposalResponse:
+    """Build a proposal response with its latest planning run."""
     latest_planning_run = await ProposalPlanningRunRepository.get_latest_by_proposal(session, proposal.id)
     return ProductProposalResponse.from_record(proposal, latest_planning_run=latest_planning_run)
 
@@ -87,6 +89,7 @@ async def create_proposal(
     payload: ProductProposalCreateRequest,
     user: UserRecord = Depends(get_current_user),
 ) -> ProductProposalResponse:
+    """Create a product proposal for an accessible workspace."""
     database: Database = request.app.state.database
     async with database.session() as session:
         # Product proposals do not store a user_id directly. Access is derived from
@@ -117,6 +120,7 @@ async def list_proposals(
     limit: int = Query(default=200, ge=1, le=1000),
     user: UserRecord = Depends(get_current_user),
 ) -> list[ProductProposalResponse]:
+    """List product proposals visible to the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
         workspaces = await WorkspaceRepository.list_for_user(session, user_id=user.id)
@@ -147,6 +151,7 @@ async def get_proposal(
     proposal_id: uuid.UUID,
     user: UserRecord = Depends(get_current_user),
 ) -> ProductProposalResponse:
+    """Return one product proposal visible to the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
         proposal = await ProductProposalRepository.get(session, proposal_id)
@@ -163,6 +168,7 @@ async def update_proposal_status(
     payload: ProductProposalStatusUpdateRequest,
     user: UserRecord = Depends(get_current_user),
 ) -> ProductProposalResponse:
+    """Update product proposal status and schedule planning when approved."""
     database: Database = request.app.state.database
     runner: AgentTaskRunner = request.app.state.runner
     async with database.session() as session:
@@ -227,6 +233,7 @@ async def list_features(
     limit: int = Query(default=200, ge=1, le=1000),
     user: UserRecord = Depends(get_current_user),
 ) -> list[FeatureResponse]:
+    """List features visible to the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
         workspaces = await WorkspaceRepository.list_for_user(session, user_id=user.id)
@@ -246,6 +253,7 @@ async def get_feature(
     feature_id: uuid.UUID,
     user: UserRecord = Depends(get_current_user),
 ) -> FeatureResponse:
+    """Return one feature visible to the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
         feature = await FeatureRepository.get(session, feature_id)

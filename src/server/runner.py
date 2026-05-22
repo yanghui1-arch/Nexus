@@ -24,6 +24,7 @@ from src.server.schemas import TaskCreateRequest
 
 
 def _task_category_for_agent(agent: AgentName) -> TaskCategory:
+    """Return the task category used for an agent."""
     if agent == AgentName.marc:
         return TaskCategory.pm
     return TaskCategory.coding
@@ -38,6 +39,7 @@ class AgentTaskRunner:
         settings: Settings,
         database: Database,
     ) -> None:
+        """Initialize the service component."""
         self._settings = settings
         self._database = database
 
@@ -50,6 +52,7 @@ class AgentTaskRunner:
         # Some callers, such as proposal approval, need the task row to exist inside
         # a larger transaction before dispatch happens so they can attach extra state
         # like proposal-planning tracking rows atomically.
+        """Create a task record without dispatching it."""
         if session is not None:
             return await self._create_task_record(session, request)
 
@@ -60,6 +63,7 @@ class AgentTaskRunner:
             return task
 
     async def submit_task(self, request: TaskCreateRequest) -> uuid.UUID:
+        """Persist and dispatch a new task."""
         async with self._database.session() as session:
             task = await self._create_task_record(session, request)
             await session.commit()
@@ -171,6 +175,7 @@ class AgentTaskRunner:
         return recovered_count
 
     async def shutdown(self) -> None:
+        """Shut down runner resources."""
         return None
 
     async def dispatch_existing_task(
@@ -180,6 +185,7 @@ class AgentTaskRunner:
         recovered: bool = False,
         mark_failed: bool = False,
     ) -> bool:
+        """Dispatch an already persisted task."""
         try:
             dispatched = await self._dispatch(task_id, recovered=recovered)
         except Exception as exc:
@@ -212,6 +218,7 @@ class AgentTaskRunner:
         return dispatched
 
     async def dispatch_github_feedback(self, task_id: uuid.UUID) -> bool:
+        """Dispatch a task created from GitHub feedback."""
         async with self._database.session() as session:
             queued = await TaskRepository.queue_github_feedback(session, task_id)
         if queued is None:
@@ -242,6 +249,7 @@ class AgentTaskRunner:
         session: AsyncSession,
         request: TaskCreateRequest,
     ):
+        """Persist a task record and related initial state."""
         instance = await AgentInstanceRepository.get(session, request.agent_instance_id)
         if instance is None:
             raise ValueError(f"agent_instance_id={request.agent_instance_id} does not exist")

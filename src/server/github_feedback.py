@@ -62,6 +62,7 @@ class GithubFeedbackPoller:
         database: Database,
         runner: AgentTaskRunner,
     ) -> None:
+        """Initialize the service component."""
         self._settings = settings
         self._database = database
         self._runner = runner
@@ -70,6 +71,7 @@ class GithubFeedbackPoller:
         self._viewer_login_by_token: dict[str, str | None] = {}
 
     def start(self) -> None:
+        """Start the background poller."""
         if self._settings.github_feedback_poll_interval_seconds <= 0:
             logger.info("GitHub feedback poller is disabled.")
             return
@@ -82,6 +84,7 @@ class GithubFeedbackPoller:
         logger.info("Github feedback poller starts.")
 
     async def stop(self) -> None:
+        """Stop the background poller."""
         self._stop_event.set()
         if self._task is None:
             return
@@ -90,6 +93,7 @@ class GithubFeedbackPoller:
 
     async def poll_once(self) -> int:
         # Scan only tasks that still point at an open external PR and can accept follow-up feedback.
+        """Run one polling cycle."""
         async with self._database.session() as session:
             tasks = await TaskRepository.list_external_pull_request_candidates(
                 session,
@@ -119,6 +123,7 @@ class GithubFeedbackPoller:
     async def _run_loop(self) -> None:
         # The loop is intentionally sleep-driven and runs as its own asyncio task so it
         # does not block FastAPI request handling or the main application event loop.
+        """Run the background polling loop."""
         while not self._stop_event.is_set():
             try:
                 await self.poll_once()
@@ -142,6 +147,7 @@ class GithubFeedbackPoller:
     ) -> int:
         # PR feedback resumes the original task/PR thread, so the PR URL stays task-scoped
         # even though repo/project for newer tasks now come from workspace.
+        """Poll one task for GitHub feedback."""
         repo = await self._resolve_task_repo(task)
         if not repo or not task.external_pull_request_url:
             return 0
@@ -277,6 +283,7 @@ class GithubFeedbackPoller:
         # - older tasks stored repo directly on the task row
         # - newer tasks store repo on workspace and only keep PR state on the task row
         # Prefer workspace-era behavior, but keep old rows replayable.
+        """Resolve the GitHub repository for a task."""
         if task.repo:
             return task.repo
 
@@ -293,6 +300,7 @@ class GithubFeedbackPoller:
     ) -> str | None:
         # Cache the token owner login because we use it to ignore self-authored comments
         # and there is no value in hitting /user on every poll iteration.
+        """Resolve the authenticated GitHub viewer login."""
         if token in self._viewer_login_by_token:
             return self._viewer_login_by_token[token]
 
@@ -314,6 +322,7 @@ class GithubFeedbackPoller:
         repo: str,
         pull_request_number: int,
     ) -> dict[str, Any]:
+        """Fetch pull request metadata from GitHub."""
         response = await client.get(
             f"https://api.github.com/repos/{repo}/pulls/{pull_request_number}",
             headers=_github_headers(token),
@@ -330,6 +339,7 @@ class GithubFeedbackPoller:
     ) -> list[_GithubFeedbackItem]:
         # GitHub splits PR discussion into three APIs: issue comments, reviews, and
         # inline review comments. We fetch all three and normalize them into one local shape.
+        """Fetch review feedback items for a pull request."""
         comments_task = self._fetch_paginated(
             client,
             token,
@@ -365,6 +375,7 @@ class GithubFeedbackPoller:
     ) -> list[dict[str, Any]]:
         # These endpoints are paginated and a busy PR can easily exceed the first page,
         # so we always walk pages until GitHub returns fewer than the page size.
+        """Fetch all pages from a GitHub API endpoint."""
         page = 1
         items: list[dict[str, Any]] = []
 
@@ -388,6 +399,7 @@ class GithubFeedbackPoller:
 
 
 def _extract_pull_request_number(value: str) -> int | None:
+    """Extract a pull request number from a GitHub URL."""
     match = _PULL_REQUEST_NUMBER_RE.search(value)
     if match is None:
         return None
@@ -395,6 +407,7 @@ def _extract_pull_request_number(value: str) -> int | None:
 
 
 def _github_headers(token: str) -> dict[str, str]:
+    """Build GitHub API headers for a token."""
     return {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
@@ -403,6 +416,7 @@ def _github_headers(token: str) -> dict[str, str]:
 
 
 def _parse_github_datetime(value: str | None) -> datetime | None:
+    """Parse a GitHub ISO timestamp."""
     if value is None:
         return None
     try:
@@ -412,6 +426,7 @@ def _parse_github_datetime(value: str | None) -> datetime | None:
 
 
 def _normalize_text(value: str | None) -> str | None:
+    """Normalize optional text for comparison."""
     if value is None:
         return None
     stripped = value.strip()
@@ -419,6 +434,7 @@ def _normalize_text(value: str | None) -> str | None:
 
 
 def _build_pr_comment_items(payloads: list[dict[str, Any]]) -> list[_GithubFeedbackItem]:
+    """Build feedback items from pull request comments."""
     items: list[_GithubFeedbackItem] = []
     for payload in payloads:
         items.append(
@@ -442,6 +458,7 @@ def _build_pr_comment_items(payloads: list[dict[str, Any]]) -> list[_GithubFeedb
 
 
 def _build_pr_review_items(payloads: list[dict[str, Any]]) -> list[_GithubFeedbackItem]:
+    """Build feedback items from pull request reviews."""
     items: list[_GithubFeedbackItem] = []
     for payload in payloads:
         items.append(
@@ -465,6 +482,7 @@ def _build_pr_review_items(payloads: list[dict[str, Any]]) -> list[_GithubFeedba
 
 
 def _build_pr_review_comment_items(payloads: list[dict[str, Any]]) -> list[_GithubFeedbackItem]:
+    """Build feedback items from review comments."""
     items: list[_GithubFeedbackItem] = []
     for payload in payloads:
         items.append(
@@ -491,6 +509,7 @@ def _build_pr_merge_conflict_item(
     pull_request: dict[str, Any],
     pull_request_number: int,
 ) -> _GithubFeedbackItem | None:
+    """Build feedback for a pull request merge conflict."""
     mergeable_state = _normalize_text(pull_request.get("mergeable_state"))
     mergeable = pull_request.get("mergeable")
     if mergeable is not False and mergeable_state not in {"dirty", "unknown"}:
@@ -519,6 +538,7 @@ def _build_pr_merge_conflict_item(
 
 
 def _user_login(payload: Any) -> str | None:
+    """Return a GitHub user's login from an API payload."""
     if not isinstance(payload, dict):
         return None
     login = payload.get("login")
@@ -534,6 +554,7 @@ def _classify_feedback(
 ) -> tuple[GithubPullRequestFeedbackStatus, str | None]:
     # We only queue actionable external feedback. Empty bodies and the bot's own replies
     # are stored for bookkeeping but should not wake the agent up again.
+    """Classify feedback into the task action it requests."""
     if item.body is None:
         return GithubPullRequestFeedbackStatus.ignored, "empty_body"
     if viewer_login and item.author and item.author.lower() == viewer_login.lower():

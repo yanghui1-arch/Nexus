@@ -55,6 +55,7 @@ async def list_agent_instances(
     is_active: bool | None = Query(default=None),
     user: UserRecord = Depends(get_current_user),
 ) -> list[AgentInstanceResponse]:
+    """List agent instances visible to the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
         instances = await AgentInstanceRepository.list(
@@ -78,6 +79,7 @@ async def get_agent_instance(
     agent_instance_id: uuid.UUID,
     user: UserRecord = Depends(get_current_user),
 ) -> AgentInstanceResponse:
+    """Return one agent instance owned by the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
         instance = await AgentInstanceRepository.get(session, agent_instance_id)
@@ -94,6 +96,7 @@ async def set_agent_instance_status(
     payload: AgentInstanceStatusUpdateRequest,
     user: UserRecord = Depends(get_current_user),
 ) -> AgentInstanceResponse:
+    """Activate or deactivate an agent instance."""
     database: Database = request.app.state.database
     async with database.session() as session:
         instance = await AgentInstanceRepository.get(session, agent_instance_id)
@@ -130,6 +133,7 @@ async def update_agent_instance_workspace(
     payload: WorkspaceUpdateRequest,
     user: UserRecord = Depends(get_current_user),
 ) -> AgentInstanceResponse:
+    """Update workspace context for an agent instance."""
     database: Database = request.app.state.database
     async with database.session() as session:
         instance = await AgentInstanceRepository.get(session, agent_instance_id)

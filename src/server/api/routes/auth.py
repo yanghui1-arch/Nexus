@@ -37,6 +37,7 @@ AGENT_PRICES = {AgentName.tela: Decimal("5500.00"), AgentName.sophie: Decimal("6
 
 @router.get("/auth/github/login")
 async def github_login() -> RedirectResponse:
+    """Redirect the user to GitHub OAuth authorization."""
     settings = get_settings()
     if not settings.github_oauth_client_id:
         raise HTTPException(status_code=500, detail="GitHub OAuth client id is not configured")
@@ -52,6 +53,7 @@ async def github_login() -> RedirectResponse:
 
 @router.get("/auth/github/callback")
 async def github_callback(request: Request, code: str) -> RedirectResponse:
+    """Complete GitHub OAuth and create an auth session."""
     settings = get_settings()
     if not settings.github_oauth_client_id or not settings.github_oauth_client_secret:
         raise HTTPException(status_code=500, detail="GitHub OAuth is not configured")
@@ -104,6 +106,7 @@ async def github_callback(request: Request, code: str) -> RedirectResponse:
 
 @router.get("/auth/me", response_model=UserResponse)
 async def get_me(user: UserRecord = Depends(get_current_user)) -> UserResponse:
+    """Return the authenticated user's profile."""
     return UserResponse(
         id=user.id,
         github_login=user.github_login,
@@ -114,6 +117,7 @@ async def get_me(user: UserRecord = Depends(get_current_user)) -> UserResponse:
 
 @router.post("/auth/logout", status_code=204)
 async def logout(request: Request, response: Response) -> None:
+    """Delete the current auth session and clear its cookie."""
     settings = get_settings()
     token = request.cookies.get(settings.auth_session_cookie_name)
     if token:
@@ -129,6 +133,7 @@ async def recharge_balance(
     payload: RechargeRequest,
     user: UserRecord = Depends(get_current_user),
 ) -> UserResponse:
+    """Add demo balance to the authenticated user's account."""
     database: Database = request.app.state.database
     # TODO: Replace this demo recharge endpoint with real payment provider callbacks.
     async with database.session() as session:
@@ -149,6 +154,7 @@ async def purchase_agent(
     payload: PurchaseAgentRequest,
     user: UserRecord = Depends(get_current_user),
 ) -> PurchaseAgentResponse:
+    """Purchase an agent subscription for the authenticated user."""
     agent = AgentName(payload.agent.value)
     price = AGENT_PRICES[agent]
     expires_at = utc_now() + timedelta(days=30)
