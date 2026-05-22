@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import type { ApiFeature, ApiProductProposal } from '@/api/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,33 +11,65 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs';
-import { PROPOSAL_STATUS_META } from '../constants';
+import { PROPOSAL_PLANNING_STATUS_META, PROPOSAL_STATUS_META } from '../constants';
 import type { ReviewActionState, ReviewActionStatus } from '../types';
-import { formatRelativeTime } from '../utils';
+import {
+  formatRelativeTime,
+  getProposalPlanningDisplayStatus,
+  hasValidatedProposalPlan,
+} from '../utils';
 import { ProposalPlanList } from './ProposalPlanList';
 
 type ProposalDetailCardProps = {
   activeReview: ReviewActionState;
   onReview: (proposalId: string, status: ReviewActionStatus) => Promise<void>;
+  onRecoverPlanning: (proposalId: string) => Promise<void>;
   proposal: ApiProductProposal;
   relatedFeatures: ApiFeature[];
+  recoveringPlanning: boolean;
 };
 
 export function ProposalDetailCard({
   activeReview,
   onReview,
+  onRecoverPlanning,
   proposal,
   relatedFeatures,
+  recoveringPlanning,
 }: ProposalDetailCardProps) {
   const { t } = useTranslation();
   const statusMeta = PROPOSAL_STATUS_META[proposal.status];
+  const planningStatus = getProposalPlanningDisplayStatus(proposal);
+  const planningRun = proposal.latest_planning_run;
   const isApproving =
     activeReview?.proposalId === proposal.id && activeReview.status === 'approved';
   const isRejecting =
     activeReview?.proposalId === proposal.id && activeReview.status === 'rejected';
   const isBusy = isApproving || isRejecting;
   const isPending = proposal.status === 'proposed';
-  const hasPlanList = relatedFeatures.length > 0;
+  const canOpenPlanList =
+    hasValidatedProposalPlan(proposal) && relatedFeatures.length > 0;
+  const [activeTab, setActiveTab] = useState<'description' | 'plan-list'>('description');
+  const visibleTab = activeTab === 'plan-list' && !canOpenPlanList
+    ? 'description'
+    : activeTab;
+  const showRetryPlanning = planningStatus === 'failed';
+  const showRecoverPlanning =
+    planningStatus === 'missing_run' || planningStatus === 'missing_task';
+  const showViewTask = Boolean(
+    planningRun?.task_id && (
+      planningStatus === 'queued' ||
+      planningStatus === 'running' ||
+      planningStatus === 'failed'
+    ),
+  );
+  const planningMessage = planningStatus === 'failed'
+    ? planningRun?.error ?? t('productResearch.planningFailedInlineFallback')
+    : planningStatus === 'missing_run'
+      ? t('productResearch.planningMissingRunInline')
+      : planningStatus === 'missing_task'
+        ? t('productResearch.planningMissingTaskInline')
+      : null;
 
   return (
     <article className="flex flex-col gap-5">
@@ -48,20 +82,78 @@ export function ProposalDetailCard({
               <span>{proposal.project ?? t('common.noProject')}</span>
               <span>{t('common.updatedRelative', { time: formatRelativeTime(proposal.updated_at) })}</span>
             </div>
+            {planningMessage ? (
+              <p className="text-sm text-red-700">{planningMessage}</p>
+            ) : null}
           </div>
 
-          <div className="flex items-center gap-2">
-            <Badge variant={statusMeta.variant} className={statusMeta.className}>
-              {t(`productResearch.proposalStatus.${proposal.status}`)}
-            </Badge>
+          <div className="flex flex-col items-start gap-2 lg:items-end">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Badge variant={statusMeta.variant} className={statusMeta.className}>
+                {t(`productResearch.proposalStatus.${proposal.status}`)}
+              </Badge>
+              {planningStatus ? (
+                <Badge
+                  variant={PROPOSAL_PLANNING_STATUS_META[planningStatus].variant}
+                  className={PROPOSAL_PLANNING_STATUS_META[planningStatus].className}
+                >
+                  {t(`productResearch.planningRunStatus.${planningStatus}`)}
+                </Badge>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2">
+                {showViewTask ? (
+                <Button asChild type="button" size="sm" variant="outline">
+                  <Link to={`/task/${planningRun?.task_id}`}>
+                    {t('productResearch.planningViewTask')}
+                  </Link>
+                </Button>
+              ) : null}
+              {showRecoverPlanning ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={recoveringPlanning}
+                  onClick={() => void onRecoverPlanning(proposal.id)}
+                >
+                  {recoveringPlanning
+                    ? t('productResearch.planningRecovering')
+                    : planningStatus === 'missing_task'
+                      ? t('productResearch.planningRecreateTask')
+                      : t('productResearch.planningRecover')}
+                </Button>
+              ) : null}
+              {showRetryPlanning ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={recoveringPlanning}
+                  onClick={() => void onRecoverPlanning(proposal.id)}
+                >
+                  {recoveringPlanning
+                    ? t('productResearch.planningRetrying')
+                    : t('productResearch.planningRetry')}
+                </Button>
+              ) : null}
+            </div>
           </div>
         </div>
       </header>
 
-      <Tabs defaultValue="description" className="gap-3">
+      <Tabs
+        value={visibleTab}
+        onValueChange={value => {
+          if (value === 'plan-list' && !canOpenPlanList) {
+            return;
+          }
+          setActiveTab(value as 'description' | 'plan-list');
+        }}
+        className="gap-3"
+      >
         <TabsList>
           <TabsTrigger value="description">{t('common.description')}</TabsTrigger>
-          <TabsTrigger value="plan-list" disabled={!hasPlanList}>
+          <TabsTrigger value="plan-list" disabled={!canOpenPlanList}>
             {t('productResearch.planList')}
           </TabsTrigger>
         </TabsList>
