@@ -40,6 +40,7 @@ class Settings:
     frontend_base_url: str
     product_discovery_poll_interval_seconds: int
     product_discovery_poll_task_limit: int
+    recent_proposal_summary_limit: int
 
 
 @lru_cache(maxsize=1)
@@ -111,5 +112,8 @@ def get_settings() -> Settings:
         ),
         product_discovery_poll_task_limit=int(
             os.getenv("NEXUS_PRODUCT_DISCOVERY_POLL_TASK_LIMIT", "100"),
+        ),
+        recent_proposal_summary_limit=int(
+            os.getenv("NEXUS_RECENT_PROPOSAL_SUMMARY_LIMIT", "10"),
         ),
     )

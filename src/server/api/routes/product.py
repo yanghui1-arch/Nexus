@@ -4,6 +4,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
+from src.server.config import get_settings
 from src.server.api.dependencies import get_current_user
 from src.server.postgres.database import Database
 from src.server.postgres.models import (
@@ -29,6 +30,7 @@ from src.server.schemas import (
     TaskCreateRequest,
     ProductProposalCreateRequest,
     ProductProposalResponse,
+    ProductProposalSummaryResponse,
     ProductProposalStatusUpdateRequest,
     FeatureResponse,
 )
@@ -143,6 +145,28 @@ async def list_proposals(
             )
             for proposal in proposals
         ]
+
+
+@router.get("/proposals/recent-summaries", response_model=list[ProductProposalSummaryResponse])
+async def list_recent_proposal_summaries(
+    request: Request,
+    project: str | None = Query(default=None),
+    repo: str | None = Query(default=None),
+    user: UserRecord = Depends(get_current_user),
+) -> list[ProductProposalSummaryResponse]:
+    """List recent lightweight proposal summaries visible to the current user."""
+    database: Database = request.app.state.database
+    limit = get_settings().recent_proposal_summary_limit
+    async with database.session() as session:
+        workspaces = await WorkspaceRepository.list_for_user(session, user_id=user.id)
+        proposals = await ProductProposalRepository.list_recent_summaries(
+            session,
+            project=project,
+            repo=repo,
+            workspaces=workspaces,
+            limit=limit,
+        )
+    return [ProductProposalSummaryResponse.from_record(proposal) for proposal in proposals]
 
 
 @router.get("/proposals/{proposal_id}", response_model=ProductProposalResponse)

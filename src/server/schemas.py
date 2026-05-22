@@ -145,6 +145,34 @@ class ProductProposalResponse(BaseModel):
         )
 
 
+class ProductProposalSummaryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    title: str
+    plan_type: str
+    summary: str
+    project: str | None
+    repo: str | None
+    status: ProductProposalStatus
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_record(cls, proposal: ProductProposalRecord) -> "ProductProposalSummaryResponse":
+        return cls(
+            id=proposal.id,
+            title=proposal.title,
+            plan_type=proposal.plan_type,
+            summary=proposal.summary,
+            project=proposal.project,
+            repo=proposal.repo,
+            status=proposal.status,
+            created_at=proposal.created_at,
+            updated_at=proposal.updated_at,
+        )
+
+
 class FeatureItemResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
