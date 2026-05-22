@@ -7,6 +7,7 @@ from typing import Any, cast
 
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy.orm import load_only
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -400,6 +401,48 @@ class ProductProposalRepository:
         if repo is not None:
             query = query.where(ProductProposalRecord.repo == repo)
         query = query.order_by(ProductProposalRecord.created_at.desc()).limit(limit)
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_recent_summaries(
+        session: AsyncSession,
+        *,
+        project: str | None = None,
+        repo: str | None = None,
+        workspaces: list[WorkspaceRecord] | None = None,
+        limit: int = 10,
+    ) -> list[ProductProposalRecord]:
+        """List recent records without loading full proposal answers."""
+        query = select(ProductProposalRecord).options(
+            load_only(
+                ProductProposalRecord.id,
+                ProductProposalRecord.title,
+                ProductProposalRecord.plan_type,
+                ProductProposalRecord.summary,
+                ProductProposalRecord.project,
+                ProductProposalRecord.repo,
+                ProductProposalRecord.status,
+                ProductProposalRecord.created_at,
+                ProductProposalRecord.updated_at,
+            )
+        )
+        if workspaces is not None:
+            if not workspaces:
+                return []
+            query = query.where(
+                or_(
+                    *(
+                        and_(ProductProposalRecord.repo == workspace.github_repo, ProductProposalRecord.project == workspace.project)
+                        for workspace in workspaces
+                    )
+                )
+            )
+        if project is not None:
+            query = query.where(ProductProposalRecord.project == project)
+        if repo is not None:
+            query = query.where(ProductProposalRecord.repo == repo)
+        query = query.order_by(ProductProposalRecord.updated_at.desc(), ProductProposalRecord.created_at.desc()).limit(limit)
         result = await session.execute(query)
         return list(result.scalars().all())
 

@@ -354,3 +354,42 @@ def test_get_proposal_hides_unscoped_record(monkeypatch) -> None:
     response = asyncio.run(run_request())
 
     assert response.status_code == 404
+
+
+def test_list_recent_proposal_summaries_uses_configured_limit(monkeypatch) -> None:
+    """Verify recent proposal summaries use configured limit and omit answers."""
+    user_id = uuid.uuid4()
+    captured = {}
+    proposal = _proposal(answer="large markdown that should not be serialized")
+
+    async def fake_list_recent_summaries(session, **kwargs):
+        """Provide fake recent summaries."""
+        captured.update(kwargs)
+        return [proposal]
+
+    monkeypatch.setattr(ProductProposalRepository, "list_recent_summaries", fake_list_recent_summaries)
+    monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
+    monkeypatch.setattr(
+        "src.server.api.routes.product.get_settings",
+        lambda: SimpleNamespace(recent_proposal_summary_limit=3),
+    )
+
+    async def run_request() -> httpx.Response:
+        """Run the request test body."""
+        transport = httpx.ASGITransport(app=_build_app(user_id=user_id))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.get("/v1/product/proposals/recent-summaries?repo=owner/repo&project=nexus")
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 200
+    assert captured == {
+        "project": "nexus",
+        "repo": "owner/repo",
+        "workspaces": [SimpleNamespace(github_repo="owner/repo", project="nexus")],
+        "limit": 3,
+    }
+    payload = response.json()
+    assert payload[0]["title"] == "Add RAG capability"
+    assert payload[0]["summary"] == "Improve answer quality with retrieval."
+    assert "answer" not in payload[0]
