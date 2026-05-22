@@ -60,11 +60,13 @@ class ProductTools:
         database: Database,
         context: NexusTaskContext | None = None,
     ) -> None:
+        """Initialize the object."""
         self._database = database
         self._context = context
 
     @property
     def all_tools(self) -> dict[str, Callable]:
+        """Return all tools exposed by this toolkit."""
         return {
             "create_proposal": self.create_proposal,
             "create_feature_for_product_proposal": self.create_feature_for_product_proposal,
@@ -82,6 +84,7 @@ class ProductTools:
         project: str | None = None,
         repo: str | None = None,
     ) -> dict:
+        """Create a product proposal."""
         proposal_repo = repo
         if not proposal_repo and self._context and self._context.repo:
             proposal_repo = self._context.repo
@@ -117,6 +120,7 @@ class ProductTools:
         title: str,
         description: str,
     ) -> dict:
+        """Create a feature for a product proposal."""
         async with self._database.session() as session:
             proposal = await ProductProposalRepository.get(session, proposal_id)
             if proposal is None:
@@ -156,6 +160,7 @@ class ProductTools:
         title: str,
         description: str,
     ) -> dict:
+        """Create a feature item."""
         async with self._database.session() as session:
             feature = await FeatureRepository.get(session, feature_id)
             if feature is None:

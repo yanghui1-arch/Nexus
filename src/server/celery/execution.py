@@ -63,6 +63,7 @@ async def execute_agent_task(
     recovered: bool = False,
     dispatch_token: str | None = None,
 ) -> None:
+    """Execute an agent task by id."""
     cfg = settings or get_settings()
     database = Database(cfg.database_url)
     await database.connect()
@@ -74,6 +75,7 @@ async def execute_agent_task(
     task: TaskRecord | None = None
 
     def on_progress(status: WorkTempStatus) -> None:
+        """Persist progress emitted by the running agent."""
         if status["process"] != "SAVE_CHECKPOINT":
             return
 
@@ -98,6 +100,7 @@ async def execute_agent_task(
 
         async def _persist_checkpoint() -> None:
             # SAVE_CHECKPOINT marks a safe replay boundary for persistence.
+            """Persist a safe replay checkpoint."""
             async with database.session() as session:
                 await TaskRepository.update_checkpoint(
                     session,
@@ -114,6 +117,7 @@ async def execute_agent_task(
         pending_checkpoint_tasks.add(async_task)
 
         def _cleanup(done_task: asyncio.Task[Any]) -> None:
+            """Clean up workflow resources."""
             pending_checkpoint_tasks.discard(done_task)
             try:
                 # Surface background persistence exceptions into logs; the return value itself is irrelevant.
@@ -219,6 +223,7 @@ async def _run_agent_workflow(
     github_repo: str | None,
     recovered: bool,
 ):
+    """Run the end-to-end agent workflow."""
     if task.category == TaskCategory.coding:
         await _run_code_agent_workflow(
             database=database,
@@ -253,6 +258,7 @@ async def _run_code_agent_workflow(
     github_repo: str | None,
     recovered: bool,
 ):
+    """Run a code-agent task workflow."""
     nexus_context = NexusTaskContext(
         task_id=task.id,
         database=database,
@@ -387,6 +393,7 @@ async def _run_pm_agent_workflow(
     workspace_key: str,
     github_repo: str | None,
 ):
+    """Run a PM-agent planning workflow."""
     nexus_context = NexusTaskContext(
         task_id=task.id,
         database=database,
@@ -412,6 +419,7 @@ async def _run_pm_agent_workflow(
 
 
 def _all_work_items_review_ready(work_items: list[TaskWorkItemRecord]) -> bool:
+    """Return whether every work item is ready for review."""
     return bool(work_items) and all(
         work_item.status in _WORK_ITEM_REVIEW_READY_STATUSES
         for work_item in work_items
@@ -419,6 +427,7 @@ def _all_work_items_review_ready(work_items: list[TaskWorkItemRecord]) -> bool:
 
 
 def _is_final_executable_work_item(work_items: list[TaskWorkItemRecord], work_item_id: uuid.UUID) -> bool:
+    """Return whether a work item is the final executable item."""
     return all(
         work_item.id == work_item_id or work_item.status in _WORK_ITEM_REVIEW_READY_STATUSES
         for work_item in work_items
@@ -426,6 +435,7 @@ def _is_final_executable_work_item(work_items: list[TaskWorkItemRecord], work_it
 
 
 async def _claim_next_work_item(database: Database, task_id: uuid.UUID) -> TaskWorkItemRecord:
+    """Claim the next work item for execution."""
     async with database.session() as session:
         running_work_item = await TaskWorkItemRepository.get_running(session, task_id)
         if running_work_item is not None:
@@ -447,6 +457,7 @@ async def _run_agent(
     checkpoint: list[ChatCompletionMessageParam] | None = None,
     on_progress,
 ) -> BaseAgentResponse:
+    """Run an agent against a prompt."""
     work_kwargs = {
         "question": question,
         "update_process_callback": on_progress,
@@ -464,6 +475,7 @@ def _build_agent(
     workspace_key: str,
     github_repo: str | None,
 ) -> Agent:
+    """Create an agent instance for a task."""
     api_key = settings.api_key
     if not api_key:
         raise RuntimeError("NEXUS_API_KEY is required.")
@@ -514,6 +526,7 @@ def _build_work_item_prompt(
     *,
     is_final_work_item: bool = False,
 ) -> str:
+    """Build the prompt for a work item."""
     external_pr_instruction = (
         "This is the final executable work item. After committing the scoped changes, "
         "create or update exactly one real GitHub pull request for the accumulated "
@@ -531,6 +544,7 @@ def _build_work_item_prompt(
 
 
 async def _load_task(database: Database, task_id: uuid.UUID) -> TaskRecord:
+    """Load task data for execution."""
     async with database.session() as session:
         task = await TaskRepository.get(session, task_id)
     if task is None:
@@ -580,6 +594,7 @@ async def _claim_running(
     lease_seconds: int,
     expected_agent_instance_id: uuid.UUID,
 ) -> bool:
+    """Claim a task for execution."""
     async with database.session() as session:
         task = await TaskRepository.claim_dispatched_running(
             session,
@@ -608,6 +623,7 @@ async def _lease_heartbeat(
     lease_seconds: int,
     stop_event: asyncio.Event,
 ) -> None:
+    """Keep a running task lease alive."""
     interval_seconds = max(1, lease_seconds // 3)
 
     while not stop_event.is_set():
@@ -637,6 +653,7 @@ async def _extend_lease(
     dispatch_token: str,
     lease_seconds: int,
 ) -> bool:
+    """Extend a task execution lease."""
     async with database.session() as session:
         return await TaskRepository.extend_lease(
             session,
@@ -652,6 +669,7 @@ async def _mark_workspace_running(
     agent_instance_id: uuid.UUID,
 ) -> None:
     # Worker execution may update runtime status, but repo/project remain frontend-owned.
+    """Mark the task workspace as running."""
     async with database.session() as session:
         await WorkspaceRepository.set_running(
             session,
@@ -659,6 +677,7 @@ async def _mark_workspace_running(
         )
 
 async def _get_latest_checkpoint(database: Database, task_id: uuid.UUID) -> list[ChatCompletionMessageParam]:
+    """Return the latest checkpoint for a task."""
     task = await _load_task(database, task_id)
     return task.checkpoint if task.checkpoint is not None else []
 
@@ -686,6 +705,7 @@ async def _release_workspace(database: Database, agent_instance_id: uuid.UUID) -
 
 
 async def _mark_waiting_for_review(database: Database, task_id: uuid.UUID, result: str | None) -> None:
+    """Mark task execution as waiting for review."""
     async with database.session() as session:
         await TaskRepository.set_waiting_for_review(session, task_id, result=result)
         planning_run = await ProposalPlanningRunRepository.get_by_task_id(session, task_id)
@@ -711,6 +731,7 @@ async def _mark_post_execution_wait_state(
     task_id: uuid.UUID,
     result: str | None,
 ) -> None:
+    """Set the task wait state after execution."""
     async with database.session() as session:
         task = await TaskRepository.get(session, task_id)
         if task is None:
@@ -730,6 +751,7 @@ async def _claim_pending_github_feedback(
     *,
     limit: int,
 ) -> list[GithubPullRequestFeedbackRecord]:
+    """Claim pending GitHub feedback."""
     async with database.session() as session:
         return await GithubPullRequestFeedbackRepository.claim_pending_by_task(
             session,
@@ -742,6 +764,7 @@ async def _mark_github_feedback_processed(
     database: Database,
     feedback_items: list[GithubPullRequestFeedbackRecord],
 ) -> None:
+    """Mark GitHub feedback as processed."""
     async with database.session() as session:
         await GithubPullRequestFeedbackRepository.mark_processed(
             session,
@@ -753,6 +776,7 @@ async def _requeue_github_feedback(
     database: Database,
     feedback_items: list[GithubPullRequestFeedbackRecord],
 ) -> None:
+    """Requeue GitHub feedback for later processing."""
     async with database.session() as session:
         await GithubPullRequestFeedbackRepository.requeue_processing(
             session,
@@ -764,6 +788,7 @@ def _build_github_feedback_prompt(
     task: TaskRecord,
     feedback_items: list[GithubPullRequestFeedbackRecord],
 ) -> str:
+    """Build a prompt from GitHub feedback."""
     pull_number = feedback_items[0].pull_request_number
     lines = [
         "Continue the current task.",
@@ -807,6 +832,7 @@ def _build_github_feedback_prompt(
 
 
 def _format_github_feedback_message(item: GithubPullRequestFeedbackRecord) -> str:
+    """Format one GitHub feedback item."""
     reminder_parts = [
         "The following feedback was sent from GitHub",
         f"by `{item.author}`" if item.author else "by an unknown GitHub user",
@@ -819,6 +845,7 @@ def _format_github_feedback_message(item: GithubPullRequestFeedbackRecord) -> st
 
 
 async def _mark_failed(database: Database, task_id: uuid.UUID, error: str) -> None:
+    """Mark task execution as failed."""
     async with database.session() as session:
         task = await TaskRepository.set_failed(session, task_id, error=error)
         if task is None or task.category != TaskCategory.pm:

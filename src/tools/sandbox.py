@@ -78,40 +78,48 @@ class SandboxToolKit:
     """Binds a live Sandbox instance to agent-dispatchable callables."""
 
     def __init__(self, sandbox: Sandbox) -> None:
+        """Initialize the object."""
         self._sandbox = sandbox
 
     @track(step_type="tool")
     async def run_code(self, code: str) -> dict:
+        """Run Python code in the sandbox."""
         return await self._sandbox.run_code(code)
 
 
     @track(step_type="tool")
     async def run_shell(self, cmd: str) -> dict:
+        """Run a shell command in the sandbox."""
         return await self._sandbox.run_shell(cmd)
 
 
     @track(step_type="tool")
     async def create_file(self, path: str, content: str) -> dict:
+        """Create or replace a file in the sandbox."""
         return await self._sandbox.write_file(path, content)
 
 
     @track(step_type="tool")
     async def read_file(self, path: str) -> dict:
+        """Read a file from the sandbox."""
         return await self._sandbox.read_file(path)
 
 
     @track(step_type="tool")
     async def append_file(self, path: str, content: str) -> dict:
+        """Append content to a file in the sandbox."""
         return await self._sandbox.append_file(path, content)
 
 
     @track(step_type="tool")
     async def edit_file(self, path: str, old_str: str, new_str: str) -> dict:
+        """Edit a file in the sandbox."""
         return await self._sandbox.edit_file(path, old_str, new_str)
 
 
     @track(step_type="tool")
     async def list_files(self, path: str = "/workspace") -> dict:
+        """List files in the sandbox."""
         return await self._sandbox.list_files(path)
 
 

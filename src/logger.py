@@ -23,6 +23,7 @@ _RESET = "\033[0m"
 class _ColorFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         # Copy to avoid mutating the shared LogRecord seen by other handlers
+        """Format a log record."""
         copy = logging.makeLogRecord(record.__dict__)
         color = _LEVEL_COLORS.get(record.levelname, "")
         copy.levelname = f"{color}{record.levelname}{_RESET}"
@@ -30,6 +31,7 @@ class _ColorFormatter(logging.Formatter):
 
 
 def _build_handler() -> logging.StreamHandler:
+    """Build a configured log handler."""
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(_ColorFormatter(fmt=_FORMAT, datefmt=_DATE_FORMAT))
     return handler

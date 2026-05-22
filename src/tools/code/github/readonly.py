@@ -84,6 +84,7 @@ class GithubReadOnlyTools:
         default_repo_url: str | None = None,
         token: str | None = None,
     ) -> None:
+        """Initialize the object."""
         self.default_repo = _parse_github_repo(default_repo) or _parse_github_repo(default_repo_url)
         if not token:
             raise ValueError("GitHub token is required for GithubReadOnlyTools.")
@@ -91,6 +92,7 @@ class GithubReadOnlyTools:
 
     @property
     def all_tools(self) -> dict[str, Callable]:
+        """Return all tools exposed by this toolkit."""
         return {
             "ListGithubIssues": self.list_github_issues,
             "GetGithubIssue": self.get_github_issue,
@@ -111,6 +113,7 @@ class GithubReadOnlyTools:
         since: str | None = None,
         per_page: int = 30,
     ) -> dict[str, Any]:
+        """List GitHub issues."""
         resolved = self._resolve_repo(repo, repo_url)
         if not resolved["success"]:
             return resolved
@@ -143,6 +146,7 @@ class GithubReadOnlyTools:
         include_comments: bool = True,
         per_page: int = 100,
     ) -> dict[str, Any]:
+        """Fetch a GitHub issue."""
         resolved = self._resolve_repo(repo, repo_url)
         if not resolved["success"]:
             return resolved
@@ -179,6 +183,7 @@ class GithubReadOnlyTools:
         direction: str = "desc",
         per_page: int = 30,
     ) -> dict[str, Any]:
+        """List GitHub pull requests."""
         resolved = self._resolve_repo(repo, repo_url)
         if not resolved["success"]:
             return resolved
@@ -212,6 +217,7 @@ class GithubReadOnlyTools:
         include_checks: bool = True,
         per_page: int = 100,
     ) -> dict[str, Any]:
+        """Fetch a GitHub pull request."""
         resolved = self._resolve_repo(repo, repo_url)
         if not resolved["success"]:
             return resolved
@@ -261,6 +267,7 @@ class GithubReadOnlyTools:
         formatter: Callable[[dict[str, Any]], dict[str, Any]],
         per_page: int,
     ) -> None:
+        """Attach a list to a result when populated."""
         data = await self._get_paginated(url, params={"per_page": per_page})
         if data["success"]:
             result[key] = [formatter(item) for item in data["data"]]
@@ -269,6 +276,7 @@ class GithubReadOnlyTools:
             result[f"{key}_error"] = data["message"]
 
     async def _get_paginated(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Fetch paginated GitHub API results."""
         page = 1
         max_pages = 3
         collected: list[dict[str, Any]] = []
@@ -289,6 +297,7 @@ class GithubReadOnlyTools:
         return {"success": True, "data": collected, "truncated": True}
 
     async def _get(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Fetch one GitHub API endpoint."""
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(url, headers=_github_headers(self.token), params=params)
@@ -300,6 +309,7 @@ class GithubReadOnlyTools:
             return {"success": False, "message": str(exc), "data": None}
 
     def _resolve_repo(self, repo: str | None, repo_url: str | None) -> dict[str, Any]:
+        """Resolve the repository for a GitHub request."""
         resolved = _parse_github_repo(repo) or _parse_github_repo(repo_url) or self.default_repo
         if not resolved:
             return {"success": False, "message": "GitHub repository is required. Provide repo or repo_url."}
@@ -307,6 +317,7 @@ class GithubReadOnlyTools:
 
 
 def _github_headers(token: str | None) -> dict[str, str]:
+    """Build GitHub API headers for a token."""
     headers = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
@@ -317,6 +328,7 @@ def _github_headers(token: str | None) -> dict[str, str]:
 
 
 def _parse_github_repo(repo_url: str | None) -> str | None:
+    """Parse an owner/repo string."""
     if not repo_url:
         return None
     value = repo_url.strip()
@@ -334,6 +346,7 @@ def _parse_github_repo(repo_url: str | None) -> str | None:
 
 
 def _summarize_issue(issue: dict[str, Any]) -> dict[str, Any]:
+    """Build a compact issue summary."""
     return {
         "number": issue.get("number"),
         "title": issue.get("title"),
@@ -350,12 +363,14 @@ def _summarize_issue(issue: dict[str, Any]) -> dict[str, Any]:
 
 
 def _format_issue(issue: dict[str, Any]) -> dict[str, Any]:
+    """Format an issue for display."""
     summary = _summarize_issue(issue)
     summary["body"] = issue.get("body") or ""
     return summary
 
 
 def _summarize_pull_request(pr: dict[str, Any]) -> dict[str, Any]:
+    """Build a compact pull request summary."""
     return {
         "number": pr.get("number"),
         "title": pr.get("title"),
@@ -377,6 +392,7 @@ def _summarize_pull_request(pr: dict[str, Any]) -> dict[str, Any]:
 
 
 def _format_pull_request(pr: dict[str, Any]) -> dict[str, Any]:
+    """Format a pull request for display."""
     summary = _summarize_pull_request(pr)
     summary["body"] = pr.get("body") or ""
     summary["mergeable"] = pr.get("mergeable")
@@ -385,6 +401,7 @@ def _format_pull_request(pr: dict[str, Any]) -> dict[str, Any]:
 
 
 def _format_comment(comment: dict[str, Any]) -> dict[str, Any]:
+    """Format a GitHub comment for display."""
     return {
         "id": comment.get("id"),
         "author": comment.get("user", {}).get("login"),
@@ -396,6 +413,7 @@ def _format_comment(comment: dict[str, Any]) -> dict[str, Any]:
 
 
 def _format_review(review: dict[str, Any]) -> dict[str, Any]:
+    """Format a pull request review for display."""
     return {
         "id": review.get("id"),
         "author": review.get("user", {}).get("login"),
@@ -407,6 +425,7 @@ def _format_review(review: dict[str, Any]) -> dict[str, Any]:
 
 
 def _format_review_comment(comment: dict[str, Any]) -> dict[str, Any]:
+    """Format a review comment for display."""
     return {
         "id": comment.get("id"),
         "author": comment.get("user", {}).get("login"),
@@ -422,6 +441,7 @@ def _format_review_comment(comment: dict[str, Any]) -> dict[str, Any]:
 
 
 def _format_changed_file(file: dict[str, Any]) -> dict[str, Any]:
+    """Format a changed file entry."""
     return {
         "filename": file.get("filename"),
         "status": file.get("status"),
@@ -433,6 +453,7 @@ def _format_changed_file(file: dict[str, Any]) -> dict[str, Any]:
 
 
 def _format_commit(commit: dict[str, Any]) -> dict[str, Any]:
+    """Format a commit entry."""
     inner = commit.get("commit", {})
     return {
         "sha": commit.get("sha"),
@@ -443,6 +464,7 @@ def _format_commit(commit: dict[str, Any]) -> dict[str, Any]:
 
 
 def _format_check_run(check: dict[str, Any]) -> dict[str, Any]:
+    """Format a check run entry."""
     return {
         "name": check.get("name"),
         "status": check.get("status"),
@@ -454,6 +476,7 @@ def _format_check_run(check: dict[str, Any]) -> dict[str, Any]:
 
 
 def _format_status(status: dict[str, Any]) -> dict[str, Any]:
+    """Format a commit status entry."""
     return {
         "context": status.get("context"),
         "state": status.get("state"),
@@ -465,11 +488,13 @@ def _format_status(status: dict[str, Any]) -> dict[str, Any]:
 
 
 def _preview(text: str | None, limit: int = 300) -> str:
+    """Return a shortened text preview."""
     value = (text or "").strip()
     return value[:limit]
 
 
 def _github_error_message(exc: httpx.HTTPStatusError) -> str:
+    """Extract a readable GitHub error message."""
     try:
         detail = exc.response.json().get("message", exc.response.text)
     except Exception:
@@ -493,4 +518,5 @@ def _github_error_message(exc: httpx.HTTPStatusError) -> str:
 
 
 def _clamp(value: int, lower: int, upper: int) -> int:
+    """Clamp a numeric value between bounds."""
     return max(lower, min(value, upper))
