@@ -7,7 +7,7 @@ from src.logger import logger
 from src.server.config import Settings
 from src.server.postgres.database import Database
 from src.server.postgres.models import AgentName
-from src.server.postgres.repositories import AgentInstanceRepository, WorkspaceRepository
+from src.server.postgres.repositories import AgentInstanceRepository, TaskRepository, WorkspaceRepository
 from src.server.runner import AgentTaskRunner
 from src.server.schemas import AgentKind, TaskCreateRequest
 
@@ -60,6 +60,13 @@ class ProductDiscoveryPoller:
                 limit=self._settings.product_discovery_poll_task_limit,
             )
 
+        if len(candidates) >= self._settings.product_discovery_poll_task_limit:
+            logger.info(
+                "Product discovery candidate list reached pending limit: pending_count=%s limit=%s.",
+                len(candidates),
+                self._settings.product_discovery_poll_task_limit,
+            )
+
         dispatched_count = 0
         for instance in candidates:
             if self._stop_event.is_set():
@@ -73,16 +80,50 @@ class ProductDiscoveryPoller:
                         session,
                         instance.id,
                     )
+                    pending_count = await TaskRepository.count_active_pm_tasks(
+                        session,
+                        agent_instance_id=instance.id,
+                    )
                 if workspace is None:
                     logger.warning(
-                        "Skip product discovery for agent instance %s because workspace is missing.",
+                        "Skipped product discovery candidate: agent_instance_id=%s workspace_id=%s repo=%s project=%s reason=%s pending_count=%s cooldown_last_used_at=%s cooldown_updated_at=%s cooldown_interval_seconds=%s.",
                         instance.id,
+                        None,
+                        None,
+                        None,
+                        "missing_workspace",
+                        pending_count,
+                        None,
+                        None,
+                        self._settings.product_discovery_poll_interval_seconds,
                     )
                     continue
-                if not workspace.project:
-                    logger.warning(
-                        "Skip product discovery for agent instance %s because workspace project is missing.",
+                if pending_count > 0:
+                    logger.info(
+                        "Skipped product discovery candidate: agent_instance_id=%s workspace_id=%s repo=%s project=%s reason=%s pending_count=%s cooldown_last_used_at=%s cooldown_updated_at=%s cooldown_interval_seconds=%s.",
                         instance.id,
+                        workspace.id,
+                        workspace.github_repo,
+                        workspace.project,
+                        "cooldown_active_task",
+                        pending_count,
+                        workspace.last_used_at,
+                        workspace.updated_at,
+                        self._settings.product_discovery_poll_interval_seconds,
+                    )
+                    continue
+                if not workspace.github_repo or not workspace.project:
+                    logger.warning(
+                        "Skipped product discovery candidate: agent_instance_id=%s workspace_id=%s repo=%s project=%s reason=%s pending_count=%s cooldown_last_used_at=%s cooldown_updated_at=%s cooldown_interval_seconds=%s.",
+                        instance.id,
+                        workspace.id,
+                        workspace.github_repo,
+                        workspace.project,
+                        "missing_context",
+                        pending_count,
+                        workspace.last_used_at,
+                        workspace.updated_at,
+                        self._settings.product_discovery_poll_interval_seconds,
                     )
                     continue
 
@@ -104,9 +145,17 @@ class ProductDiscoveryPoller:
 
             dispatched_count += 1
             logger.info(
-                "Queued product discovery task %s for agent instance %s.",
-                task_id,
+                "Dispatched product discovery candidate: agent_instance_id=%s workspace_id=%s repo=%s project=%s reason=%s pending_count=%s cooldown_last_used_at=%s cooldown_updated_at=%s cooldown_interval_seconds=%s task_id=%s.",
                 instance.id,
+                workspace.id,
+                workspace.github_repo,
+                workspace.project,
+                "dispatch",
+                pending_count,
+                workspace.last_used_at,
+                workspace.updated_at,
+                self._settings.product_discovery_poll_interval_seconds,
+                task_id,
             )
 
         return dispatched_count

@@ -996,6 +996,21 @@ class TaskRepository:
         return list(result.scalars().all())
 
     @staticmethod
+    async def count_active_pm_tasks(
+        session: AsyncSession,
+        *,
+        agent_instance_id: uuid.UUID,
+    ) -> int:
+        """Count active product discovery tasks for an agent instance."""
+        query = select(func.count(TaskRecord.id)).where(
+            TaskRecord.agent_instance_id == agent_instance_id,
+            TaskRecord.category == TaskCategory.pm,
+            TaskRecord.status.in_([TaskStatus.queued, TaskStatus.running]),
+        )
+        result = await session.execute(query)
+        return int(result.scalar_one())
+
+    @staticmethod
     async def list_external_pull_request_candidates(
         session: AsyncSession,
         *,
