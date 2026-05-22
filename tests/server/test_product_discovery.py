@@ -3,12 +3,23 @@ from __future__ import annotations
 import asyncio
 import uuid
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from src.server.product_discovery import ProductDiscoveryPoller
+from src.server.product_discovery import (
+    ProductDiscoveryPoller,
+    ProductDiscoveryProposalMetrics,
+    decide_product_discovery_dispatch,
+)
 from src.server.postgres.models import AgentName, TaskCategory, TaskRecord, TaskStatus
-from src.server.postgres.repositories import AgentInstanceRepository, UserRepository, WorkspaceRepository
+from src.server.postgres.repositories import (
+    AgentInstanceRepository,
+    ProductProposalRepository,
+    TaskRepository,
+    UserRepository,
+    WorkspaceRepository,
+)
 
 
 class FakeDatabase:
@@ -38,6 +49,71 @@ def _settings(**overrides):
     }
     values.update(overrides)
     return SimpleNamespace(**values)
+
+
+def _metrics(**overrides):
+    values = {
+        "pending_proposal_count": 0,
+        "pending_proposal_limit": 3,
+        "cooldown_seconds": 3600,
+        "latest_discovery_or_proposal_at": None,
+    }
+    values.update(overrides)
+    return ProductDiscoveryProposalMetrics(**values)
+
+
+def test_decision_skips_when_pending_proposal_limit_reached():
+    candidate = SimpleNamespace(id=uuid.uuid4())
+    workspace = SimpleNamespace(github_repo="owner/repo", project="nexus")
+
+    decision = decide_product_discovery_dispatch(
+        candidate=candidate,
+        workspace=workspace,
+        metrics=_metrics(pending_proposal_count=3),
+    )
+
+    assert decision.action == "skip"
+    assert decision.reason.code == "pending_proposal_limit_reached"
+    assert decision.reason.details["pending_proposal_count"] == 3
+
+
+def test_decision_skips_when_cooldown_is_active():
+    now = datetime(2025, 1, 1, tzinfo=UTC)
+    candidate = SimpleNamespace(id=uuid.uuid4())
+    workspace = SimpleNamespace(github_repo="owner/repo", project="nexus")
+
+    decision = decide_product_discovery_dispatch(
+        candidate=candidate,
+        workspace=workspace,
+        metrics=_metrics(latest_discovery_or_proposal_at=now - timedelta(minutes=10)),
+        now=now,
+    )
+
+    assert decision.action == "skip"
+    assert decision.reason.code == "cooldown_active"
+
+
+def test_decision_skips_when_context_is_missing():
+    candidate = SimpleNamespace(id=uuid.uuid4())
+
+    decision = decide_product_discovery_dispatch(
+        candidate=candidate,
+        workspace=SimpleNamespace(github_repo="owner/repo", project=None),
+        metrics=_metrics(),
+    )
+
+    assert decision.action == "skip"
+    assert decision.reason.code == "missing_workspace_context"
+
+
+def test_decision_allows_dispatch():
+    candidate = SimpleNamespace(id=uuid.uuid4())
+    workspace = SimpleNamespace(github_repo="owner/repo", project="nexus")
+
+    decision = decide_product_discovery_dispatch(candidate=candidate, workspace=workspace, metrics=_metrics())
+
+    assert decision.action == "dispatch"
+    assert decision.reason.code == "dispatch_allowed"
 
 
 def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):

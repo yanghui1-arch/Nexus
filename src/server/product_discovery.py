@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from typing import Any, Literal
 
 from src.logger import logger
 from src.server.config import Settings
@@ -13,6 +15,90 @@ from src.server.schemas import AgentKind, TaskCreateRequest
 
 
 PRODUCT_DISCOVERY_AGENT_NAMES = {AgentName.marc}
+
+ProductDiscoveryAction = Literal["dispatch", "skip"]
+
+
+@dataclass(frozen=True)
+class ProductDiscoveryDecisionReason:
+    code: str
+    message: str
+    details: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ProductDiscoveryDecision:
+    action: ProductDiscoveryAction
+    reason: ProductDiscoveryDecisionReason
+
+
+@dataclass(frozen=True)
+class ProductDiscoveryProposalMetrics:
+    pending_proposal_count: int
+    pending_proposal_limit: int
+    cooldown_seconds: int
+    latest_discovery_or_proposal_at: datetime | None = None
+
+
+def decide_product_discovery_dispatch(
+    *,
+    candidate: Any,
+    workspace: Any | None,
+    metrics: ProductDiscoveryProposalMetrics,
+    now: datetime | None = None,
+) -> ProductDiscoveryDecision:
+    """Decide whether a product discovery candidate should be dispatched."""
+    candidate_id = getattr(candidate, "id", None)
+    if workspace is None:
+        return _skip("missing_workspace", "Workspace context is missing.", candidate_id=candidate_id)
+
+    repo = getattr(workspace, "github_repo", None)
+    project = getattr(workspace, "project", None)
+    if not repo or not project:
+        return _skip(
+            "missing_workspace_context",
+            "Workspace repository or project context is missing.",
+            candidate_id=candidate_id,
+            repo=repo,
+            project=project,
+        )
+
+    if metrics.pending_proposal_count >= metrics.pending_proposal_limit:
+        return _skip(
+            "pending_proposal_limit_reached",
+            "Pending product proposal limit has been reached.",
+            pending_proposal_count=metrics.pending_proposal_count,
+            pending_proposal_limit=metrics.pending_proposal_limit,
+            repo=repo,
+            project=project,
+        )
+
+    if metrics.latest_discovery_or_proposal_at is not None and metrics.cooldown_seconds > 0:
+        current_time = now or datetime.now(UTC)
+        cooldown_until = metrics.latest_discovery_or_proposal_at + timedelta(seconds=metrics.cooldown_seconds)
+        if current_time < cooldown_until:
+            return _skip(
+                "cooldown_active",
+                "Recent product discovery or proposal is still within cooldown.",
+                latest_discovery_or_proposal_at=metrics.latest_discovery_or_proposal_at.isoformat(),
+                cooldown_until=cooldown_until.isoformat(),
+                repo=repo,
+                project=project,
+            )
+
+    return ProductDiscoveryDecision(
+        action="dispatch",
+        reason=ProductDiscoveryDecisionReason(
+            "dispatch_allowed",
+            "Product discovery dispatch is allowed.",
+            {"candidate_id": str(candidate_id), "repo": repo, "project": project},
+        ),
+    )
+
+
+def _skip(code: str, message: str, **details: Any) -> ProductDiscoveryDecision:
+    return ProductDiscoveryDecision("skip", ProductDiscoveryDecisionReason(code, message, details))
+
 
 
 class ProductDiscoveryPoller:
