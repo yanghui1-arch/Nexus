@@ -8,13 +8,19 @@ from typing import Any, Literal
 from src.logger import logger
 from src.server.config import Settings
 from src.server.postgres.database import Database
-from src.server.postgres.models import AgentName
-from src.server.postgres.repositories import AgentInstanceRepository, WorkspaceRepository
+from src.server.postgres.models import AgentName, ProductProposalStatus, TaskCategory
+from src.server.postgres.repositories import (
+    AgentInstanceRepository,
+    ProductProposalRepository,
+    TaskRepository,
+    WorkspaceRepository,
+)
 from src.server.runner import AgentTaskRunner
 from src.server.schemas import AgentKind, TaskCreateRequest
 
 
 PRODUCT_DISCOVERY_AGENT_NAMES = {AgentName.marc}
+PENDING_PROPOSAL_LIMIT = 3
 
 ProductDiscoveryAction = Literal["dispatch", "skip"]
 
@@ -100,7 +106,6 @@ def _skip(code: str, message: str, **details: Any) -> ProductDiscoveryDecision:
     return ProductDiscoveryDecision("skip", ProductDiscoveryDecisionReason(code, message, details))
 
 
-
 class ProductDiscoveryPoller:
     def __init__(
         self,
@@ -155,20 +160,19 @@ class ProductDiscoveryPoller:
 
             try:
                 async with self._database.session() as session:
-                    workspace = await WorkspaceRepository.get_by_agent_instance_id(
-                        session,
+                    workspace = await WorkspaceRepository.get_by_agent_instance_id(session, instance.id)
+                    metrics = await self._proposal_metrics(session, workspace)
+
+                decision = decide_product_discovery_dispatch(
+                    candidate=instance,
+                    workspace=workspace,
+                    metrics=metrics,
+                )
+                if decision.action == "skip":
+                    logger.info(
+                        "Skip product discovery for agent instance %s: %s",
                         instance.id,
-                    )
-                if workspace is None:
-                    logger.warning(
-                        "Skip product discovery for agent instance %s because workspace is missing.",
-                        instance.id,
-                    )
-                    continue
-                if not workspace.project:
-                    logger.warning(
-                        "Skip product discovery for agent instance %s because workspace project is missing.",
-                        instance.id,
+                        decision.reason,
                     )
                     continue
 
@@ -196,6 +200,29 @@ class ProductDiscoveryPoller:
             )
 
         return dispatched_count
+
+    async def _proposal_metrics(self, session: Any, workspace: Any | None) -> ProductDiscoveryProposalMetrics:
+        """Build proposal metrics for a workspace."""
+        interval = self._settings.product_discovery_poll_interval_seconds
+        if workspace is None or not getattr(workspace, "github_repo", None) or not getattr(workspace, "project", None):
+            return ProductDiscoveryProposalMetrics(0, PENDING_PROPOSAL_LIMIT, interval)
+
+        proposals = await ProductProposalRepository.list(session, repo=workspace.github_repo, project=workspace.project)
+        pending_count = sum(
+            proposal.status in {ProductProposalStatus.proposed, ProductProposalStatus.approved, ProductProposalStatus.planned}
+            for proposal in proposals
+        )
+        latest_at = max((proposal.created_at for proposal in proposals), default=None)
+        tasks = await TaskRepository.list(
+            session,
+            category=TaskCategory.pm,
+            repo=workspace.github_repo,
+            project=workspace.project,
+            limit=1,
+        )
+        if tasks:
+            latest_at = tasks[0].created_at if latest_at is None else max(latest_at, tasks[0].created_at)
+        return ProductDiscoveryProposalMetrics(pending_count, PENDING_PROPOSAL_LIMIT, interval, latest_at)
 
     async def _run_loop(self) -> None:
         """Run the background polling loop."""

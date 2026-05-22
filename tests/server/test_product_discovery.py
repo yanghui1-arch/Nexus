@@ -131,8 +131,18 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
         """Provide a fake workspace."""
         return SimpleNamespace(github_repo="owner/repo", project="nexus")
 
+    async def fake_proposals(session, **filters):
+        """Provide no existing proposals."""
+        return []
+
+    async def fake_tasks(session, **filters):
+        """Provide no existing discovery tasks."""
+        return []
+
     monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
     monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
+    monkeypatch.setattr(ProductProposalRepository, "list", fake_proposals)
+    monkeypatch.setattr(TaskRepository, "list", fake_tasks)
 
     poller = ProductDiscoveryPoller(
         settings=_settings(),
@@ -197,8 +207,18 @@ def test_poll_once_continues_after_submit_failure(monkeypatch):
 
     runner = FakeRunner()
     runner.submit_task = AsyncMock(side_effect=fake_submit)
+    async def fake_proposals(session, **filters):
+        """Provide no existing proposals."""
+        return []
+
+    async def fake_tasks(session, **filters):
+        """Provide no existing discovery tasks."""
+        return []
+
     monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
     monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
+    monkeypatch.setattr(ProductProposalRepository, "list", fake_proposals)
+    monkeypatch.setattr(TaskRepository, "list", fake_tasks)
 
     poller = ProductDiscoveryPoller(
         settings=_settings(),
