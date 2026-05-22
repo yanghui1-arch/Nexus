@@ -236,3 +236,100 @@ async def test_product_discovery_candidates_block_running_pm_tasks(db_session):
     candidates = await AgentInstanceRepository.list_product_discovery_candidates(db_session)
 
     assert candidates == []
+
+
+def test_poll_once_logs_skip_and_dispatch_reasons(monkeypatch, caplog):
+    """Verify product discovery decisions include observable safe log fields."""
+    missing_context = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc)
+    cooldown = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc)
+    dispatch = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc)
+    workspace_id = uuid.uuid4()
+
+    async def fake_list(session, *, limit):
+        """Provide a fake list at the configured limit."""
+        return [missing_context, cooldown, dispatch]
+
+    async def fake_workspace(session, agent_instance_id):
+        """Provide workspace context for candidates."""
+        if agent_instance_id == missing_context.id:
+            return SimpleNamespace(
+                id=workspace_id,
+                github_repo=None,
+                project="nexus",
+                last_used_at="2026-01-01T00:00:00+00:00",
+                updated_at="2026-01-01T00:00:00+00:00",
+            )
+        return SimpleNamespace(
+            id=workspace_id,
+            github_repo="owner/repo",
+            project="nexus",
+            last_used_at="2026-01-01T00:00:00+00:00",
+            updated_at="2026-01-01T00:05:00+00:00",
+        )
+
+    async def fake_pending_count(session, *, agent_instance_id):
+        """Provide pending counts."""
+        return 1 if agent_instance_id == cooldown.id else 0
+
+    monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
+    monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
+    monkeypatch.setattr(TaskRepository, "count_active_pm_tasks", fake_pending_count)
+
+    poller = ProductDiscoveryPoller(
+        settings=_settings(product_discovery_poll_task_limit=3),
+        database=FakeDatabase(),
+        runner=FakeRunner(),
+    )
+
+    caplog.set_level("INFO", logger="nexus")
+    logger = __import__("src.logger", fromlist=["logger"]).logger
+    previous_propagate = logger.propagate
+    logger.propagate = True
+    try:
+        result = asyncio.run(poller.poll_once())
+    finally:
+        logger.propagate = previous_propagate
+
+    assert result == 1
+    logs = "\n".join(record.getMessage() for record in caplog.records)
+    assert "pending limit" in logs
+    assert "reason=missing_context" in logs
+    assert "reason=cooldown_active_task" in logs
+    assert "reason=dispatch" in logs
+    assert "repo=owner/repo" in logs
+    assert "project=nexus" in logs
+    assert "pending_count=1" in logs
+    assert "cooldown_last_used_at=2026-01-01T00:00:00+00:00" in logs
+    assert "proposal answer" not in logs.lower()
+    assert "token" not in logs.lower()
+
+
+def test_product_discovery_count_active_pm_tasks(db_session):
+    """Verify active PM tasks are counted for cooldown logging."""
+    async def run():
+        user = await UserRepository.upsert_github_user(
+            db_session, github_id="discovery-count", github_login="marc-count", email=None
+        )
+        instance = await AgentInstanceRepository.create(
+            db_session,
+            agent=AgentName.marc,
+            client_id="marc-count",
+            display_name="Marc Count",
+            user_id=user.id,
+        )
+        db_session.add(
+            TaskRecord(
+                agent=AgentName.marc,
+                agent_instance_id=instance.id,
+                category=TaskCategory.pm,
+                question="产品提案",
+                status=TaskStatus.queued,
+            )
+        )
+        await db_session.commit()
+
+        count = await TaskRepository.count_active_pm_tasks(db_session, agent_instance_id=instance.id)
+
+        assert count == 1
+
+    asyncio.run(run())
