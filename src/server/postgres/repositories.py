@@ -414,6 +414,35 @@ class ProductProposalRepository:
         return list(result.scalars().all())
 
     @staticmethod
+    async def count_pending_for_workspace(
+        session: AsyncSession,
+        *,
+        workspace: WorkspaceRecord,
+    ) -> int:
+        """Count proposed proposals that exactly match a workspace's repo/project."""
+        return await ProductProposalRepository.count_pending(
+            session,
+            repo=workspace.github_repo,
+            project=workspace.project,
+        )
+
+    @staticmethod
+    async def count_pending(
+        session: AsyncSession,
+        *,
+        repo: str | None,
+        project: str | None,
+    ) -> int:
+        """Count proposals still pending human review for an exact repo/project pair."""
+        query = select(func.count(ProductProposalRecord.id)).where(
+            ProductProposalRecord.status == ProductProposalStatus.proposed,
+            ProductProposalRecord.repo == repo,
+            ProductProposalRecord.project == project,
+        )
+        result = await session.execute(query)
+        return int(result.scalar_one())
+
+    @staticmethod
     async def set_status(
         session: AsyncSession,
         proposal_id: uuid.UUID,
