@@ -16,13 +16,6 @@ import {
 import { useAppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import {
-  Card,
-  CardAction,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import {
   EmptyPanel,
   LoadingPanel,
 } from './components/FeedbackPanels';
@@ -289,35 +282,31 @@ export default function ProductResearchPage() {
     <section className="flex flex-col gap-6">
       {viewMode === 'proposals' ? (
         <div className="flex flex-col gap-4">
-          <Card className="border-primary/20 bg-primary/5">
-            <CardHeader className="gap-3 md:grid-cols-[1fr_auto]">
+          <section className="border-y border-primary/20 bg-primary/5 px-4 py-4">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="space-y-2">
-                <CardTitle>{t('productResearch.approvalInboxTitle')}</CardTitle>
+                <h2 className="font-semibold">{t('productResearch.approvalInboxTitle')}</h2>
                 <p className="text-muted-foreground text-sm">
                   {t('productResearch.approvalInboxDescription', {
                     count: proposalSummaryCounts.proposed,
                   })}
                 </p>
               </div>
-              <CardAction className="col-auto row-auto self-center justify-self-start md:col-start-2 md:row-span-2 md:row-start-1 md:justify-self-end">
-                <Button onClick={handleReviewPendingProposals}>
-                  {t('productResearch.reviewPendingProposals')}
-                </Button>
-              </CardAction>
-            </CardHeader>
-            <CardContent>
-              <dl className="grid gap-3 sm:grid-cols-4">
-                {approvalInboxStats.map(({ key, value }) => (
-                  <div key={key} className="rounded-lg border bg-background/80 p-3">
-                    <dt className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
-                      {t(`productResearch.approvalInbox.${key}`)}
-                    </dt>
-                    <dd className="mt-1 text-2xl font-semibold">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </CardContent>
-          </Card>
+              <Button className="self-start md:self-center" onClick={handleReviewPendingProposals}>
+                {t('productResearch.reviewPendingProposals')}
+              </Button>
+            </div>
+            <dl className="mt-4 grid gap-3 sm:grid-cols-4">
+              {approvalInboxStats.map(({ key, value }) => (
+                <div key={key} className="border-l border-primary/30 pl-3">
+                  <dt className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                    {t(`productResearch.approvalInbox.${key}`)}
+                  </dt>
+                  <dd className="mt-1 text-2xl font-semibold">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
 
           <ProposalFilters
             proposalFilter={proposalFilter}
