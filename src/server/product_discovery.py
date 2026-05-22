@@ -6,13 +6,15 @@ from typing import Any
 from src.logger import logger
 from src.server.config import Settings
 from src.server.postgres.database import Database
-from src.server.postgres.models import AgentName
-from src.server.postgres.repositories import AgentInstanceRepository, WorkspaceRepository
+from src.server.postgres.models import AgentName, ProductProposalStatus
+from src.server.postgres.repositories import AgentInstanceRepository, ProductProposalRepository, WorkspaceRepository
 from src.server.runner import AgentTaskRunner
 from src.server.schemas import AgentKind, TaskCreateRequest
 
 
 PRODUCT_DISCOVERY_AGENT_NAMES = {AgentName.marc}
+PENDING_PROPOSAL_LIMIT = 3
+PENDING_LIMIT_SKIP_REASON = "pending_proposal_limit_reached"
 
 
 class ProductDiscoveryPoller:
@@ -73,18 +75,25 @@ class ProductDiscoveryPoller:
                         session,
                         instance.id,
                     )
-                if workspace is None:
-                    logger.warning(
-                        "Skip product discovery for agent instance %s because workspace is missing.",
-                        instance.id,
-                    )
-                    continue
-                if not workspace.project:
-                    logger.warning(
-                        "Skip product discovery for agent instance %s because workspace project is missing.",
-                        instance.id,
-                    )
-                    continue
+                    if workspace is None:
+                        logger.warning(
+                            "Skip product discovery for agent instance %s because workspace is missing.",
+                            instance.id,
+                        )
+                        continue
+                    if not workspace.project:
+                        logger.warning(
+                            "Skip product discovery for agent instance %s because workspace project is missing.",
+                            instance.id,
+                        )
+                        continue
+                    if await self._pending_proposal_limit_reached(session, workspace):
+                        logger.info(
+                            "Skip product discovery for agent instance %s: %s",
+                            instance.id,
+                            PENDING_LIMIT_SKIP_REASON,
+                        )
+                        continue
 
                 task_id = await self._runner.submit_task(
                     TaskCreateRequest(
@@ -110,6 +119,18 @@ class ProductDiscoveryPoller:
             )
 
         return dispatched_count
+
+    async def _pending_proposal_limit_reached(self, session: Any, workspace: Any) -> bool:
+        """Return whether a workspace has too many pending proposals."""
+        limit = getattr(self._settings, "product_discovery_pending_proposal_limit", PENDING_PROPOSAL_LIMIT)
+        proposals = await ProductProposalRepository.list(
+            session,
+            status=ProductProposalStatus.proposed,
+            repo=workspace.github_repo,
+            project=workspace.project,
+            limit=limit,
+        )
+        return len(proposals) >= limit
 
     async def _run_loop(self) -> None:
         """Run the background polling loop."""
