@@ -3,12 +3,19 @@ from __future__ import annotations
 import asyncio
 import uuid
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from src.server.product_discovery import ProductDiscoveryPoller
 from src.server.postgres.models import AgentName, TaskCategory, TaskRecord, TaskStatus
-from src.server.postgres.repositories import AgentInstanceRepository, UserRepository, WorkspaceRepository
+from src.server.postgres.repositories import (
+    AgentInstanceRepository,
+    ProductProposalRepository,
+    TaskRepository,
+    UserRepository,
+    WorkspaceRepository,
+)
 
 
 class FakeDatabase:
@@ -40,6 +47,17 @@ def _settings(**overrides):
     return SimpleNamespace(**values)
 
 
+def _patch_no_discovery_history(monkeypatch):
+    """Provide empty proposal and discovery-task history."""
+    async def fake_proposals(session, **filters):
+        return []
+
+    async def fake_tasks(session, **filters):
+        return []
+
+    monkeypatch.setattr(ProductProposalRepository, "list", fake_proposals)
+    monkeypatch.setattr(TaskRepository, "list", fake_tasks)
+
 def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
     """Verify poll once dispatches only dispatchable instances."""
     candidate = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc)
@@ -57,6 +75,7 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
 
     monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
     monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
+    _patch_no_discovery_history(monkeypatch)
 
     poller = ProductDiscoveryPoller(
         settings=_settings(),
@@ -123,6 +142,7 @@ def test_poll_once_continues_after_submit_failure(monkeypatch):
     runner.submit_task = AsyncMock(side_effect=fake_submit)
     monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
     monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
+    _patch_no_discovery_history(monkeypatch)
 
     poller = ProductDiscoveryPoller(
         settings=_settings(),
@@ -136,6 +156,82 @@ def test_poll_once_continues_after_submit_failure(monkeypatch):
     assert calls == [20]
     assert runner.submit_task.await_count == 2
 
+
+def test_poll_once_skips_recent_discovery_inside_cooldown(monkeypatch):
+    """Verify recent discovery activity suppresses a new discovery task."""
+    candidate = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc)
+    recent = datetime.now(UTC) - timedelta(minutes=10)
+
+    async def fake_list(session, *, limit):
+        return [candidate]
+
+    async def fake_workspace(session, agent_instance_id):
+        return SimpleNamespace(github_repo="owner/repo", project="nexus")
+
+    async def fake_proposals(session, **filters):
+        return []
+
+    async def fake_tasks(session, **filters):
+        return [SimpleNamespace(created_at=recent)]
+
+    runner = FakeRunner()
+    monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
+    monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
+    monkeypatch.setattr(ProductProposalRepository, "list", fake_proposals)
+    monkeypatch.setattr(TaskRepository, "list", fake_tasks)
+
+    result = asyncio.run(ProductDiscoveryPoller(settings=_settings(), database=FakeDatabase(), runner=runner).poll_once())
+
+    assert result == 0
+    runner.submit_task.assert_not_awaited()
+
+def test_poll_once_allows_old_proposal_outside_cooldown(monkeypatch):
+    """Verify old proposal activity outside cooldown allows discovery."""
+    candidate = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc)
+    old = datetime.now(UTC) - timedelta(hours=2)
+
+    async def fake_list(session, *, limit):
+        return [candidate]
+
+    async def fake_workspace(session, agent_instance_id):
+        return SimpleNamespace(github_repo="owner/repo", project="nexus")
+
+    async def fake_proposals(session, **filters):
+        return [SimpleNamespace(created_at=old)]
+
+    async def fake_tasks(session, **filters):
+        return []
+
+    runner = FakeRunner()
+    monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
+    monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
+    monkeypatch.setattr(ProductProposalRepository, "list", fake_proposals)
+    monkeypatch.setattr(TaskRepository, "list", fake_tasks)
+
+    result = asyncio.run(ProductDiscoveryPoller(settings=_settings(), database=FakeDatabase(), runner=runner).poll_once())
+
+    assert result == 1
+    runner.submit_task.assert_awaited_once()
+
+def test_poll_once_allows_discovery_without_history(monkeypatch):
+    """Verify missing discovery/proposal history allows discovery."""
+    candidate = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc)
+
+    async def fake_list(session, *, limit):
+        return [candidate]
+
+    async def fake_workspace(session, agent_instance_id):
+        return SimpleNamespace(github_repo="owner/repo", project="nexus")
+
+    runner = FakeRunner()
+    monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
+    monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
+    _patch_no_discovery_history(monkeypatch)
+
+    result = asyncio.run(ProductDiscoveryPoller(settings=_settings(), database=FakeDatabase(), runner=runner).poll_once())
+
+    assert result == 1
+    runner.submit_task.assert_awaited_once()
 
 def test_product_discovery_poller_start_and_stop(monkeypatch):
     """Verify product discovery poller start and stop."""
