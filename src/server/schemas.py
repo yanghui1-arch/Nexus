@@ -117,6 +117,7 @@ class ProductProposalResponse(BaseModel):
     status: ProductProposalStatus
     source_task_id: uuid.UUID | None
     latest_planning_run: ProposalPlanningRunResponse | None = None
+    latest_planning_task_exists: bool | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -126,6 +127,7 @@ class ProductProposalResponse(BaseModel):
         proposal: ProductProposalRecord,
         *,
         latest_planning_run: ProposalPlanningRunRecord | None = None,
+        latest_planning_task_exists: bool | None = None,
     ) -> "ProductProposalResponse":
         return cls(
             id=proposal.id,
@@ -140,6 +142,7 @@ class ProductProposalResponse(BaseModel):
             latest_planning_run=ProposalPlanningRunResponse.from_record(latest_planning_run)
             if latest_planning_run is not None
             else None,
+            latest_planning_task_exists=latest_planning_task_exists,
             created_at=proposal.created_at,
             updated_at=proposal.updated_at,
         )
