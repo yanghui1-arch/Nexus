@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { ApiProductProposal } from '@/api/types';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import {
   Table,
   TableBody,
@@ -47,7 +48,22 @@ export function ProposalTable({ page, pageCount, proposals, totalCount, onSelect
           {proposals.map(proposal => {
             const statusMeta = PROPOSAL_STATUS_META[proposal.status];
             return (
-              <TableRow key={proposal.id} tabIndex={0} className={TABLE_ROW_CLASS} onClick={() => onSelect(proposal.id)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(proposal.id); } }}>
+              <TableRow
+                key={proposal.id}
+                tabIndex={0}
+                className={cn(
+                  TABLE_ROW_CLASS,
+                  proposal.status === 'proposed' &&
+                    'bg-amber-50/70 hover:bg-amber-100/70 focus-visible:bg-amber-100/70',
+                )}
+                onClick={() => onSelect(proposal.id)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onSelect(proposal.id);
+                  }
+                }}
+              >
                 <TableCell>
                   <div className="flex min-w-0 flex-col gap-1">
                     <Link to={`/product-research/proposals/${proposal.id}`} className="truncate font-medium text-black hover:underline" onClick={event => event.stopPropagation()}>{proposal.title}</Link>

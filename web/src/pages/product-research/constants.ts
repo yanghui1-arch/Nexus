@@ -36,9 +36,9 @@ export const PROPOSAL_STATUS_META: Record<
   StatusBadgeMeta
 > = {
   proposed: {
-    label: 'Pending Review',
+    label: 'Needs review',
     variant: 'outline',
-    className: 'border-black bg-black text-white hover:bg-black',
+    className: 'border-amber-400 bg-amber-100 text-amber-950 hover:bg-amber-100',
   },
   approved: {
     label: 'Approved',

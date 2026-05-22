@@ -13,6 +13,13 @@ import { updateProductProposalStatus } from '@/api/product';
 import { useAppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
   EmptyPanel,
   LoadingPanel,
 } from './components/FeedbackPanels';
@@ -50,7 +57,6 @@ export default function ProductResearchPage() {
   const { features, isLoading, loadError, proposals, reloadSnapshot } =
     useProductResearchSnapshot();
   const [proposalFilter, setProposalFilter] = useState<ProposalFilter>('accepted');
-  const proposalFilterSelectedRef = useRef(false);
   const [proposalProjectFilter, setProposalProjectFilter] =
     useState<string>(ALL_PROJECTS);
   const [featureProjectFilter, setFeatureProjectFilter] =
@@ -62,6 +68,13 @@ export default function ProductResearchPage() {
   const isFeatureRoute = location.pathname.startsWith('/product-research/features');
   const viewMode = isFeatureRoute ? 'features' : 'proposals';
   const proposalCounts = getProposalReviewCounts(proposals);
+  const proposalFilterSelectedRef = useRef(false);
+
+  function handleReviewPendingProposals(): void {
+    setProposalFilter('proposed');
+    setProposalPage(1);
+    navigate('/product-research', { replace: true });
+  }
 
   const statusFilteredProposals = proposals.filter(proposal => {
     if (proposalFilter === 'all') {
@@ -88,6 +101,12 @@ export default function ProductResearchPage() {
   const proposalPageCount = getPageCount(filteredProposals.length);
   const activeProposalPage = Math.min(proposalPage, proposalPageCount);
   const visibleProposals = getVisiblePage(filteredProposals, activeProposalPage);
+  const approvalInboxStats = [
+    { key: 'pending', value: proposalCounts.proposed },
+    { key: 'accepted', value: proposalCounts.accepted },
+    { key: 'rejected', value: proposalCounts.rejected },
+    { key: 'total', value: proposalCounts.all },
+  ];
 
   const trackedFeatures = (() => {
     const activeFeatures = features.filter(feature => feature.status !== 'closed');
@@ -111,6 +130,7 @@ export default function ProductResearchPage() {
     ? features.filter(feature => feature.proposal_id === proposalId)
     : [];
   const selectedFeature = features.find(feature => feature.id === featureId) ?? null;
+
 
   useEffect(() => {
     if (proposalFilterSelectedRef.current || proposalId) {
@@ -143,6 +163,7 @@ export default function ProductResearchPage() {
     }
 
     if (proposalId && selectedProposal?.status === 'proposed') {
+      proposalFilterSelectedRef.current = true;
       setProposalFilter('proposed');
     }
   }, [proposalId, selectedProposal, viewMode]);
@@ -167,9 +188,6 @@ export default function ProductResearchPage() {
       await updateProductProposalStatus(currentProposalId, { status });
       toast.success(
         status === 'approved' ? t('productResearch.requirementApproved') : t('productResearch.requirementRejected'),
-        status === 'approved'
-          ? { description: t('productResearch.requirementApprovedDescription') }
-          : undefined,
       );
       await reloadSnapshot('mutation');
       setProposalFilter(status === 'approved' ? 'accepted' : 'rejected');
@@ -243,25 +261,41 @@ export default function ProductResearchPage() {
     <section className="flex flex-col gap-6">
       {viewMode === 'proposals' ? (
         <div className="flex flex-col gap-4">
-          <div className="rounded-[28px] border border-black/10 bg-white p-5 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-black/45">
-              {t('productResearch.pendingReviewKicker')}
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-black">
-              {t('productResearch.pendingReviewTitle', {
-                count: proposalCounts.proposed,
-              })}
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm text-black/60">
-              {t('productResearch.pendingReviewDescription')}
-            </p>
-          </div>
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader className="gap-3 md:grid-cols-[1fr_auto]">
+              <div className="space-y-2">
+                <CardTitle>{t('productResearch.approvalInboxTitle')}</CardTitle>
+                <p className="text-muted-foreground text-sm">
+                  {t('productResearch.approvalInboxDescription', {
+                    count: proposalCounts.proposed,
+                  })}
+                </p>
+              </div>
+              <CardAction className="col-auto row-auto self-center justify-self-start md:col-start-2 md:row-span-2 md:row-start-1 md:justify-self-end">
+                <Button onClick={handleReviewPendingProposals}>
+                  {t('productResearch.reviewPendingProposals')}
+                </Button>
+              </CardAction>
+            </CardHeader>
+            <CardContent>
+              <dl className="grid gap-3 sm:grid-cols-4">
+                {approvalInboxStats.map(({ key, value }) => (
+                  <div key={key} className="rounded-lg border bg-background/80 p-3">
+                    <dt className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                      {t(`productResearch.approvalInbox.${key}`)}
+                    </dt>
+                    <dd className="mt-1 text-2xl font-semibold">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </CardContent>
+          </Card>
 
           <ProposalFilters
-            proposalCounts={proposalCounts}
             proposalFilter={proposalFilter}
             projectFilter={activeProposalProjectFilter}
             projectOptions={proposalProjectOptions}
+            proposalCounts={proposalCounts}
             onProposalFilterChange={filter => {
               proposalFilterSelectedRef.current = true;
               setProposalFilter(filter);
