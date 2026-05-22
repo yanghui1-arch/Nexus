@@ -42,6 +42,8 @@ class Settings:
     product_discovery_poll_task_limit: int
     product_discovery_recent_proposal_limit: int
     product_discovery_pending_proposal_limit: int
+    product_discovery_cooldown_seconds: int
+    product_discovery_recent_context_limit: int
 
 
 @lru_cache(maxsize=1)
@@ -118,6 +120,12 @@ def get_settings() -> Settings:
             os.getenv("NEXUS_PRODUCT_DISCOVERY_RECENT_PROPOSAL_LIMIT", "5"),
         ),
         product_discovery_pending_proposal_limit=int(
-            os.getenv("NEXUS_PRODUCT_DISCOVERY_PENDING_PROPOSAL_LIMIT", "50"),
+            os.getenv("NEXUS_PRODUCT_DISCOVERY_PENDING_PROPOSAL_LIMIT", "3"),
+        ),
+        product_discovery_cooldown_seconds=int(
+            os.getenv("NEXUS_PRODUCT_DISCOVERY_COOLDOWN_SECONDS", "86400"),
+        ),
+        product_discovery_recent_context_limit=int(
+            os.getenv("NEXUS_PRODUCT_DISCOVERY_RECENT_CONTEXT_LIMIT", "5"),
         ),
     )
