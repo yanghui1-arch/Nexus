@@ -36,6 +36,7 @@ def make_tela(**kwargs) -> Tela:
 
 
 def make_pool_manager(mock_sandbox):
+    """Create a mocked sandbox pool manager."""
     pool_manager = AsyncMock()
     pool_manager.acquire = AsyncMock(return_value=mock_sandbox)
     pool_manager.release = AsyncMock(return_value=None)
@@ -45,6 +46,7 @@ def make_pool_manager(mock_sandbox):
 def make_stop_response(content: str = "done"):
     """Build a minimal streaming response that stops."""
     async def _stream():
+        """Yield mocked streaming completion chunks."""
         delta = SimpleNamespace(content=content, tool_calls=None, reasoning_content=None)
         choice = SimpleNamespace(finish_reason="stop", delta=delta)
         chunk = SimpleNamespace(choices=[choice], usage=SimpleNamespace(total_tokens=42))
@@ -55,6 +57,7 @@ def make_stop_response(content: str = "done"):
 def make_tool_response(name: str, args: str, call_id: str = "c1"):
     """Build a streaming response that requests one tool call."""
     async def _stream():
+        """Yield mocked streaming completion chunks."""
         tc_delta = MagicMock()
         tc_delta.index = 0
         tc_delta.id = call_id
@@ -68,6 +71,7 @@ def make_tool_response(name: str, args: str, call_id: str = "c1"):
 
 class TestContextManager:
     async def test_enter_starts_sandbox(self):
+        """Verify enter starts sandbox."""
         tela = make_tela()
         mock_sandbox = AsyncMock()
         mock_sandbox._workdir = "/tmp/nexus_test"
@@ -81,6 +85,7 @@ class TestContextManager:
 
 
     async def test_exit_stops_sandbox(self):
+        """Verify exit stops sandbox."""
         tela = make_tela()
         mock_sandbox = AsyncMock()
         mock_sandbox._workdir = "/tmp/nexus_test"
@@ -95,6 +100,7 @@ class TestContextManager:
 
 
     async def test_tool_kits_populated_after_enter(self):
+        """Verify tool kits populated after enter."""
         tela = make_tela()
         mock_sandbox = AsyncMock()
         mock_sandbox._workdir = "/tmp/nexus_test"
@@ -110,11 +116,13 @@ class TestContextManager:
 
 
     async def test_step_raises_without_context_manager(self):
+        """Verify step raises without context manager."""
         tela = make_tela()
         with pytest.raises(RuntimeError, match="async context manager"):
             await tela.step([])
 
     async def test_enter_forks_when_not_exists(self):
+        """Verify enter forks when not exists."""
         tela = make_tela(github_repo="owner/repo", github_token="ghp_test")
         mock_sandbox = AsyncMock()
 
@@ -139,6 +147,7 @@ class TestContextManager:
         assert "owner/repo/forks" in post_url
 
     async def test_enter_skips_fork_creation_when_exists(self):
+        """Verify enter skips fork creation when exists."""
         tela = make_tela(github_repo="owner/repo", github_token="ghp_test")
         mock_sandbox = AsyncMock()
 
@@ -160,6 +169,7 @@ class TestContextManager:
 
 class TestStep:
     async def test_stop_result_parsed_correctly(self):
+        """Verify stop result parsed correctly."""
         tela = make_tela()
         mock_sandbox = AsyncMock()
         mock_sandbox._workdir = "/tmp/nexus_test"
@@ -175,6 +185,7 @@ class TestStep:
 
 
     async def test_tool_call_result_parsed_correctly(self):
+        """Verify tool call result parsed correctly."""
         tela = make_tela()
         mock_sandbox = AsyncMock()
         mock_sandbox._workdir = "/tmp/nexus_test"
@@ -192,6 +203,7 @@ class TestStep:
 
 
     async def test_all_tools_passed_to_openai(self):
+        """Verify all tools passed to openai."""
         from src.agents.tela.agent import _ALL_TOOL_DEFINITIONS
 
         tela = make_tela()
@@ -212,11 +224,13 @@ class TestGithubTools:
     """GithubTools runs git operations inside the sandbox container."""
 
     def _make_kit(self) -> GithubTools:
+        """Create a GitHub toolkit for tests."""
         sandbox = AsyncMock()
         sandbox.run_shell = AsyncMock(return_value={"success": True, "stdout": "", "stderr": ""})
         return GithubTools(sandbox)
 
     async def test_fetch_clones_when_no_git_dir(self):
+        """Verify fetch clones when no git dir."""
         sandbox = AsyncMock()
         sandbox.run_shell = AsyncMock(side_effect=[
             {"success": True, "stdout": "new", "stderr": ""},   # test -d .git
@@ -233,6 +247,7 @@ class TestGithubTools:
         assert "/workspace/myproject" in clone_call
 
     async def test_fetch_pulls_when_already_cloned(self):
+        """Verify fetch pulls when already cloned."""
         sandbox = AsyncMock()
         sandbox.recreate = AsyncMock()
         sandbox.run_shell = AsyncMock(side_effect=[
@@ -251,6 +266,7 @@ class TestGithubTools:
         sandbox.recreate.assert_not_awaited()
 
     async def test_fetch_sets_upstream_remote_after_clone(self):
+        """Verify fetch sets upstream remote after clone."""
         sandbox = AsyncMock()
         sandbox.run_shell = AsyncMock(side_effect=[
             {"success": True, "stdout": "new", "stderr": ""},   # test -d .git
@@ -271,6 +287,7 @@ class TestGithubTools:
         assert "fetch upstream main" in sync_call
 
     async def test_fetch_syncs_main_with_upstream_when_already_cloned(self):
+        """Verify fetch syncs main with upstream when already cloned."""
         sandbox = AsyncMock()
         sandbox.recreate = AsyncMock()
         sandbox.run_shell = AsyncMock(side_effect=[
@@ -295,6 +312,7 @@ class TestGithubTools:
         sandbox.recreate.assert_not_awaited()
 
     async def test_fetch_syncs_main_with_upstream_after_clone(self):
+        """Verify fetch syncs main with upstream after clone."""
         sandbox = AsyncMock()
         sandbox.run_shell = AsyncMock(side_effect=[
             {"success": True, "stdout": "new", "stderr": ""},   # test -d .git
@@ -318,6 +336,7 @@ class TestGithubTools:
         assert "fetch upstream main" in sync_call
 
     async def test_fetch_uses_repo_url_as_given(self):
+        """Verify fetch uses repo url as given."""
         sandbox = AsyncMock()
         sandbox.run_shell = AsyncMock(side_effect=[
             {"success": True, "stdout": "new", "stderr": ""},
@@ -333,6 +352,7 @@ class TestGithubTools:
         assert authenticated_url in clone_call
 
     async def test_fetch_recreates_sandbox_when_origin_remote_missing(self):
+        """Verify fetch recreates sandbox when origin remote missing."""
         sandbox = AsyncMock()
         sandbox.recreate = AsyncMock()
         sandbox.run_shell = AsyncMock(side_effect=[
@@ -352,6 +372,7 @@ class TestGithubTools:
         assert "git clone" in clone_call
 
     async def test_fetch_recreates_sandbox_when_origin_remote_mismatched(self):
+        """Verify fetch recreates sandbox when origin remote mismatched."""
         sandbox = AsyncMock()
         sandbox.recreate = AsyncMock()
         sandbox.run_shell = AsyncMock(side_effect=[
@@ -371,6 +392,7 @@ class TestGithubTools:
         assert "git clone" in clone_call
 
     async def test_pr_pushes_via_sandbox(self):
+        """Verify pr pushes via sandbox."""
         sandbox = AsyncMock()
         sandbox.run_shell = AsyncMock(return_value={"success": True, "stdout": "", "stderr": ""})
         kit = GithubTools(sandbox)
@@ -393,12 +415,14 @@ class TestGithubTools:
         assert "git" in push_cmd and "push" in push_cmd and "feature" in push_cmd
 
     async def test_pr_appends_closes_issues(self):
+        """Verify pr appends closes issues."""
         sandbox = AsyncMock()
         sandbox.run_shell = AsyncMock(return_value={"success": True, "stdout": "", "stderr": ""})
         kit = GithubTools(sandbox)
         captured_body: list[str] = []
         with patch("src.tools.code.github.client.httpx.AsyncClient") as mock_client_cls:
             async def fake_post(*args, **kwargs):
+                """Record a fake pull request creation request."""
                 captured_body.append(kwargs["json"]["body"])
                 resp = MagicMock()
                 resp.json.return_value = {"html_url": "url", "number": 2}
@@ -423,6 +447,7 @@ class TestGithubTools:
 
 class TestReport:
     def test_last_report_returns_last_assistant_content(self):
+        """Verify last report returns last assistant content."""
         tela = make_tela()
         ctx = [
             {"role": "system", "content": "sys"},
@@ -434,6 +459,7 @@ class TestReport:
 
 
     def test_last_report_fallback_when_no_assistant(self):
+        """Verify last report fallback when no assistant."""
         tela = make_tela()
         ctx = [{"role": "system", "content": "sys"}, {"role": "user", "content": "q"}]
         result = tela.last_report_current_process(ctx)
@@ -443,6 +469,7 @@ class TestReport:
 @pytest.mark.asyncio
 class TestCompact:
     async def test_single_turn_is_unchanged(self):
+        """Verify single turn is unchanged."""
         tela = make_tela()
         ctx = [
             {"role": "system", "content": "sys"},
@@ -452,6 +479,7 @@ class TestCompact:
         assert await tela.compact(ctx) == ctx
 
     async def test_compact_uses_shared_base_behavior(self):
+        """Verify compact uses shared base behavior."""
         tela = make_tela()
         completion = MagicMock()
         completion.choices = [MagicMock(message=MagicMock(content="Earlier work"))]
@@ -476,6 +504,7 @@ class TestCompact:
 
 class TestFactory:
     def test_create_sets_correct_defaults(self):
+        """Verify create sets correct defaults."""
         with patch("src.agents.base.agent.AsyncOpenAI"):
             tela = Tela.create(
                 base_url="http://x",
@@ -492,6 +521,7 @@ class TestFactory:
 
 
     def test_create_accepts_overrides(self):
+        """Verify create accepts overrides."""
         with patch("src.agents.base.agent.AsyncOpenAI"):
             tela = Tela.create(
                 base_url="http://x",

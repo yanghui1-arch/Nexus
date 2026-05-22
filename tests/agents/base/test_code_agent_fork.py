@@ -11,13 +11,16 @@ class DummyCodeAgent(CodeAgent):
     GITHUB_NICKNAME = "Nexus-Test"
 
     def step(self, current_turn_ctx: list) -> BaseAgentStepResult:
+        """Return the next queued test step."""
         raise NotImplementedError("unused in these tests")
 
     def last_report_current_process(self, current_turn_ctx: list) -> str:
+        """Return a test progress report."""
         return "unused"
 
 
 def make_agent() -> DummyCodeAgent:
+    """Create a test agent instance."""
     with patch("src.agents.base.agent.AsyncOpenAI"):
         return DummyCodeAgent(
             name="dummy-code-agent",
@@ -31,12 +34,14 @@ def make_agent() -> DummyCodeAgent:
 
 
 def make_response(status_code: int, payload: dict | None = None, text: str = "error"):
+    """Create a mocked HTTP response."""
     response = MagicMock(status_code=status_code, text=text)
     response.json = MagicMock(return_value=payload or {})
     return response
 
 
 def make_mock_http_client(mock_client_cls, *, get_responses: list[MagicMock], post_response=None):
+    """Create a mocked HTTP client."""
     mock_http = AsyncMock()
     mock_http.get = AsyncMock(side_effect=get_responses)
     mock_http.post = AsyncMock(return_value=post_response or make_response(202, text="accepted"))
@@ -46,6 +51,7 @@ def make_mock_http_client(mock_client_cls, *, get_responses: list[MagicMock], po
 
 
 def test_ensure_fork_checks_repo_endpoint_without_pinning_api_version():
+    """Verify ensure fork checks repo endpoint without pinning api version."""
     agent = make_agent()
 
     with patch("src.agents.base.code_agent.httpx.AsyncClient") as mock_client_cls:
@@ -71,6 +77,7 @@ def test_ensure_fork_checks_repo_endpoint_without_pinning_api_version():
 
 
 def test_ensure_fork_creates_when_missing_and_waits_until_ready():
+    """Verify ensure fork creates when missing and waits until ready."""
     agent = make_agent()
 
     with patch("src.agents.base.code_agent.httpx.AsyncClient") as mock_client_cls:
@@ -102,6 +109,7 @@ def test_ensure_fork_creates_when_missing_and_waits_until_ready():
 
 
 def test_ensure_fork_skips_creation_when_exists():
+    """Verify ensure fork skips creation when exists."""
     agent = make_agent()
 
     with patch("src.agents.base.code_agent.httpx.AsyncClient") as mock_client_cls:
@@ -120,6 +128,7 @@ def test_ensure_fork_skips_creation_when_exists():
 
 
 def test_ensure_fork_rejects_repo_that_points_to_different_upstream():
+    """Verify ensure fork rejects repo that points to different upstream."""
     agent = make_agent()
 
     with patch("src.agents.base.code_agent.httpx.AsyncClient") as mock_client_cls:
@@ -138,6 +147,7 @@ def test_ensure_fork_rejects_repo_that_points_to_different_upstream():
 
 
 def test_ensure_fork_times_out_when_github_never_exposes_the_fork():
+    """Verify ensure fork times out when github never exposes the fork."""
     agent = make_agent()
     original_timeout = DummyCodeAgent.FORK_READY_TIMEOUT_SECONDS
     DummyCodeAgent.FORK_READY_TIMEOUT_SECONDS = 0

@@ -37,6 +37,7 @@ FORBIDDEN_MUTATING_TOOLS = {
 
 
 def make_marc() -> Marc:
+    """Create a Marc test instance."""
     return Marc.create(
         base_url="https://api.example.com/v1",
         api_key="api-key",
@@ -49,13 +50,16 @@ def make_marc() -> Marc:
 
 
 def _tool_name(definition) -> str:
+    """Return a tool definition name."""
     if isinstance(definition, dict):
         return definition["function"]["name"]
     return definition["function"]["name"]
 
 
 def test_marc_tool_kits_are_read_only():
+    """Verify marc tool kits are read only."""
     async def run():
+        """Run the async test body."""
         sandbox = SimpleNamespace(
             run_code=AsyncMock(),
             run_shell=AsyncMock(),
@@ -76,6 +80,7 @@ def test_marc_tool_kits_are_read_only():
 
 
 def test_marc_tool_definitions_include_only_expected_read_only_tools():
+    """Verify marc tool definitions include only expected read only tools."""
     tool_names = {_tool_name(definition) for definition in _ALL_TOOL_DEFINITIONS}
 
     assert tool_names == EXPECTED_TOOLS
@@ -84,11 +89,14 @@ def test_marc_tool_definitions_include_only_expected_read_only_tools():
 
 
 def test_marc_step_passes_read_only_tools_to_openai():
+    """Verify marc step passes read only tools to openai."""
     async def run():
+        """Run the async test body."""
         marc = make_marc()
         marc._sandbox = SimpleNamespace()
 
         async def fake_stream():
+            """Return a fake stream completion result."""
             yield SimpleNamespace(
                 choices=[SimpleNamespace(
                     finish_reason="stop",

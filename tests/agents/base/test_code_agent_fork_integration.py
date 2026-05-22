@@ -12,13 +12,16 @@ from src.agents.base.code_agent import CodeAgent
 
 class LiveCodeAgent(CodeAgent):
     def step(self, current_turn_ctx: list) -> BaseAgentStepResult:
+        """Return the next queued test step."""
         raise NotImplementedError("unused in these tests")
 
     def last_report_current_process(self, current_turn_ctx: list) -> str:
+        """Return a test progress report."""
         return "unused"
 
 
 def make_agent(nickname: str) -> LiveCodeAgent:
+    """Create a test agent instance."""
     LiveCodeAgent.GITHUB_NICKNAME = nickname
     with patch("src.agents.base.agent.AsyncOpenAI"):
         return LiveCodeAgent(
@@ -34,6 +37,7 @@ def make_agent(nickname: str) -> LiveCodeAgent:
 
 @pytest.mark.integration
 async def test_ensure_fork_makes_real_fork_reachable_over_git():
+    """Verify ensure fork makes real fork reachable over git."""
     token = os.getenv("NEXUS_GITHUB_FORK_TEST_TOKEN")
     upstream_repo = os.getenv("NEXUS_GITHUB_FORK_TEST_UPSTREAM_REPO")
     nickname = os.getenv("NEXUS_GITHUB_FORK_TEST_NICKNAME")

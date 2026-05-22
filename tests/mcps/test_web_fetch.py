@@ -30,6 +30,7 @@ def _make_mocks(content_text: str | None):
 def patch_mcp():
     """Patch both MCP transport and session."""
     def _patch(content_text: str | None):
+        """Patch the web fetch MCP client."""
         mock_stdio_cm, mock_session_cm, mock_session = _make_mocks(content_text)
         stdio_patch = patch("src.mcps.web_fetch.stdio_client", return_value=mock_stdio_cm)
         session_patch = patch("src.mcps.web_fetch.ClientSession", return_value=mock_session_cm)
@@ -38,6 +39,7 @@ def patch_mcp():
 
 
 async def test_successful_fetch(patch_mcp):
+    """Verify successful fetch."""
     stdio_patch, session_patch, mock_session = patch_mcp("# Hello\nThis is the page content.")
 
     with stdio_patch, session_patch:
@@ -49,6 +51,7 @@ async def test_successful_fetch(patch_mcp):
 
 
 async def test_passes_arguments_to_mcp(patch_mcp):
+    """Verify passes arguments to mcp."""
     stdio_patch, session_patch, mock_session = patch_mcp("content")
 
     with stdio_patch, session_patch:
@@ -61,6 +64,7 @@ async def test_passes_arguments_to_mcp(patch_mcp):
 
 
 async def test_empty_content_returns_failure(patch_mcp):
+    """Verify empty content returns failure."""
     stdio_patch, session_patch, _ = patch_mcp(None)
 
     with stdio_patch, session_patch:
@@ -72,6 +76,7 @@ async def test_empty_content_returns_failure(patch_mcp):
 
 
 async def test_mcp_exception_returns_failure():
+    """Verify mcp exception returns failure."""
     with patch("src.mcps.web_fetch.stdio_client", side_effect=Exception("server crashed")):
         result = await web_fetch("https://example.com")
 
@@ -81,6 +86,7 @@ async def test_mcp_exception_returns_failure():
 
 
 async def test_default_arguments(patch_mcp):
+    """Verify default arguments."""
     stdio_patch, session_patch, mock_session = patch_mcp("content")
 
     with stdio_patch, session_patch:

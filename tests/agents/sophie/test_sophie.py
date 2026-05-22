@@ -14,6 +14,7 @@ from src.sandbox import PYTHON_312
 
 
 def make_pool_manager(mock_sandbox):
+    """Create a mocked sandbox pool manager."""
     pool_manager = AsyncMock()
     pool_manager.acquire = AsyncMock(return_value=mock_sandbox)
     pool_manager.release = AsyncMock(return_value=None)
@@ -157,6 +158,7 @@ class TestSophieCompact:
     """Test Sophie inherits the shared compact behavior."""
 
     async def test_compact_single_turn_is_unchanged(self):
+        """Verify compact single turn is unchanged."""
         with patch("src.agents.base.agent.AsyncOpenAI"):
             sophie = Sophie.create(
                 base_url="https://api.openai.com/v1",
@@ -175,6 +177,7 @@ class TestSophieCompact:
         assert await sophie.compact(context) == context
 
     async def test_compact_summarizes_previous_work(self):
+        """Verify compact summarizes previous work."""
         with patch("src.agents.base.agent.AsyncOpenAI"):
             sophie = Sophie.create(
                 base_url="https://api.openai.com/v1",
