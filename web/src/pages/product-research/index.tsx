@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useState } from 'react';
+import { startTransition, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Link,
@@ -50,6 +50,7 @@ export default function ProductResearchPage() {
   const { features, isLoading, loadError, proposals, reloadSnapshot } =
     useProductResearchSnapshot();
   const [proposalFilter, setProposalFilter] = useState<ProposalFilter>('accepted');
+  const proposalFilterSelectedRef = useRef(false);
   const [proposalProjectFilter, setProposalProjectFilter] =
     useState<string>(ALL_PROJECTS);
   const [featureProjectFilter, setFeatureProjectFilter] =
@@ -110,6 +111,16 @@ export default function ProductResearchPage() {
     ? features.filter(feature => feature.proposal_id === proposalId)
     : [];
   const selectedFeature = features.find(feature => feature.id === featureId) ?? null;
+
+  useEffect(() => {
+    if (proposalFilterSelectedRef.current || proposalId) {
+      return;
+    }
+
+    if (proposals.some(proposal => proposal.status === 'proposed')) {
+      setProposalFilter('proposed');
+    }
+  }, [proposalId, proposals]);
 
   useEffect(() => {
     if (viewMode !== 'proposals') {
@@ -251,7 +262,10 @@ export default function ProductResearchPage() {
             proposalFilter={proposalFilter}
             projectFilter={activeProposalProjectFilter}
             projectOptions={proposalProjectOptions}
-            onProposalFilterChange={setProposalFilter}
+            onProposalFilterChange={filter => {
+              proposalFilterSelectedRef.current = true;
+              setProposalFilter(filter);
+            }}
             onProjectFilterChange={setProposalProjectFilter}
           />
 
