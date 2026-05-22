@@ -6,13 +6,43 @@ from typing import Any
 from src.logger import logger
 from src.server.config import Settings
 from src.server.postgres.database import Database
-from src.server.postgres.models import AgentName
-from src.server.postgres.repositories import AgentInstanceRepository, WorkspaceRepository
+from src.server.postgres.models import AgentName, ProductProposalStatus
+from src.server.postgres.repositories import AgentInstanceRepository, ProductProposalRepository, WorkspaceRepository
 from src.server.runner import AgentTaskRunner
 from src.server.schemas import AgentKind, TaskCreateRequest
 
 
 PRODUCT_DISCOVERY_AGENT_NAMES = {AgentName.marc}
+RECENT_PROPOSAL_PROMPT_LIMIT = 5
+
+
+def build_product_discovery_prompt(
+    *,
+    project: str,
+    repo: str | None,
+    pending_proposal_count: int,
+    recent_proposals: list[Any],
+) -> str:
+    """Build the product discovery task prompt."""
+    repo_context = repo or "未配置"
+    recent_lines = []
+    for proposal in recent_proposals[:RECENT_PROPOSAL_PROMPT_LIMIT]:
+        status = getattr(proposal, "status", "unknown")
+        status_value = getattr(status, "value", str(status))
+        recent_lines.append(f"- {proposal.title} ({status_value})")
+    recent_summary = "\n".join(recent_lines) if recent_lines else "- 暂无近期 proposal"
+
+    return (
+        "优化产品并提出一个proposal\n\n"
+        "中文产品发现任务目标：结合当前项目上下文、代码库事实和用户价值，发现一个高价值产品改进机会，"
+        "并创建清晰、可评审的 proposal。\n"
+        f"项目上下文：project={project}; repo={repo_context}\n"
+        f"待处理 proposal 数量：{pending_proposal_count}\n"
+        "近期 proposal（标题/状态）：\n"
+        f"{recent_summary}\n"
+        "避免重复：不要创建与近期 proposal 标题、目标或范围重复的 proposal；"
+        "如主题相近，请明确差异化价值和边界。"
+    )
 
 
 class ProductDiscoveryPoller:
@@ -86,11 +116,31 @@ class ProductDiscoveryPoller:
                     )
                     continue
 
+                async with self._database.session() as session:
+                    recent_proposals = await ProductProposalRepository.list(
+                        session,
+                        project=workspace.project,
+                        repo=workspace.github_repo,
+                        limit=RECENT_PROPOSAL_PROMPT_LIMIT,
+                    )
+                    pending_proposals = await ProductProposalRepository.list(
+                        session,
+                        status=ProductProposalStatus.proposed,
+                        project=workspace.project,
+                        repo=workspace.github_repo,
+                        limit=200,
+                    )
+
                 task_id = await self._runner.submit_task(
                     TaskCreateRequest(
                         agent_instance_id=instance.id,
                         agent=AgentKind(instance.agent.value),
-                        question="优化产品并提出一个proposal",
+                        question=build_product_discovery_prompt(
+                            project=workspace.project,
+                            repo=workspace.github_repo,
+                            pending_proposal_count=len(pending_proposals),
+                            recent_proposals=recent_proposals,
+                        ),
                         external_issue_url=None,
                     )
                 )
