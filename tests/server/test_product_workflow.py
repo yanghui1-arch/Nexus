@@ -14,15 +14,18 @@ from src.server.product_workflow import ProductWorkflowPoller
 class FakeDatabase:
     @asynccontextmanager
     async def session(self):
+        """Return a fake database session."""
         yield object()
 
 
 class FakeRunner:
     def __init__(self):
+        """Initialize the test helper."""
         self.submit_task = AsyncMock(return_value="coding-task-id")
 
 
 def _settings(**overrides):
+    """Create test settings."""
     values = {
         "product_discovery_poll_interval_seconds": 60,
     }
@@ -31,6 +34,7 @@ def _settings(**overrides):
 
 
 def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
+    """Verify poll once publishes one feature item to tela."""
     item = SimpleNamespace(id="feature-item-id", title="Knowledge base", description="Add search.")
     feature = SimpleNamespace(project="nexus")
     proposal = SimpleNamespace(repo="owner/repo", project="nexus")
@@ -41,10 +45,12 @@ def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
     calls = {"item": 0}
 
     async def fake_next_item(session):
+        """Provide a fake next item."""
         calls["item"] += 1
         return item if calls["item"] == 1 else None
 
     async def fake_list_agents(session, *, agent, github_repo, project, limit):
+        """Provide a fake list agents."""
         captured["agent"] = agent
         captured["github_repo"] = github_repo
         captured["project"] = project
@@ -52,14 +58,17 @@ def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
         return [tela]
 
     async def fake_get_feature(session, item_id):
+        """Provide a fake get feature."""
         captured["feature_item_id"] = item_id
         return feature
 
     async def fake_get_proposal(session, item_id):
+        """Provide a fake get proposal."""
         captured["proposal_item_id"] = item_id
         return proposal
 
     async def fake_assign(session, item_id, *, task_id):
+        """Provide a fake assign."""
         captured["assign"] = (item_id, task_id)
         return item
 
@@ -92,7 +101,9 @@ def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
 
 
 def test_poll_once_skips_when_no_feature_item(monkeypatch):
+    """Verify poll once skips when no feature item."""
     async def fake_next_item(session):
+        """Provide a fake next item."""
         return None
 
     runner = FakeRunner()

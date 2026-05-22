@@ -25,10 +25,12 @@ from src.server.postgres.repositories import (
 
 class FakeDatabase:
     def __init__(self, session_obj: object | None = None) -> None:
+        """Initialize the test helper."""
         self._session_obj = session_obj if session_obj is not None else SimpleNamespace(commit=AsyncMock())
 
     @asynccontextmanager
     async def session(self):
+        """Return a fake database session."""
         yield self._session_obj
 
 
@@ -37,6 +39,7 @@ def _build_app(
     runner: object | None = None,
     user_id: uuid.UUID | None = None,
 ) -> FastAPI:
+    """Build a FastAPI app for route tests."""
     app = FastAPI()
     app.state.database = FakeDatabase(session_obj)
     app.state.runner = runner or SimpleNamespace()
@@ -46,6 +49,7 @@ def _build_app(
 
 
 def _proposal(**overrides: Any) -> Any:
+    """Create a product proposal record."""
     now = datetime.now(timezone.utc)
     values = {
         "id": uuid.uuid4(),
@@ -65,6 +69,7 @@ def _proposal(**overrides: Any) -> Any:
 
 
 def _planning_run(**overrides: Any) -> Any:
+    """Create a proposal planning run record."""
     now = datetime.now(timezone.utc)
     values = {
         "id": uuid.uuid4(),
@@ -83,10 +88,12 @@ def _planning_run(**overrides: Any) -> Any:
 
 
 async def _fake_user_workspaces(session, *, user_id):
+    """Return fake workspaces for the current user."""
     return [SimpleNamespace(github_repo="owner/repo", project="nexus")]
 
 
 def test_approve_proposal_dispatches_planning_task(monkeypatch) -> None:
+    """Verify approve proposal dispatches planning task."""
     proposal_id = uuid.uuid4()
     user_id = uuid.uuid4()
     marc_instance_id = uuid.uuid4()
@@ -105,17 +112,20 @@ def test_approve_proposal_dispatches_planning_task(monkeypatch) -> None:
     state = {"get_calls": 0}
 
     async def fake_get(session, pid):
+        """Provide a fake get."""
         state["get_calls"] += 1
         if state["get_calls"] == 1:
             return _proposal(id=pid, user_id=user_id, status=ProductProposalStatus.proposed)
         return approved
 
     async def fake_set_status(session, pid, status):
+        """Provide a fake set status."""
         captured["proposal_id"] = pid
         captured["status"] = status
         return approved
 
     async def fake_list_marc(session, *, agent, user_id=None, github_repo=None, project=None, limit):
+        """Provide a fake list marc."""
         captured["agent"] = agent
         captured["user_id"] = user_id
         captured["github_repo"] = github_repo
@@ -124,11 +134,13 @@ def test_approve_proposal_dispatches_planning_task(monkeypatch) -> None:
         return [SimpleNamespace(id=marc_instance_id)]
 
     async def fake_create_pending(session, *, proposal_id, task_id):
+        """Provide a fake create pending."""
         captured["planning_run_proposal_id"] = proposal_id
         captured["planning_run_task_id"] = task_id
         return latest_run
 
     async def fake_get_latest_by_proposal(session, proposal_id):
+        """Provide a fake get latest by proposal."""
         return latest_run
 
     monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
@@ -139,6 +151,7 @@ def test_approve_proposal_dispatches_planning_task(monkeypatch) -> None:
     monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
 
     async def run_request() -> httpx.Response:
+        """Run the request test body."""
         transport = httpx.ASGITransport(app=_build_app(runner=runner, user_id=user_id))
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
             return await client.patch(
@@ -173,6 +186,7 @@ def test_approve_proposal_dispatches_planning_task(monkeypatch) -> None:
 
 
 def test_approve_proposal_marks_source_pm_task_merged(monkeypatch) -> None:
+    """Verify approve proposal marks source pm task merged."""
     proposal_id = uuid.uuid4()
     user_id = uuid.uuid4()
     source_task_id = uuid.uuid4()
@@ -191,25 +205,31 @@ def test_approve_proposal_marks_source_pm_task_merged(monkeypatch) -> None:
     state = {"get_calls": 0}
 
     async def fake_get(session, pid):
+        """Provide a fake get."""
         state["get_calls"] += 1
         if state["get_calls"] == 1:
             return _proposal(id=pid, user_id=user_id, status=ProductProposalStatus.proposed)
         return approved
 
     async def fake_set_status(session, pid, status):
+        """Provide a fake set status."""
         return approved
 
     async def fake_set_merged(session, task_id):
+        """Provide a fake set merged."""
         captured["merged_task_id"] = task_id
         return SimpleNamespace(id=task_id)
 
     async def fake_list_marc(session, *, agent, user_id=None, github_repo=None, project=None, limit):
+        """Provide a fake list marc."""
         return [SimpleNamespace(id=uuid.uuid4())]
 
     async def fake_create_pending(session, *, proposal_id, task_id):
+        """Provide a fake create pending."""
         return _planning_run(proposal_id=proposal_id, task_id=task_id)
 
     async def fake_get_latest_by_proposal(session, proposal_id):
+        """Provide a fake get latest by proposal."""
         return _planning_run(proposal_id=proposal_id, task_id=planning_task_id)
 
     monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
@@ -221,6 +241,7 @@ def test_approve_proposal_marks_source_pm_task_merged(monkeypatch) -> None:
     monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
 
     async def run_request() -> httpx.Response:
+        """Run the request test body."""
         transport = httpx.ASGITransport(app=_build_app(runner=runner, user_id=user_id))
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
             return await client.patch(
@@ -235,6 +256,7 @@ def test_approve_proposal_marks_source_pm_task_merged(monkeypatch) -> None:
 
 
 def test_reject_proposal_marks_source_pm_task_closed(monkeypatch) -> None:
+    """Verify reject proposal marks source pm task closed."""
     proposal_id = uuid.uuid4()
     user_id = uuid.uuid4()
     source_task_id = uuid.uuid4()
@@ -248,16 +270,20 @@ def test_reject_proposal_marks_source_pm_task_closed(monkeypatch) -> None:
     runner = SimpleNamespace()
 
     async def fake_get(session, pid):
+        """Provide a fake get."""
         return _proposal(id=pid, user_id=user_id, status=ProductProposalStatus.proposed)
 
     async def fake_set_status(session, pid, status):
+        """Provide a fake set status."""
         return rejected
 
     async def fake_set_closed(session, task_id):
+        """Provide a fake set closed."""
         captured["closed_task_id"] = task_id
         return SimpleNamespace(id=task_id)
 
     async def fake_get_latest_by_proposal(session, proposal_id):
+        """Provide a fake get latest by proposal."""
         return None
 
     monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
@@ -267,6 +293,7 @@ def test_reject_proposal_marks_source_pm_task_closed(monkeypatch) -> None:
     monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
 
     async def run_request() -> httpx.Response:
+        """Run the request test body."""
         transport = httpx.ASGITransport(app=_build_app(runner=runner, user_id=user_id))
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
             return await client.patch(
@@ -281,10 +308,12 @@ def test_reject_proposal_marks_source_pm_task_closed(monkeypatch) -> None:
 
 
 def test_list_proposals_filters_current_user(monkeypatch) -> None:
+    """Verify list proposals filters current user."""
     user_id = uuid.uuid4()
     captured = {}
 
     async def fake_list(session, **kwargs):
+        """Provide a fake list."""
         captured.update(kwargs)
         return [_proposal(user_id=user_id)]
 
@@ -293,6 +322,7 @@ def test_list_proposals_filters_current_user(monkeypatch) -> None:
     monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
 
     async def run_request() -> httpx.Response:
+        """Run the request test body."""
         transport = httpx.ASGITransport(app=_build_app(user_id=user_id))
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
             return await client.get("/v1/product/proposals")
@@ -304,9 +334,11 @@ def test_list_proposals_filters_current_user(monkeypatch) -> None:
 
 
 def test_get_proposal_hides_unscoped_record(monkeypatch) -> None:
+    """Verify get proposal hides unscoped record."""
     proposal_id = uuid.uuid4()
 
     async def fake_get(session, pid):
+        """Provide a fake get."""
         return _proposal(id=pid, repo="other/repo", project="other")
 
     monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
@@ -314,6 +346,7 @@ def test_get_proposal_hides_unscoped_record(monkeypatch) -> None:
     monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
 
     async def run_request() -> httpx.Response:
+        """Run the request test body."""
         transport = httpx.ASGITransport(app=_build_app(user_id=uuid.uuid4()))
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
             return await client.get(f"/v1/product/proposals/{proposal_id}")

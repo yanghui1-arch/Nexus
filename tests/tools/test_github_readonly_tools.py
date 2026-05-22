@@ -10,6 +10,7 @@ from src.tools.code.github.readonly import GithubReadOnlyTools, _parse_github_re
 
 
 def _response(data):
+    """Create a fake GitHub response."""
     response = MagicMock()
     response.json.return_value = data
     response.raise_for_status = MagicMock()
@@ -17,6 +18,7 @@ def _response(data):
 
 
 def test_parse_github_repo_forms():
+    """Verify parse github repo forms."""
     assert _parse_github_repo("owner/repo") == "owner/repo"
     assert _parse_github_repo("https://github.com/owner/repo") == "owner/repo"
     assert _parse_github_repo("https://github.com/owner/repo.git") == "owner/repo"
@@ -24,6 +26,7 @@ def test_parse_github_repo_forms():
 
 
 def test_list_github_issues_returns_summaries_and_uses_token():
+    """Verify list github issues returns summaries and uses token."""
     tools = GithubReadOnlyTools(default_repo="owner/repo", token="secret-token")
     issue = {
         "number": 1,
@@ -53,6 +56,7 @@ def test_list_github_issues_returns_summaries_and_uses_token():
 
 
 def test_get_github_issue_returns_body_and_comments():
+    """Verify get github issue returns body and comments."""
     tools = GithubReadOnlyTools(default_repo="owner/repo", token="secret-token")
     responses = [
         _response({
@@ -88,6 +92,7 @@ def test_get_github_issue_returns_body_and_comments():
 
 
 def test_get_github_pull_request_returns_full_context_without_mutating_methods():
+    """Verify get github pull request returns full context without mutating methods."""
     tools = GithubReadOnlyTools(default_repo="owner/repo", token="secret-token")
     pull = {
         "number": 5,
@@ -145,6 +150,7 @@ def test_get_github_pull_request_returns_full_context_without_mutating_methods()
 
 
 def test_list_github_pull_requests_returns_summaries():
+    """Verify list github pull requests returns summaries."""
     tools = GithubReadOnlyTools(default_repo="owner/repo", token="secret-token")
     pull = {
         "number": 7,
@@ -170,11 +176,13 @@ def test_list_github_pull_requests_returns_summaries():
 
 
 def test_github_readonly_tools_requires_token():
+    """Verify github readonly tools requires token."""
     with pytest.raises(ValueError, match="GitHub token is required"):
         GithubReadOnlyTools(default_repo="owner/repo")
 
 
 def test_list_github_issues_surfaces_rate_limit_message():
+    """Verify list github issues surfaces rate limit message."""
     tools = GithubReadOnlyTools(default_repo="owner/repo", token="secret-token")
     response = httpx.Response(
         403,

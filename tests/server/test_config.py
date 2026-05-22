@@ -4,6 +4,7 @@ from src.server.config import get_settings
 
 
 def test_marc_github_token_is_loaded(monkeypatch):
+    """Verify marc github token is loaded."""
     get_settings.cache_clear()
     monkeypatch.setenv("NEXUS_MARC_GITHUB_TOKEN", "marc-token")
 
@@ -16,6 +17,7 @@ def test_marc_github_token_is_loaded(monkeypatch):
 
 
 def test_product_discovery_poll_interval_defaults_to_hourly(monkeypatch):
+    """Verify product discovery poll interval defaults to hourly."""
     get_settings.cache_clear()
     monkeypatch.delenv("NEXUS_PRODUCT_DISCOVERY_POLL_INTERVAL_SECONDS", raising=False)
 
@@ -28,6 +30,7 @@ def test_product_discovery_poll_interval_defaults_to_hourly(monkeypatch):
 
 
 def test_frontend_base_url_is_loaded(monkeypatch):
+    """Verify frontend base url is loaded."""
     get_settings.cache_clear()
     monkeypatch.setenv("NEXUS_FRONTEND_BASE_URL", "http://localhost:5174")
 

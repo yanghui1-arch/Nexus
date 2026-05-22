@@ -14,20 +14,24 @@ from src.server.postgres.repositories import AgentInstanceRepository, UserReposi
 class FakeDatabase:
     @asynccontextmanager
     async def session(self):
+        """Return a fake database session."""
         yield object()
 
 
 class FakeRunner:
     def __init__(self):
+        """Initialize the test helper."""
         self.submit_task = AsyncMock(side_effect=self._submit_task)
         self.created = []
 
     async def _submit_task(self, payload):
+        """Support submit task tests."""
         self.created.append(payload)
         return uuid.uuid4()
 
 
 def _settings(**overrides):
+    """Create test settings."""
     values = {
         "product_discovery_poll_interval_seconds": 3600,
         "product_discovery_poll_task_limit": 20,
@@ -37,15 +41,18 @@ def _settings(**overrides):
 
 
 def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
+    """Verify poll once dispatches only dispatchable instances."""
     candidate = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc)
     runner = FakeRunner()
     captured = {}
 
     async def fake_list(session, *, limit):
+        """Provide a fake list."""
         captured["limit"] = limit
         return [candidate]
 
     async def fake_workspace(session, agent_instance_id):
+        """Provide a fake workspace."""
         return SimpleNamespace(github_repo="owner/repo", project="nexus")
 
     monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
@@ -68,9 +75,11 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
 
 
 def test_poll_once_skips_when_stop_requested(monkeypatch):
+    """Verify poll once skips when stop requested."""
     candidate = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc)
 
     async def fake_list(session, *, limit):
+        """Provide a fake list."""
         return [candidate]
 
     runner = FakeRunner()
@@ -90,20 +99,24 @@ def test_poll_once_skips_when_stop_requested(monkeypatch):
 
 
 def test_poll_once_continues_after_submit_failure(monkeypatch):
+    """Verify poll once continues after submit failure."""
     first = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc)
     second = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc)
     calls = []
 
     async def fake_list(session, *, limit):
+        """Provide a fake list."""
         calls.append(limit)
         return [first, second]
 
     async def fake_submit(payload):
+        """Provide a fake submit."""
         if payload.agent_instance_id == first.id:
             raise RuntimeError("dispatch failed")
         return uuid.UUID("00000000-0000-0000-0000-000000000002")
 
     async def fake_workspace(session, agent_instance_id):
+        """Provide a fake workspace."""
         return SimpleNamespace(github_repo="owner/repo", project="nexus")
 
     runner = FakeRunner()
@@ -125,7 +138,9 @@ def test_poll_once_continues_after_submit_failure(monkeypatch):
 
 
 def test_product_discovery_poller_start_and_stop(monkeypatch):
+    """Verify product discovery poller start and stop."""
     async def run():
+        """Run the async test body."""
         poller = ProductDiscoveryPoller(
             settings=_settings(product_discovery_poll_interval_seconds=1),
             database=FakeDatabase(),
@@ -133,6 +148,7 @@ def test_product_discovery_poller_start_and_stop(monkeypatch):
         )
 
         async def fake_run_loop():
+            """Provide a fake run loop."""
             return None
 
         monkeypatch.setattr(poller, "_run_loop", fake_run_loop)
@@ -145,6 +161,7 @@ def test_product_discovery_poller_start_and_stop(monkeypatch):
 
 
 async def test_product_discovery_candidates_allow_waiting_for_review_pm_tasks(db_session):
+    """Verify product discovery candidates allow waiting for review pm tasks."""
     user = await UserRepository.upsert_github_user(
         db_session, github_id="discovery-waiting", github_login="marc-waiting", email=None
     )
@@ -172,6 +189,7 @@ async def test_product_discovery_candidates_allow_waiting_for_review_pm_tasks(db
 
 
 async def test_product_discovery_candidates_block_running_pm_tasks(db_session):
+    """Verify product discovery candidates block running pm tasks."""
     user = await UserRepository.upsert_github_user(
         db_session, github_id="discovery-running", github_login="marc-running", email=None
     )

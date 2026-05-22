@@ -12,6 +12,7 @@ from src.server.postgres.repositories import AgentPurchaseRepository, TaskReposi
 
 @pytest.mark.asyncio
 async def test_purchase_stores_user_on_agent_instance(db_session):
+    """Verify purchase stores user on agent instance."""
     user = await UserRepository.upsert_github_user(
         db_session,
         github_id="scope-1",
@@ -35,6 +36,7 @@ async def test_purchase_stores_user_on_agent_instance(db_session):
 
 @pytest.mark.asyncio
 async def test_task_repository_filters_by_agent_instance_user(db_session):
+    """Verify task repository filters by agent instance user."""
     owner = await UserRepository.upsert_github_user(db_session, github_id="scope-2", github_login="owner", email=None)
     other = await UserRepository.upsert_github_user(db_session, github_id="scope-3", github_login="other", email=None)
     owner_instance = AgentInstanceRecord(user_id=owner.id, agent=AgentName.tela, client_id="owner", is_active=True)

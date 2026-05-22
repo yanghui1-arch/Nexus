@@ -24,54 +24,67 @@ from src.server.postgres.repositories import (
 
 class FakeDatabase:
     def __init__(self, session_obj: object | None = None) -> None:
+        """Initialize the test helper."""
         self._session_obj = session_obj if session_obj is not None else object()
 
     @asynccontextmanager
     async def session(self):
+        """Return a fake database session."""
         yield self._session_obj
 
 
 class FakeResponse:
     def __init__(self, payload):
+        """Initialize the test helper."""
         self._payload = payload
 
     def raise_for_status(self) -> None:
+        """Raise for a fake HTTP response status."""
         return None
 
     def json(self):
+        """Return fake JSON data."""
         return self._payload
 
 
 class _ScalarResult:
     def __init__(self, items):
+        """Initialize the test helper."""
         self._items = items
 
     def all(self):
+        """Return all fake scalar values."""
         return list(self._items)
 
 
 class _ExecuteResult:
     def __init__(self, items):
+        """Initialize the test helper."""
         self._items = items
 
     def scalars(self):
+        """Return fake scalar results."""
         return _ScalarResult(self._items)
 
 
 class FakeFeatureItemSession:
     def __init__(self, items):
+        """Initialize the test helper."""
         self._items = items
         self.commit_count = 0
 
     async def execute(self, statement):
+        """Execute a fake database operation."""
         del statement
         return _ExecuteResult(self._items)
 
     async def commit(self) -> None:
+        """Commit the fake session."""
         self.commit_count += 1
 
 
 def _make_settings():
+    """Create test server settings."""
     return SimpleNamespace(
         github_tokens={"sophie": "test-token"},
         github_feedback_poll_interval_seconds=60,
@@ -81,6 +94,7 @@ def _make_settings():
 
 
 def test_poll_once_discovers_feedback_and_reuses_existing_task(monkeypatch):
+    """Verify poll once discovers feedback and reuses existing task."""
     task = SimpleNamespace(
         id=uuid.uuid4(),
         repo="owner/repo",
@@ -94,10 +108,12 @@ def test_poll_once_discovers_feedback_and_reuses_existing_task(monkeypatch):
     runner = SimpleNamespace(dispatch_github_feedback=AsyncMock(return_value=True))
 
     async def fake_list_candidates(session, *, limit):
+        """Provide a fake list candidates."""
         assert limit == 20
         return [task]
 
     async def fake_upsert(session, **kwargs):
+        """Provide a fake upsert."""
         captured_statuses.append(
             {
                 "kind": kwargs["kind"].value,
@@ -108,11 +124,13 @@ def test_poll_once_discovers_feedback_and_reuses_existing_task(monkeypatch):
         return SimpleNamespace(id=uuid.uuid4()), True
 
     async def fake_has_pending_newer_than(session, task_id, *, cutoff):
+        """Provide a fake has pending newer than."""
         assert task_id == task.id
         assert cutoff == task.updated_at
         return False
 
     async def fake_get(self, url, headers=None, params=None):
+        """Provide a fake get."""
         page = 1 if params is None else params.get("page", 1)
         if url.endswith("/user"):
             return FakeResponse({"login": "nexus-bot"})
@@ -207,6 +225,7 @@ def test_poll_once_discovers_feedback_and_reuses_existing_task(monkeypatch):
 
 
 def test_poll_once_does_not_redispatch_stale_pending_feedback(monkeypatch):
+    """Verify poll once does not redispatch stale pending feedback."""
     task = SimpleNamespace(
         id=uuid.uuid4(),
         repo="owner/repo",
@@ -219,17 +238,21 @@ def test_poll_once_does_not_redispatch_stale_pending_feedback(monkeypatch):
     runner = SimpleNamespace(dispatch_github_feedback=AsyncMock(return_value=True))
 
     async def fake_list_candidates(session, *, limit):
+        """Provide a fake list candidates."""
         return [task]
 
     async def fake_upsert(session, **kwargs):
+        """Provide a fake upsert."""
         return SimpleNamespace(id=uuid.uuid4()), False
 
     async def fake_has_pending_newer_than(session, task_id, *, cutoff):
+        """Provide a fake has pending newer than."""
         assert task_id == task.id
         assert cutoff == task.updated_at
         return False
 
     async def fake_get(self, url, headers=None, params=None):
+        """Provide a fake get."""
         page = 1 if params is None else params.get("page", 1)
         if url.endswith("/user"):
             return FakeResponse({"login": "nexus-bot"})
@@ -275,6 +298,7 @@ def test_poll_once_does_not_redispatch_stale_pending_feedback(monkeypatch):
 
 
 def test_poll_once_marks_merged_task_when_pull_request_is_merged(monkeypatch):
+    """Verify poll once marks merged task when pull request is merged."""
     task = SimpleNamespace(
         id=uuid.uuid4(),
         repo="owner/repo",
@@ -298,12 +322,15 @@ def test_poll_once_marks_merged_task_when_pull_request_is_merged(monkeypatch):
     session = FakeFeatureItemSession([item])
 
     async def fake_list_candidates(session, *, limit):
+        """Provide a fake list candidates."""
         return [task]
 
     async def fake_fetch_pull_request(self, client, token, repo, pull_request_number):
+        """Provide a fake fetch pull request."""
         return {"state": "closed", "merged_at": "2024-01-11T00:00:00Z"}
 
     async def fake_set_merged(session, task_id):
+        """Provide a fake set merged."""
         captured["task_id"] = task_id
         return SimpleNamespace(
             id=task_id,
@@ -312,6 +339,7 @@ def test_poll_once_marks_merged_task_when_pull_request_is_merged(monkeypatch):
         )
 
     async def fake_sync_feature_status(session, feature_id):
+        """Provide a fake sync feature status."""
         assert feature_id == item.feature_id
         return None
 
@@ -336,6 +364,7 @@ def test_poll_once_marks_merged_task_when_pull_request_is_merged(monkeypatch):
 
 
 def test_poll_once_marks_task_closed_when_pull_request_is_closed_unmerged(monkeypatch):
+    """Verify poll once marks task closed when pull request is closed unmerged."""
     task = SimpleNamespace(
         id=uuid.uuid4(),
         repo="owner/repo",
@@ -359,12 +388,15 @@ def test_poll_once_marks_task_closed_when_pull_request_is_closed_unmerged(monkey
     session = FakeFeatureItemSession([item])
 
     async def fake_list_candidates(session, *, limit):
+        """Provide a fake list candidates."""
         return [task]
 
     async def fake_fetch_pull_request(self, client, token, repo, pull_request_number):
+        """Provide a fake fetch pull request."""
         return {"state": "closed", "merged_at": None}
 
     async def fake_set_closed(session, task_id):
+        """Provide a fake set closed."""
         captured["task_id"] = task_id
         return SimpleNamespace(
             id=task_id,
@@ -373,6 +405,7 @@ def test_poll_once_marks_task_closed_when_pull_request_is_closed_unmerged(monkey
         )
 
     async def fake_sync_feature_status(session, feature_id):
+        """Provide a fake sync feature status."""
         assert feature_id == item.feature_id
         return None
 
@@ -397,6 +430,7 @@ def test_poll_once_marks_task_closed_when_pull_request_is_closed_unmerged(monkey
 
 
 def test_poll_once_leaves_open_pull_request_in_waiting_for_review(monkeypatch):
+    """Verify poll once leaves open pull request in waiting for review."""
     task = SimpleNamespace(
         id=uuid.uuid4(),
         repo="owner/repo",
@@ -409,9 +443,11 @@ def test_poll_once_leaves_open_pull_request_in_waiting_for_review(monkeypatch):
     runner = SimpleNamespace(dispatch_github_feedback=AsyncMock(return_value=True))
 
     async def fake_list_candidates(session, *, limit):
+        """Provide a fake list candidates."""
         return [task]
 
     async def fake_fetch_pull_request(self, client, token, repo, pull_request_number):
+        """Provide a fake fetch pull request."""
         return {
             "state": "open",
             "merged_at": None,
@@ -420,18 +456,23 @@ def test_poll_once_leaves_open_pull_request_in_waiting_for_review(monkeypatch):
         }
 
     async def fake_resolve_viewer_login(self, client, token):
+        """Provide a fake resolve viewer login."""
         return "nexus-bot"
 
     async def fake_fetch_feedback_items(self, client, token, repo, pull_request_number):
+        """Provide a fake fetch feedback items."""
         return []
 
     async def fake_has_pending_newer_than(session, task_id, *, cutoff):
+        """Provide a fake has pending newer than."""
         return False
 
     async def fail_set_merged(session, task_id):
+        """Fail if set merged is called."""
         raise AssertionError("open pull requests should not be auto-promoted to merged")
 
     async def fail_set_closed(session, task_id):
+        """Fail if set closed is called."""
         raise AssertionError("open pull requests should not be auto-closed")
 
     monkeypatch.setattr(TaskRepository, "list_external_pull_request_candidates", fake_list_candidates)
@@ -458,6 +499,7 @@ def test_poll_once_leaves_open_pull_request_in_waiting_for_review(monkeypatch):
 
 
 def test_poll_once_dispatches_merge_conflict_feedback(monkeypatch):
+    """Verify poll once dispatches merge conflict feedback."""
     task = SimpleNamespace(
         id=uuid.uuid4(),
         repo="owner/repo",
@@ -471,9 +513,11 @@ def test_poll_once_dispatches_merge_conflict_feedback(monkeypatch):
     runner = SimpleNamespace(dispatch_github_feedback=AsyncMock(return_value=True))
 
     async def fake_list_candidates(session, *, limit):
+        """Provide a fake list candidates."""
         return [task]
 
     async def fake_fetch_pull_request(self, client, token, repo, pull_request_number):
+        """Provide a fake fetch pull request."""
         return {
             "state": "open",
             "merged_at": None,
@@ -485,16 +529,20 @@ def test_poll_once_dispatches_merge_conflict_feedback(monkeypatch):
         }
 
     async def fake_resolve_viewer_login(self, client, token):
+        """Provide a fake resolve viewer login."""
         return "nexus-bot"
 
     async def fake_fetch_feedback_items(self, client, token, repo, pull_request_number):
+        """Provide a fake fetch feedback items."""
         return []
 
     async def fake_upsert(session, **kwargs):
+        """Provide a fake upsert."""
         captured.append(kwargs)
         return SimpleNamespace(id=uuid.uuid4()), True
 
     async def fake_has_pending_newer_than(session, task_id, *, cutoff):
+        """Provide a fake has pending newer than."""
         return False
 
     monkeypatch.setattr(TaskRepository, "list_external_pull_request_candidates", fake_list_candidates)
