@@ -3,7 +3,11 @@ import type {
   ApiFeatureStatus,
   ApiProductProposalStatus,
 } from '@/api/types';
-import type { ProposalFilter, StatusBadgeMeta } from './types';
+import type {
+  ProposalFilter,
+  ProposalPlanningDisplayStatus,
+  StatusBadgeMeta,
+} from './types';
 
 export const POLL_INTERVAL_MS = 15_000;
 export const ALL_PROJECTS = '__all_projects__';
@@ -59,6 +63,43 @@ export const PROPOSAL_STATUS_META: Record<
     label: 'Completed',
     variant: 'outline',
     className: 'border-black/18 bg-white text-black hover:bg-black/[0.03]',
+  },
+};
+
+export const PROPOSAL_PLANNING_STATUS_META: Record<
+  ProposalPlanningDisplayStatus,
+  StatusBadgeMeta
+> = {
+  queued: {
+    label: 'Planning queued',
+    variant: 'outline',
+    className: 'border-black/10 bg-white text-black/60 hover:bg-white',
+  },
+  running: {
+    label: 'Planning running',
+    variant: 'outline',
+    className: 'border-black bg-black text-white hover:bg-black',
+  },
+  failed: {
+    label: 'Planning failed',
+    variant: 'outline',
+    className: 'border-red-200 bg-red-50 text-red-700 hover:bg-red-50',
+  },
+  completed: {
+    label: 'Planning completed',
+    variant: 'outline',
+    className:
+      'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-50',
+  },
+  missing_run: {
+    label: 'Planning run missing',
+    variant: 'outline',
+    className: 'border-red-200 bg-red-50 text-red-700 hover:bg-red-50',
+  },
+  missing_task: {
+    label: 'Planning task missing',
+    variant: 'outline',
+    className: 'border-red-200 bg-red-50 text-red-700 hover:bg-red-50',
   },
 };
 

@@ -47,6 +47,7 @@ def _resolved_task_repo_project(task, workspace) -> tuple[str | None, str | None
     # - newer task rows read repo/project from the agent-instance workspace
     # Prefer the explicit task value when present so old rows render as-is, then
     # fall back to the current workspace context for newer rows.
+    """Resolve task repo and project from task and workspace data."""
     repo = task.repo or (workspace.github_repo if workspace is not None else None)
     project = task.project if task.project is not None else (workspace.project if workspace is not None else None)
     return repo, project
@@ -58,6 +59,7 @@ async def create_task(
     payload: TaskCreateRequest,
     user: UserRecord = Depends(get_current_user),
 ) -> TaskSubmitResponse:
+    """Create and dispatch a new agent task."""
     runner: AgentTaskRunner = request.app.state.runner
     database: Database = request.app.state.database
     async with database.session() as session:
@@ -94,6 +96,7 @@ async def list_tasks(
     limit: int = Query(default=200, ge=1, le=1000),
     user: UserRecord = Depends(get_current_user),
 ) -> list[TaskResponse]:
+    """List tasks owned by the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
         tasks = await TaskRepository.list(
@@ -128,6 +131,7 @@ async def get_task(
     task_id: uuid.UUID,
     user: UserRecord = Depends(get_current_user),
 ) -> TaskResponse:
+    """Return one task owned by the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
         task = await TaskRepository.get(session, task_id)
@@ -147,6 +151,7 @@ async def list_task_work_items(
     task_id: uuid.UUID,
     user: UserRecord = Depends(get_current_user),
 ) -> list[TaskWorkItemResponse]:
+    """List review work items for a task."""
     database: Database = request.app.state.database
     async with database.session() as session:
         task = await TaskRepository.get(session, task_id)
@@ -166,6 +171,7 @@ async def update_task_status(
     payload: TaskStatusUpdateRequest,
     user: UserRecord = Depends(get_current_user),
 ) -> TaskResponse:
+    """Update review status for a task."""
     database: Database = request.app.state.database
 
     async with database.session() as session:
@@ -220,6 +226,7 @@ async def consult_task(
     payload: TaskConsultRequest,
     user: UserRecord = Depends(get_current_user),
 ) -> TaskConsultResponse:
+    """Ask an agent to report progress for an existing task."""
     database: Database = request.app.state.database
     async with database.session() as session:
         task = await TaskRepository.get(session, task_id)

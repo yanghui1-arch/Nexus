@@ -6,6 +6,7 @@ from mcp.types import TextContent
 
 
 def _mock(content_text: str | None):
+    """Create a mocked MCP client session."""
     result = MagicMock()
     result.content = [TextContent(text=content_text, type="text")] if content_text is not None else []
     result.isError = False
@@ -26,6 +27,7 @@ def _mock(content_text: str | None):
 
 
 async def test_connect_and_close():
+    """Verify connect and close."""
     sp, cp, _ = _mock("ok")
     client = MCPClient(StdioServerParameters(command="python", args=["-m", "test"]))
     with sp, cp:
@@ -36,6 +38,7 @@ async def test_connect_and_close():
 
 
 async def test_context_manager():
+    """Verify context manager."""
     sp, cp, session = _mock("data")
     params = StdioServerParameters(command="python", args=["-m", "test"])
     with sp, cp:
@@ -46,12 +49,14 @@ async def test_context_manager():
 
 
 async def test_call_tool_not_connected():
+    """Verify call tool not connected."""
     client = MCPClient(StdioServerParameters(command="python", args=["-m", "test"]))
     with pytest.raises(RuntimeError, match="not connected"):
         await client.call_tool("fetch", {})
 
 
 async def test_list_tools():
+    """Verify list tools."""
     sp, cp, _ = _mock("ok")
     client = MCPClient(StdioServerParameters(command="python", args=["-m", "test"]))
     with sp, cp:

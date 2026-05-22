@@ -12,6 +12,8 @@ from src.server.postgres.models import (
     AgentInstanceRecord,
     ProductProposalRecord,
     ProductProposalStatus,
+    ProposalPlanningRunRecord,
+    ProposalPlanningRunStatus,
     FeatureItemRecord,
     FeatureItemStatus,
     FeatureRecord,
@@ -72,6 +74,36 @@ class ProductProposalStatusUpdateRequest(BaseModel):
         return value
 
 
+class ProposalPlanningRunResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    proposal_id: uuid.UUID
+    task_id: uuid.UUID
+    attempt: int
+    status: ProposalPlanningRunStatus
+    error: str | None
+    created_at: datetime
+    updated_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+    @classmethod
+    def from_record(cls, run: ProposalPlanningRunRecord) -> "ProposalPlanningRunResponse":
+        return cls(
+            id=run.id,
+            proposal_id=run.proposal_id,
+            task_id=run.task_id,
+            attempt=run.attempt,
+            status=run.status,
+            error=run.error,
+            created_at=run.created_at,
+            updated_at=run.updated_at,
+            started_at=run.started_at,
+            finished_at=run.finished_at,
+        )
+
+
 class ProductProposalResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -84,11 +116,19 @@ class ProductProposalResponse(BaseModel):
     repo: str | None
     status: ProductProposalStatus
     source_task_id: uuid.UUID | None
+    latest_planning_run: ProposalPlanningRunResponse | None = None
+    latest_planning_task_exists: bool | None = None
     created_at: datetime
     updated_at: datetime
 
     @classmethod
-    def from_record(cls, proposal: ProductProposalRecord) -> "ProductProposalResponse":
+    def from_record(
+        cls,
+        proposal: ProductProposalRecord,
+        *,
+        latest_planning_run: ProposalPlanningRunRecord | None = None,
+        latest_planning_task_exists: bool | None = None,
+    ) -> "ProductProposalResponse":
         return cls(
             id=proposal.id,
             title=proposal.title,
@@ -99,6 +139,10 @@ class ProductProposalResponse(BaseModel):
             repo=proposal.repo,
             status=proposal.status,
             source_task_id=proposal.source_task_id,
+            latest_planning_run=ProposalPlanningRunResponse.from_record(latest_planning_run)
+            if latest_planning_run is not None
+            else None,
+            latest_planning_task_exists=latest_planning_task_exists,
             created_at=proposal.created_at,
             updated_at=proposal.updated_at,
         )

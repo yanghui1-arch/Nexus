@@ -26,6 +26,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 def utc_now() -> datetime:
+    """Return the current UTC timestamp."""
     return datetime.now(timezone.utc)
 
 
@@ -68,10 +69,43 @@ class TaskWorkItemStatus(str, enum.Enum):
 
 
 class ProductProposalStatus(str, enum.Enum):
+    """Business-level proposal lifecycle.
+
+    proposed:
+        Proposal exists and is waiting for human review.
+    approved:
+        Human approved the proposal, but planning may still be queued/running/failed.
+    rejected:
+        Human rejected the proposal.
+    planned:
+        Planning finished and produced a valid implementation plan with feature items.
+    completed:
+        All linked features are completed or closed.
+    """
+
     proposed = "proposed"
     approved = "approved"
     rejected = "rejected"
     planned = "planned"
+    completed = "completed"
+
+
+class ProposalPlanningRunStatus(str, enum.Enum):
+    """Execution state of a single planning attempt for an approved proposal.
+
+    queued:
+        Planning task row exists and is waiting to be dispatched/claimed.
+    running:
+        The worker has claimed the planning task and is generating features/items.
+    failed:
+        Dispatch, execution, or post-run validation failed.
+    completed:
+        The planning task succeeded and produced a valid plan.
+    """
+
+    queued = "queued"
+    running = "running"
+    failed = "failed"
     completed = "completed"
 
 
@@ -341,6 +375,52 @@ class ProductProposalRecord(Base):
         onupdate=utc_now,
         server_default=func.now(),
     )
+
+
+class ProposalPlanningRunRecord(Base):
+    __tablename__ = "proposal_planning_run"
+    __table_args__ = (
+        UniqueConstraint("proposal_id", "attempt", name="uq_proposal_planning_run_attempt"),
+        UniqueConstraint("task_id", name="uq_proposal_planning_run_task_id"),
+        Index("ix_proposal_planning_run_proposal_created_at", "proposal_id", "created_at"),
+        Index("ix_proposal_planning_run_status_created_at", "status", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    proposal_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("product_proposal.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("task.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[ProposalPlanningRunStatus] = mapped_column(
+        Enum(ProposalPlanningRunStatus, native_enum=False, length=32),
+        nullable=False,
+        index=True,
+        default=ProposalPlanningRunStatus.queued,
+        server_default=ProposalPlanningRunStatus.queued.value,
+    )
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+        server_default=func.now(),
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class FeatureRecord(Base):

@@ -11,10 +11,12 @@ from src.server.postgres.repositories import AuthSessionRepository
 
 
 def hash_token(token: str) -> str:
+    """Return a stable SHA-256 hash for a session token."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 async def get_current_user(request: Request) -> UserRecord:
+    """Authenticate the current request and return its user."""
     settings = get_settings()
     token = request.cookies.get(settings.auth_session_cookie_name)
     if not token:

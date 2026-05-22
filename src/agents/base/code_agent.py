@@ -38,6 +38,14 @@ class CodeAgent(Agent):
 
     @staticmethod
     def _github_headers(token: str) -> dict[str, str]:
+        """Build authentication headers for GitHub API requests.
+
+        Args:
+            token: GitHub personal access token.
+
+        Returns:
+            Headers accepted by GitHub REST API endpoints.
+        """
         return {
             "Authorization": f"Bearer {token}",
             "Accept": "application/vnd.github+json",
@@ -50,6 +58,19 @@ class CodeAgent(Agent):
         fork_repo: str,
         upstream_repo: str,
     ) -> bool:
+        """Validate whether a GitHub repository payload describes the expected fork.
+
+        Args:
+            payload: GitHub repository response payload.
+            fork_repo: Expected fork repository in owner/repo format.
+            upstream_repo: Expected parent repository in owner/repo format.
+
+        Returns:
+            True when the payload is the expected ready fork.
+
+        Raises:
+            RuntimeError: If the repository exists but is not the expected fork.
+        """
         is_fork = payload.get("fork")
         parent_full_name = (payload.get("parent") or {}).get("full_name")
 
@@ -71,6 +92,18 @@ class CodeAgent(Agent):
         fork_repo: str,
         upstream_repo: str,
     ) -> None:
+        """Poll GitHub until a requested fork is available.
+
+        Args:
+            client: HTTP client used for GitHub requests.
+            token: GitHub personal access token.
+            fork_repo: Fork repository in owner/repo format.
+            upstream_repo: Parent repository in owner/repo format.
+
+        Raises:
+            RuntimeError: If GitHub returns an unexpected response.
+            TimeoutError: If the fork does not become ready before the deadline.
+        """
         headers = self._github_headers(token)
         deadline = asyncio.get_running_loop().time() + self.FORK_READY_TIMEOUT_SECONDS
         last_status_code: int | None = None

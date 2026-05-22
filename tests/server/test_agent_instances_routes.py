@@ -17,14 +17,17 @@ from src.server.postgres.repositories import AgentInstanceRepository, WorkspaceR
 
 class FakeDatabase:
     def __init__(self, session_obj: object | None = None) -> None:
+        """Initialize the test helper."""
         self._session_obj = session_obj if session_obj is not None else object()
 
     @asynccontextmanager
     async def session(self):
+        """Return a fake database session."""
         yield self._session_obj
 
 
 def _build_app(user_id: uuid.UUID, session_obj: object | None = None) -> FastAPI:
+    """Build a FastAPI app for route tests."""
     app = FastAPI()
     app.state.database = FakeDatabase(session_obj)
     app.include_router(agent_instances_router)
@@ -33,6 +36,7 @@ def _build_app(user_id: uuid.UUID, session_obj: object | None = None) -> FastAPI
 
 
 def test_update_workspace_persists_frontend_repo_project(monkeypatch) -> None:
+    """Verify update workspace persists frontend repo project."""
     user_id = uuid.uuid4()
     instance_id = uuid.uuid4()
     now = datetime.now(timezone.utc)
@@ -49,14 +53,17 @@ def test_update_workspace_persists_frontend_repo_project(monkeypatch) -> None:
     captured = {}
 
     async def fake_get(session, agent_instance_id):
+        """Provide a fake get."""
         assert agent_instance_id == instance_id
         return instance
 
     async def fake_ensure(session, agent_instance):
+        """Provide a fake ensure."""
         assert agent_instance is instance
         return None
 
     async def fake_set_context(session, *, agent_instance_id, github_repo, project):
+        """Provide a fake set context."""
         captured["agent_instance_id"] = agent_instance_id
         captured["github_repo"] = github_repo
         captured["project"] = project
@@ -79,6 +86,7 @@ def test_update_workspace_persists_frontend_repo_project(monkeypatch) -> None:
     monkeypatch.setattr(WorkspaceRepository, "set_context", fake_set_context)
 
     async def run_request() -> httpx.Response:
+        """Run the request test body."""
         transport = httpx.ASGITransport(app=_build_app(user_id))
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
             return await client.patch(

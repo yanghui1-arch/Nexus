@@ -25,15 +25,18 @@ class NexusTaskContext:
 
     @property
     def default_local_path(self) -> str:
+        """Return the default local repository path."""
         repo_name = self.repo.rsplit("/", 1)[-1] if self.repo else "repo"
         return f"/workspace/{repo_name}"
 
 
 def _quote_git_command(local_path: str, *args: str) -> str:
+    """Quote a command for git output."""
     return " ".join(["git", "-C", shlex.quote(local_path), *(shlex.quote(arg) for arg in args)])
 
 
 async def _git_stdout(sandbox: Sandbox, local_path: str, *args: str) -> str:
+    """Return stdout from a git command."""
     result = await sandbox.run_shell(_quote_git_command(local_path, *args))
     if not result or not result.get("success", False):
         stderr = result.get("stderr", "") if result else "git command failed"
@@ -45,11 +48,13 @@ async def _git_stdout(sandbox: Sandbox, local_path: str, *args: str) -> str:
 
 class NexusReviewTools:
     def __init__(self, sandbox: Sandbox, context: NexusTaskContext | None) -> None:
+        """Initialize the object."""
         self._sandbox = sandbox
         self._context = context
 
     @track(step_type="tool")
     async def create_task_work_items(self, items: list[dict[str, str]]) -> dict:
+        """Create Nexus task work items."""
         if self._context is None:
             return {"success": False, "message": "Nexus task context is not available."}
 
@@ -84,6 +89,7 @@ class NexusReviewTools:
         summary: str,
         local_path: str | None = None,
     ) -> dict:
+        """Finish the current Nexus work item."""
         if self._context is None or self._context.current_work_item_id is None:
             return {"success": False, "message": "No current Nexus work item is assigned."}
 
@@ -136,6 +142,7 @@ class NexusReviewTools:
 
     @property
     def all_tools(self) -> dict[str, Callable]:
+        """Return all tools exposed by this toolkit."""
         return {
             "create_task_work_items": self.create_task_work_items,
             "finish_current_task_work_item": self.finish_current_task_work_item,
@@ -143,6 +150,7 @@ class NexusReviewTools:
 
 
 async def _infer_base_commit(sandbox: Sandbox, local_path: str) -> str:
+    """Infer the base commit for work-item review scope."""
     for args in (
         ("merge-base", "HEAD", "origin/main"),
         ("merge-base", "HEAD", "origin/master"),

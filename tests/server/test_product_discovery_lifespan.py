@@ -9,56 +9,70 @@ from src.server.api.main import lifespan
 
 class FakePoller:
     def __init__(self):
+        """Initialize the test helper."""
         self.started = False
         self.stopped = False
         self.stop = AsyncMock(side_effect=self._stop)
 
     def start(self):
+        """Start a fake service."""
         self.started = True
 
     async def _stop(self):
+        """Stop a fake service."""
         self.stopped = True
 
 
 class FakeRunner:
     async def recover_unfinished_tasks(self):
+        """Return recovered task count."""
         return 0
 
     async def shutdown(self):
+        """Shut down a fake service."""
         return None
 
 
 class FakeDatabase:
     async def connect(self):
+        """Connect a fake service."""
         return None
 
     async def create_schema(self):
+        """Create a fake schema."""
         return None
 
     async def disconnect(self):
+        """Disconnect a fake service."""
         return None
 
     async def ping(self):
+        """Return the fake service health status."""
         return True
 
 
 class FakeRedis:
     async def connect(self):
+        """Connect a fake service."""
         return None
 
     async def close(self):
+        """Close a fake service."""
         return None
 
     async def ping(self):
+        """Return the fake service health status."""
         return True
 
 
 class FakeApp:
     def __init__(self):
+        """Initialize the test helper."""
         self.state = SimpleNamespace()
 
 
 async def _run_lifespan_test():
+    """Run the application lifespan test harness."""
     app = FakeApp()
     fake_runner = FakeRunner()
     fake_poller = FakePoller()
@@ -90,4 +104,5 @@ async def _run_lifespan_test():
 
 
 def test_lifespan_attaches_product_discovery_poller():
+    """Verify lifespan attaches product discovery poller."""
     asyncio.run(_run_lifespan_test())
