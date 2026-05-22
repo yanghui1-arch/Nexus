@@ -7,12 +7,42 @@ from src.logger import logger
 from src.server.config import Settings
 from src.server.postgres.database import Database
 from src.server.postgres.models import AgentName
-from src.server.postgres.repositories import AgentInstanceRepository, WorkspaceRepository
+from src.server.postgres.repositories import AgentInstanceRepository, ProductProposalRepository, WorkspaceRepository
 from src.server.runner import AgentTaskRunner
 from src.server.schemas import AgentKind, TaskCreateRequest
 
 
 PRODUCT_DISCOVERY_AGENT_NAMES = {AgentName.marc}
+DEFAULT_RECENT_PROPOSAL_LIMIT = 5
+MAX_PROPOSAL_TITLE_CHARS = 120
+MAX_PROPOSAL_SUMMARY_CHARS = 500
+
+
+def _truncate_text(value: str | None, *, max_chars: int) -> str:
+    """Return text capped to max_chars with a stable truncation marker."""
+    text = (value or "").strip()
+    if len(text) <= max_chars:
+        return text
+    return f"{text[: max_chars - 1]}…"
+
+
+def build_product_discovery_question(proposals: list[Any], *, proposal_limit: int) -> str:
+    """Build a bounded product discovery prompt from recent proposals."""
+    lines = [
+        "优化产品并提出一个proposal",
+        "",
+        "Recent proposals context (title and summary only):",
+    ]
+    for proposal in proposals[: max(0, proposal_limit)]:
+        lines.extend(
+            [
+                f"- Title: {_truncate_text(proposal.title, max_chars=MAX_PROPOSAL_TITLE_CHARS)}",
+                f"  Summary: {_truncate_text(proposal.summary, max_chars=MAX_PROPOSAL_SUMMARY_CHARS)}",
+            ]
+        )
+    if len(lines) == 3:
+        lines.append("- None")
+    return "\n".join(lines)
 
 
 class ProductDiscoveryPoller:
@@ -85,12 +115,27 @@ class ProductDiscoveryPoller:
                         instance.id,
                     )
                     continue
+                recent_limit = getattr(
+                    self._settings,
+                    "product_discovery_recent_proposal_limit",
+                    DEFAULT_RECENT_PROPOSAL_LIMIT,
+                )
+                async with self._database.session() as session:
+                    recent_proposals = await ProductProposalRepository.list(
+                        session,
+                        project=workspace.project,
+                        repo=workspace.github_repo,
+                        limit=recent_limit,
+                    )
 
                 task_id = await self._runner.submit_task(
                     TaskCreateRequest(
                         agent_instance_id=instance.id,
                         agent=AgentKind(instance.agent.value),
-                        question="优化产品并提出一个proposal",
+                        question=build_product_discovery_question(
+                            recent_proposals,
+                            proposal_limit=recent_limit,
+                        ),
                         external_issue_url=None,
                     )
                 )
