@@ -1,32 +1,22 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 
 from src.logger import logger
 from src.server.config import Settings
 from src.server.postgres.database import Database
-from src.server.postgres.models import AgentName
+from src.server.postgres.models import AgentName, ProductProposalRecord
 from src.server.postgres.repositories import AgentInstanceRepository, ProductProposalRepository, WorkspaceRepository
 from src.server.runner import AgentTaskRunner
 from src.server.schemas import AgentKind, TaskCreateRequest
 
 
 PRODUCT_DISCOVERY_AGENT_NAMES = {AgentName.marc}
-DEFAULT_RECENT_PROPOSAL_LIMIT = 5
 MAX_PROPOSAL_TITLE_CHARS = 120
 MAX_PROPOSAL_SUMMARY_CHARS = 500
 
 
-def _truncate_text(value: str | None, *, max_chars: int) -> str:
-    """Return text capped to max_chars with a stable truncation marker."""
-    text = (value or "").strip()
-    if len(text) <= max_chars:
-        return text
-    return f"{text[: max_chars - 1]}…"
-
-
-def build_product_discovery_question(proposals: list[Any], *, proposal_limit: int) -> str:
+def build_product_discovery_question(proposals: list[ProductProposalRecord], *, proposal_limit: int) -> str:
     """Build a bounded product discovery prompt from recent proposals."""
     lines = [
         "优化产品并提出一个proposal",
@@ -34,12 +24,13 @@ def build_product_discovery_question(proposals: list[Any], *, proposal_limit: in
         "Recent proposals context (title and summary only):",
     ]
     for proposal in proposals[: max(0, proposal_limit)]:
-        lines.extend(
-            [
-                f"- Title: {_truncate_text(proposal.title, max_chars=MAX_PROPOSAL_TITLE_CHARS)}",
-                f"  Summary: {_truncate_text(proposal.summary, max_chars=MAX_PROPOSAL_SUMMARY_CHARS)}",
-            ]
-        )
+        title = (proposal.title or "").strip()
+        summary = (proposal.summary or "").strip()
+        if len(title) > MAX_PROPOSAL_TITLE_CHARS:
+            title = f"{title[: MAX_PROPOSAL_TITLE_CHARS - 1]}…"
+        if len(summary) > MAX_PROPOSAL_SUMMARY_CHARS:
+            summary = f"{summary[: MAX_PROPOSAL_SUMMARY_CHARS - 1]}…"
+        lines.extend([f"- Title: {title}", f"  Summary: {summary}"])
     if len(lines) == 3:
         lines.append("- None")
     return "\n".join(lines)
@@ -58,7 +49,7 @@ class ProductDiscoveryPoller:
         self._database = database
         self._runner = runner
         self._stop_event = asyncio.Event()
-        self._task: asyncio.Task[Any] | None = None
+        self._task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
         """Start the product discovery poller.
@@ -115,11 +106,7 @@ class ProductDiscoveryPoller:
                         instance.id,
                     )
                     continue
-                recent_limit = getattr(
-                    self._settings,
-                    "product_discovery_recent_proposal_limit",
-                    DEFAULT_RECENT_PROPOSAL_LIMIT,
-                )
+                recent_limit = self._settings.product_discovery_recent_proposal_limit
                 async with self._database.session() as session:
                     recent_proposals = await ProductProposalRepository.list(
                         session,
