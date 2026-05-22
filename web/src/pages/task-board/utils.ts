@@ -1,4 +1,4 @@
-import type { ApiTaskStatus } from '@/api/types';
+import type { ApiTaskCategory, ApiTaskStatus } from '@/api/types';
 import {
   sortTaskViewsByNewest,
   type WorkspaceTaskView,
@@ -15,6 +15,12 @@ export const TASK_BOARD_STATUS_ORDER = [
 
 export type TaskBoardStatus = (typeof TASK_BOARD_STATUS_ORDER)[number];
 
+const TASK_BOARD_CATEGORY = 'coding' satisfies ApiTaskCategory;
+
+export function isTaskBoardTask(task: WorkspaceTaskView): boolean {
+  return task.category === TASK_BOARD_CATEGORY;
+}
+
 export function isTaskBoardStatus(
   status: ApiTaskStatus,
 ): status is TaskBoardStatus {
@@ -28,7 +34,12 @@ export function deriveTaskBoardRepoOptions(
   const repoOptions = [DEFAULT_TASK_BOARD_REPO];
 
   for (const task of tasks) {
-    if (!task.repo || seen.has(task.repo) || task.repo === DEFAULT_TASK_BOARD_REPO) {
+    if (
+      !isTaskBoardTask(task) ||
+      !task.repo ||
+      seen.has(task.repo) ||
+      task.repo === DEFAULT_TASK_BOARD_REPO
+    ) {
       continue;
     }
 
@@ -43,9 +54,9 @@ export function getVisibleTaskBoardTasks(
   tasks: WorkspaceTaskView[],
   repoFilter: string,
 ): WorkspaceTaskView[] {
-  return sortTaskViewsByNewest(tasks.filter(task => task.repo === repoFilter)).filter(
-    task => isTaskBoardStatus(task.status),
-  );
+  return sortTaskViewsByNewest(
+    tasks.filter(task => isTaskBoardTask(task) && task.repo === repoFilter),
+  ).filter(task => isTaskBoardStatus(task.status));
 }
 
 export function groupTaskBoardTasks(
@@ -56,7 +67,7 @@ export function groupTaskBoardTasks(
   ) as Record<TaskBoardStatus, WorkspaceTaskView[]>;
 
   tasks.forEach(task => {
-    if (isTaskBoardStatus(task.status)) {
+    if (isTaskBoardTask(task) && isTaskBoardStatus(task.status)) {
       groups[task.status].push(task);
     }
   });
