@@ -693,6 +693,7 @@ class GithubTools:
     @property
     def issues(self):
         return {
+            "create_github_issue": self.create_github_issue,
             "get_issue_comments": self.get_issue_comments,
             "reply_to_issue": self.reply_to_issue,
             "get_my_issues": self.get_my_issues,

@@ -128,6 +128,7 @@ class TestSophieAsyncContext:
             "ListFiles": AsyncMock(),
         }
         mock_github_kit_class.return_value.all_tools = {
+            "create_github_issue": AsyncMock(),
             "get_issue_comments": AsyncMock(),
             "pr_to_github": AsyncMock(),
             "get_notifications": AsyncMock(),
@@ -147,6 +148,7 @@ class TestSophieAsyncContext:
 
                 async with sophie as s:
                     assert s.tool_kits is not None
+                    assert "create_github_issue" in s.tool_kits
                     assert "get_issue_comments" in s.tool_kits
                     assert "pr_to_github" in s.tool_kits
                     assert "get_notifications" in s.tool_kits
@@ -309,6 +311,7 @@ class TestSophieToolAccess:
                 )
 
                 async with sophie as s:
+                    assert "create_github_issue" in s.tool_kits
                     assert "get_issue_comments" in s.tool_kits
                     assert "reply_to_issue" in s.tool_kits
                     assert "get_pr_reviews" in s.tool_kits

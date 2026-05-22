@@ -103,6 +103,7 @@ class TestContextManager:
             async with tela:
                 assert tela.tool_kits is not None
                 assert "RunCode" in tela.tool_kits
+                assert "create_github_issue" in tela.tool_kits
                 assert "get_issue_comments" in tela.tool_kits
                 assert "pr_to_github" in tela.tool_kits
                 assert "WebFetch" in tela.tool_kits
