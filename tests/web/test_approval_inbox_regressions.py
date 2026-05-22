@@ -42,7 +42,5 @@ def test_filter_labels_render_counts_from_proposal_data() -> None:
     assert "proposalCounts={proposalCounts}" in page_source
     assert "count: proposalCounts[option.value]" in filters_source
     assert "status === 'proposed'" in counts_source
-    assert "status === 'approved' ||" in counts_source
-    assert "status === 'planned' ||" in counts_source
-    assert "status === 'completed'" in counts_source
     assert "status === 'rejected'" in counts_source
+    assert "counts.accepted += 1" in counts_source
