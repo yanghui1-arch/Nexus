@@ -51,7 +51,7 @@ export default function ProductResearchPage() {
   }>();
   const { features, isLoading, loadError, proposals, reloadSnapshot } =
     useProductResearchSnapshot();
-  const [proposalFilter, setProposalFilter] = useState<ProposalFilter>('accepted');
+  const [proposalFilter, setProposalFilter] = useState<ProposalFilter>('proposed');
   const proposalFilterSelectedRef = useRef(false);
   const [proposalProjectFilter, setProposalProjectFilter] =
     useState<string>(ALL_PROJECTS);
@@ -115,12 +115,12 @@ export default function ProductResearchPage() {
   const selectedFeature = features.find(feature => feature.id === featureId) ?? null;
 
   useEffect(() => {
-    if (proposalFilterSelectedRef.current || proposalId) {
+    if (proposalFilterSelectedRef.current || proposalId || proposals.length === 0) {
       return;
     }
 
-    if (proposals.some(proposal => proposal.status === 'proposed')) {
-      setProposalFilter('proposed');
+    if (!proposals.some(proposal => proposal.status === 'proposed')) {
+      setProposalFilter('accepted');
     }
   }, [proposalId, proposals]);
 
