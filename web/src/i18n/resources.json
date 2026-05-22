@@ -203,7 +203,7 @@
           "rejected": "已拒绝"
         },
         "proposalStatus": {
-          "proposed": "待评审",
+          "proposed": "需要评审",
           "approved": "已批准",
           "rejected": "已拒绝",
           "planned": "已计划"
@@ -451,7 +451,7 @@
           "rejected": "Rejected"
         },
         "proposalStatus": {
-          "proposed": "Pending Review",
+          "proposed": "Needs review",
           "approved": "Approved",
           "rejected": "Rejected",
           "planned": "Planned"

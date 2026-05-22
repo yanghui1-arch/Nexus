@@ -3,10 +3,13 @@ import { Select } from '@/components/ui/select';
 import { ALL_PROJECTS, PROPOSAL_FILTER_OPTIONS } from '../constants';
 import type { ProjectOption, ProposalFilter } from '../types';
 
+type ProposalFilterCounts = Record<ProposalFilter, number>;
+
 type ProposalFiltersProps = {
   proposalFilter: ProposalFilter;
   projectFilter: string;
   projectOptions: ProjectOption[];
+  proposalCounts: ProposalFilterCounts;
   onProposalFilterChange: (filter: ProposalFilter) => void;
   onProjectFilterChange: (project: string) => void;
 };
@@ -15,6 +18,7 @@ export function ProposalFilters({
   proposalFilter,
   projectFilter,
   projectOptions,
+  proposalCounts,
   onProposalFilterChange,
   onProjectFilterChange,
 }: ProposalFiltersProps) {
@@ -32,7 +36,7 @@ export function ProposalFilters({
         >
           {PROPOSAL_FILTER_OPTIONS.map(option => (
             <option key={option.value} value={option.value}>
-              {t(`productResearch.proposalFilter.${option.value}`)}
+              {t(`productResearch.proposalFilter.${option.value}`)} ({proposalCounts[option.value]})
             </option>
           ))}
         </Select>

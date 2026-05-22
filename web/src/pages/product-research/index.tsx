@@ -60,6 +60,17 @@ export default function ProductResearchPage() {
   const isFeatureRoute = location.pathname.startsWith('/product-research/features');
   const viewMode = isFeatureRoute ? 'features' : 'proposals';
 
+  const proposalCounts: Record<ProposalFilter, number> = {
+    all: proposals.length,
+    proposed: proposals.filter(proposal => proposal.status === 'proposed').length,
+    accepted: proposals.filter(proposal =>
+      proposal.status === 'approved' ||
+      proposal.status === 'planned' ||
+      proposal.status === 'completed',
+    ).length,
+    rejected: proposals.filter(proposal => proposal.status === 'rejected').length,
+  };
+
   const statusFilteredProposals = proposals.filter(proposal => {
     if (proposalFilter === 'all') {
       return true;
@@ -231,6 +242,7 @@ export default function ProductResearchPage() {
             proposalFilter={proposalFilter}
             projectFilter={activeProposalProjectFilter}
             projectOptions={proposalProjectOptions}
+            proposalCounts={proposalCounts}
             onProposalFilterChange={setProposalFilter}
             onProjectFilterChange={setProposalProjectFilter}
           />
