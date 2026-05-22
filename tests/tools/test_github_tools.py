@@ -6,6 +6,7 @@ import httpx
 
 from src.tools.code import GITHUB_TOOLS_SCHEMA, GithubTools
 from src.tools.code.github.issue import (
+    CREATE_GITHUB_ISSUE,
     GET_ISSUE_COMMENTS,
     REPLY_TO_ISSUE,
     GET_MY_ISSUES,
@@ -406,6 +407,7 @@ class TestToolDefinitions:
     def test_all_new_tools_in_definitions(self):
         """Verify all current GitHub tools are in GITHUB_TOOLS_SCHEMA."""
         expected_tools = [
+            CREATE_GITHUB_ISSUE,
             GET_ISSUE_COMMENTS,
             REPLY_TO_ISSUE,
             GET_PR_REVIEWS,

@@ -17,9 +17,11 @@ from fastapi import FastAPI
 
 class _FakeCelery:
     def __init__(self, *args, **kwargs) -> None:
+        """Initialize the test helper."""
         self.conf: dict[str, Any] = {}
 
     def autodiscover_tasks(self, *args, **kwargs) -> None:
+        """Ignore Celery autodiscovery in tests."""
         return None
 
 
@@ -46,14 +48,17 @@ from src.server.postgres.repositories import (
 
 class FakeDatabase:
     def __init__(self, session_obj: object | None = None) -> None:
+        """Initialize the test helper."""
         self._session_obj = session_obj if session_obj is not None else object()
 
     @asynccontextmanager
     async def session(self):
+        """Return a fake database session."""
         yield self._session_obj
 
 
 def _build_app(session_obj: object | None = None, runner_obj: object | None = None) -> FastAPI:
+    """Build a FastAPI app for route tests."""
     app = FastAPI()
     app.state.database = FakeDatabase(session_obj)
     if runner_obj is not None:
@@ -64,6 +69,7 @@ def _build_app(session_obj: object | None = None, runner_obj: object | None = No
 
 
 async def _fake_get_current_user_instance(session, agent_instance_id):
+    """Return fake authenticated user and instance records."""
     return SimpleNamespace(
         id=agent_instance_id,
         user_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
@@ -82,6 +88,7 @@ def _make_task(
     agent_instance_id: uuid.UUID | None = None,
     checkpoint: list[dict[str, Any] | str] | None = None,
 ) -> Any:
+    """Create a task route record."""
     started_at = created_at + timedelta(minutes=1)
     finished_at = (
         None
@@ -110,6 +117,7 @@ def _make_task(
 
 
 def _make_settings() -> Any:
+    """Create test server settings."""
     return SimpleNamespace(
         api_key='test-api-key',
         base_url='https://api.example.com/v1',
@@ -124,6 +132,7 @@ def _make_settings() -> Any:
 
 
 def test_list_tasks_returns_newest_first(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify list tasks returns newest first."""
     now = datetime.now(timezone.utc)
     older_task = _make_task(
         question='older task',
@@ -137,12 +146,14 @@ def test_list_tasks_returns_newest_first(monkeypatch: pytest.MonkeyPatch) -> Non
     )
 
     async def fake_list(session, **kwargs):
+        """Provide a fake list."""
         return [older_task, newer_task]
 
     monkeypatch.setattr(TaskRepository, 'list', fake_list)
     monkeypatch.setattr(WorkspaceRepository, 'list_for_user', AsyncMock(return_value=[]))
 
     async def run_request() -> httpx.Response:
+        """Run the request test body."""
         transport = httpx.ASGITransport(app=_build_app())
         async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
             return await client.get('/v1/tasks')
@@ -173,6 +184,7 @@ def test_list_tasks_returns_newest_first(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_create_task_returns_category_from_persisted_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify create task returns category from persisted task."""
     now = datetime.now(timezone.utc)
     created_task = _make_task(
         question='ship a coding task',
@@ -183,10 +195,12 @@ def test_create_task_returns_category_from_persisted_task(monkeypatch: pytest.Mo
     runner = SimpleNamespace(submit_task=AsyncMock(return_value=created_task.id))
 
     async def fake_get(session, task_id, **kwargs):
+        """Provide a fake get."""
         assert task_id == created_task.id
         return created_task
 
     async def fake_get_instance(session, agent_instance_id, **kwargs):
+        """Provide a fake get instance."""
         assert agent_instance_id == created_task.agent_instance_id
         return SimpleNamespace(
             id=agent_instance_id,
@@ -197,6 +211,7 @@ def test_create_task_returns_category_from_persisted_task(monkeypatch: pytest.Mo
     monkeypatch.setattr(AgentInstanceRepository, 'get', fake_get_instance)
 
     async def run_request() -> httpx.Response:
+        """Run the request test body."""
         transport = httpx.ASGITransport(app=_build_app(runner_obj=runner))
         async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
             return await client.post(
@@ -224,6 +239,7 @@ def test_create_task_returns_category_from_persisted_task(monkeypatch: pytest.Mo
 
 
 def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify list tasks passes filters to repository."""
     session_obj = object()
     app = _build_app(session_obj)
     now = datetime.now(timezone.utc)
@@ -239,6 +255,7 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
     captured: dict[str, Any] = {}
 
     async def fake_list(session, **kwargs):
+        """Provide a fake list."""
         captured['session'] = session
         captured.update(kwargs)
         return [expected_task]
@@ -247,6 +264,7 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(WorkspaceRepository, 'list_for_user', AsyncMock(return_value=[]))
 
     async def run_request() -> httpx.Response:
+        """Run the request test body."""
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
             return await client.get(
@@ -297,6 +315,7 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
 
 
 def test_list_task_work_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify list task work items."""
     now = datetime.now(timezone.utc)
     task = _make_task(question='large task', status=TaskStatus.waiting_for_review, created_at=now)
     work_item = SimpleNamespace(
@@ -317,10 +336,12 @@ def test_list_task_work_items(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     async def fake_get(session, task_id, **kwargs):
+        """Provide a fake get."""
         assert task_id == task.id
         return task
 
     async def fake_list_by_task(session, task_id):
+        """Provide a fake list by task."""
         assert task_id == task.id
         return [work_item]
 
@@ -329,6 +350,7 @@ def test_list_task_work_items(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(AgentInstanceRepository, 'get', _fake_get_current_user_instance)
 
     async def run_request() -> httpx.Response:
+        """Run the request test body."""
         transport = httpx.ASGITransport(app=_build_app())
         async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
             return await client.get(f'/v1/tasks/{task.id}/work-items')
@@ -342,6 +364,7 @@ def test_list_task_work_items(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_update_task_status_closes_reviewable_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify update task status closes reviewable task."""
     now = datetime.now(timezone.utc)
     task = _make_task(question='close task', status=TaskStatus.waiting_for_review, created_at=now)
     closed_task = _make_task(question='close task', status=TaskStatus.closed, created_at=now)
@@ -349,10 +372,12 @@ def test_update_task_status_closes_reviewable_task(monkeypatch: pytest.MonkeyPat
     captured: dict[str, Any] = {}
 
     async def fake_get_task(session, task_id, **kwargs):
+        """Provide a fake get task."""
         assert task_id == task.id
         return task
 
     async def fake_set_closed(session, task_id):
+        """Provide a fake set closed."""
         captured['closed_task_id'] = task_id
         return closed_task
 
@@ -361,6 +386,7 @@ def test_update_task_status_closes_reviewable_task(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(AgentInstanceRepository, 'get', _fake_get_current_user_instance)
 
     async def run_request() -> httpx.Response:
+        """Run the request test body."""
         transport = httpx.ASGITransport(app=_build_app())
         async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
             return await client.patch(
@@ -376,6 +402,7 @@ def test_update_task_status_closes_reviewable_task(monkeypatch: pytest.MonkeyPat
 
 
 def test_update_task_status_reopens_closed_task_for_review(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify update task status reopens closed task for review."""
     now = datetime.now(timezone.utc)
     task = _make_task(question='reopen task', status=TaskStatus.closed, created_at=now)
     reopened_task = _make_task(
@@ -387,10 +414,12 @@ def test_update_task_status_reopens_closed_task_for_review(monkeypatch: pytest.M
     captured: dict[str, Any] = {}
 
     async def fake_get_task(session, task_id, **kwargs):
+        """Provide a fake get task."""
         assert task_id == task.id
         return task
 
     async def fake_list_work_items(session, task_id):
+        """Provide a fake list work items."""
         assert task_id == task.id
         return [
             SimpleNamespace(id=uuid.uuid4(), status=TaskWorkItemStatus.approved),
@@ -398,6 +427,7 @@ def test_update_task_status_reopens_closed_task_for_review(monkeypatch: pytest.M
         ]
 
     async def fake_set_waiting_for_review(session, task_id, **kwargs):
+        """Provide a fake set waiting for review."""
         captured['waiting_for_review_task_id'] = task_id
         captured['waiting_for_review_result'] = kwargs.get('result')
         return reopened_task
@@ -408,6 +438,7 @@ def test_update_task_status_reopens_closed_task_for_review(monkeypatch: pytest.M
     monkeypatch.setattr(AgentInstanceRepository, 'get', _fake_get_current_user_instance)
 
     async def run_request() -> httpx.Response:
+        """Run the request test body."""
         transport = httpx.ASGITransport(app=_build_app())
         async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
             return await client.patch(
@@ -426,6 +457,7 @@ def test_update_task_status_reopens_closed_task_for_review(monkeypatch: pytest.M
 def test_update_task_status_reopens_closed_task_for_review_when_work_items_are_all_approved(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify update task status reopens closed task for review when work items are all approved."""
     now = datetime.now(timezone.utc)
     task = _make_task(question='reopen merge task', status=TaskStatus.closed, created_at=now)
     reopened_task = _make_task(
@@ -437,10 +469,12 @@ def test_update_task_status_reopens_closed_task_for_review_when_work_items_are_a
     captured: dict[str, Any] = {}
 
     async def fake_get_task(session, task_id, **kwargs):
+        """Provide a fake get task."""
         assert task_id == task.id
         return task
 
     async def fake_list_work_items(session, task_id):
+        """Provide a fake list work items."""
         assert task_id == task.id
         return [
             SimpleNamespace(id=uuid.uuid4(), status=TaskWorkItemStatus.approved),
@@ -448,6 +482,7 @@ def test_update_task_status_reopens_closed_task_for_review_when_work_items_are_a
         ]
 
     async def fake_set_waiting_for_review(session, task_id, **kwargs):
+        """Provide a fake set waiting for review."""
         captured['waiting_for_review_task_id'] = task_id
         captured['waiting_for_review_result'] = kwargs.get('result')
         return reopened_task
@@ -458,6 +493,7 @@ def test_update_task_status_reopens_closed_task_for_review_when_work_items_are_a
     monkeypatch.setattr(AgentInstanceRepository, 'get', _fake_get_current_user_instance)
 
     async def run_request() -> httpx.Response:
+        """Run the request test body."""
         transport = httpx.ASGITransport(app=_build_app())
         async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
             return await client.patch(
@@ -474,6 +510,7 @@ def test_update_task_status_reopens_closed_task_for_review_when_work_items_are_a
 
 
 def test_consult_task_returns_process_reply(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify consult task returns process reply."""
     now = datetime.now(timezone.utc)
     task = _make_task(
         question='stabilize process tracking',
@@ -489,26 +526,31 @@ def test_consult_task_returns_process_reply(monkeypatch: pytest.MonkeyPatch) -> 
     )
 
     async def fake_get(session, task_id, **kwargs):
+        """Provide a fake get."""
         assert task_id == task.id
         return task
 
     class FakeAgent:
         def __init__(self) -> None:
+            """Initialize the test helper."""
             self.checkpoint = None
             self.user_message = None
             self.closed = False
 
         async def report_current_process(self, *, checkpoint, user_message):
+            """Return a fake progress report."""
             self.checkpoint = checkpoint
             self.user_message = user_message
             return 'Agent consult reply'
 
         async def close(self) -> None:
+            """Close a fake service."""
             self.closed = True
 
     fake_agent = FakeAgent()
 
     def fake_create(**kwargs):
+        """Provide a fake create."""
         assert kwargs == {
             'base_url': 'https://api.example.com/v1',
             'api_key': 'test-api-key',
@@ -527,6 +569,7 @@ def test_consult_task_returns_process_reply(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(tasks_routes.Sophie, 'create', fake_create)
 
     async def run_request() -> httpx.Response:
+        """Run the request test body."""
         transport = httpx.ASGITransport(app=_build_app())
         async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
             return await client.post(

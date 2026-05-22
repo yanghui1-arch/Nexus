@@ -9,7 +9,10 @@ import {
 } from 'react-router-dom';
 import { toast } from 'sonner';
 import { getErrorDetail } from '@/api/client';
-import { updateProductProposalStatus } from '@/api/product';
+import {
+  retryProductProposalPlanning,
+  updateProductProposalStatus,
+} from '@/api/product';
 import { useAppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import {
@@ -56,6 +59,7 @@ export default function ProductResearchPage() {
   const [proposalPage, setProposalPage] = useState(1);
   const [featurePage, setFeaturePage] = useState(1);
   const [activeReview, setActiveReview] = useState<ReviewActionState>(null);
+  const [recoveringPlanningProposalId, setRecoveringPlanningProposalId] = useState<string | null>(null);
 
   const isFeatureRoute = location.pathname.startsWith('/product-research/features');
   const viewMode = isFeatureRoute ? 'features' : 'proposals';
@@ -164,11 +168,12 @@ export default function ProductResearchPage() {
     try {
       await updateProductProposalStatus(currentProposalId, { status });
       toast.success(
-        status === 'approved' ? t('productResearch.requirementApproved') : t('productResearch.requirementRejected'),
+        status === 'approved'
+          ? t('productResearch.requirementApprovedPlanningStarted')
+          : t('productResearch.requirementRejected'),
       );
       await reloadSnapshot('mutation');
       setProposalFilter(status === 'approved' ? 'accepted' : 'rejected');
-      navigate('/product-research', { replace: true });
     } catch (error) {
       toast.error(t('productResearch.updateProposalFailed'), {
         description: getErrorDetail(error, t('productResearch.updateProposalFailedDescription')),
@@ -176,6 +181,29 @@ export default function ProductResearchPage() {
     } finally {
       startTransition(() => {
         setActiveReview(null);
+      });
+    }
+  }
+
+  async function handleRecoverPlanning(currentProposalId: string): Promise<void> {
+    startTransition(() => {
+      setRecoveringPlanningProposalId(currentProposalId);
+    });
+
+    try {
+      await retryProductProposalPlanning(currentProposalId);
+      toast.success(t('productResearch.planningRecoverStarted'));
+      await reloadSnapshot('mutation');
+    } catch (error) {
+      toast.error(t('productResearch.planningRecoverFailed'), {
+        description: getErrorDetail(
+          error,
+          t('productResearch.planningRecoverFailedDescription'),
+        ),
+      });
+    } finally {
+      startTransition(() => {
+        setRecoveringPlanningProposalId(null);
       });
     }
   }
@@ -210,6 +238,8 @@ export default function ProductResearchPage() {
             relatedFeatures={selectedProposalFeatures}
             activeReview={activeReview}
             onReview={handleReview}
+            onRecoverPlanning={handleRecoverPlanning}
+            recoveringPlanning={recoveringPlanningProposalId === selectedProposal.id}
           />
         )}
       </div>

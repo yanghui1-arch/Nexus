@@ -91,12 +91,14 @@ class Sandbox:
     """
 
     def __init__(self, config: SandboxConfig) -> None:
+        """Initialize the object."""
         self._config = config
         self._client: docker.DockerClient | None = None
         self._container = None
 
 
     async def __aenter__(self) -> "Sandbox":
+        """Enter the async context manager."""
         return await self.start()
 
 
@@ -141,6 +143,7 @@ class Sandbox:
 
 
     async def __aexit__(self, *_) -> None:
+        """Exit the async context manager."""
         if self._container:
             await asyncio.to_thread(self._container.kill)
             self._container = None
@@ -280,6 +283,7 @@ class Sandbox:
 
 
     async def _exec(self, cmd: list[str]) -> dict:
+        """Execute a command in the sandbox."""
         exit_code, output = await asyncio.to_thread(
             self._container.exec_run, cmd, demux=True
         )
