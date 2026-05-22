@@ -1,10 +1,11 @@
 import type { TFunction } from 'i18next';
 import { getProductFeature, listProductFeatures, listProductProposals } from '@/api/product';
-import type { ApiFeatureItem, ApiTask } from '@/api/types';
+import type { ApiFeatureItem, ApiProductProposal, ApiTask } from '@/api/types';
 import { ALL_PROJECTS, NO_PROJECT, PAGE_SIZE } from './constants';
 import type {
   ProductResearchSnapshot,
   ProjectOption,
+  ProposalPlanningDisplayStatus,
   ProposalFilter,
 } from './types';
 
@@ -83,6 +84,30 @@ export function formatRelativeTime(value: string | null): string {
 
 export function shortId(value: string): string {
   return value.slice(0, 8);
+}
+
+export function hasValidatedProposalPlan(proposal: ApiProductProposal): boolean {
+  return proposal.status === 'planned' || proposal.status === 'completed';
+}
+
+export function getProposalPlanningDisplayStatus(
+  proposal: ApiProductProposal,
+): ProposalPlanningDisplayStatus | null {
+  if (proposal.status === 'approved') {
+    if (proposal.latest_planning_run == null) {
+      return 'missing_run';
+    }
+    if (proposal.latest_planning_task_exists === false) {
+      return 'missing_task';
+    }
+    return proposal.latest_planning_run.status;
+  }
+
+  if (hasValidatedProposalPlan(proposal)) {
+    return proposal.latest_planning_run?.status ?? 'completed';
+  }
+
+  return proposal.latest_planning_run?.status ?? null;
 }
 
 export function calculateFeatureCompletion(

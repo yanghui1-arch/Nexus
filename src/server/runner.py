@@ -71,7 +71,11 @@ class AgentTaskRunner:
         logger.info(f"Task `{task.id}` is queued.")
 
         try:
-            dispatched = await self.dispatch_existing_task(task.id, recovered=False, mark_failed=True)
+            dispatched = await self.dispatch_existing_task(
+                task.id,
+                recovered=False,
+                fail_task_on_dispatch_error=True,
+            )
             if not dispatched:
                 raise RuntimeError(f"Task `{task.id}` is no longer dispatchable (status/lease changed).")
             logger.info(f"Task `{task.id}` has been dispatched for worker.")
@@ -183,13 +187,13 @@ class AgentTaskRunner:
         task_id: uuid.UUID,
         *,
         recovered: bool = False,
-        mark_failed: bool = False,
+        fail_task_on_dispatch_error: bool = False,
     ) -> bool:
         """Dispatch an already persisted task."""
         try:
             dispatched = await self._dispatch(task_id, recovered=recovered)
         except Exception as exc:
-            if mark_failed:
+            if fail_task_on_dispatch_error:
                 # New planning flows can opt in here so a dispatch failure is visible
                 # on both the task row and the linked planning run instead of leaving
                 # the approved proposal in an ambiguous in-between state.
@@ -206,7 +210,7 @@ class AgentTaskRunner:
                 logger.error(f"Fail to dispatch task `{task_id}`: {str(exc)}")
             raise
 
-        if not dispatched and mark_failed:
+        if not dispatched and fail_task_on_dispatch_error:
             error = f"Dispatch failed: Task `{task_id}` is no longer dispatchable (status/lease changed)."
             async with self._database.session() as session:
                 task = await TaskRepository.set_failed(session, task_id, error=error)
