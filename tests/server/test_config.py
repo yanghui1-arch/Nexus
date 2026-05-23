@@ -53,3 +53,29 @@ def test_product_discovery_recent_proposal_limit_is_loaded(monkeypatch):
         get_settings.cache_clear()
 
     assert settings.product_discovery_recent_proposal_limit == 3
+
+
+def test_product_discovery_pending_proposal_limit_defaults_to_50(monkeypatch):
+    """Verify product discovery pending proposal limit default."""
+    get_settings.cache_clear()
+    monkeypatch.delenv("NEXUS_PRODUCT_DISCOVERY_PENDING_PROPOSAL_LIMIT", raising=False)
+
+    try:
+        settings = get_settings()
+    finally:
+        get_settings.cache_clear()
+
+    assert settings.product_discovery_pending_proposal_limit == 50
+
+
+def test_product_discovery_pending_proposal_limit_is_loaded(monkeypatch):
+    """Verify product discovery pending proposal limit is loaded."""
+    get_settings.cache_clear()
+    monkeypatch.setenv("NEXUS_PRODUCT_DISCOVERY_PENDING_PROPOSAL_LIMIT", "7")
+
+    try:
+        settings = get_settings()
+    finally:
+        get_settings.cache_clear()
+
+    assert settings.product_discovery_pending_proposal_limit == 7
