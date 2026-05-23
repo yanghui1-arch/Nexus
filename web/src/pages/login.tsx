@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Navigate, useLocation } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
 import { SiGithub } from 'react-icons/si';
-import { getCurrentUser } from '@/api/auth';
+import { useAuth } from '@/components/AuthProvider';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 type LoginLocationState = {
   from?: {
     pathname?: string;
@@ -14,36 +17,14 @@ type LoginLocationState = {
   };
 };
 
-type AuthStatus = 'checking' | 'authenticated' | 'unauthenticated';
-
 export default function LoginPage() {
   const { t } = useTranslation();
   const location = useLocation();
-  const [authStatus, setAuthStatus] = useState<AuthStatus>('checking');
+  const { status } = useAuth();
   const from = (location.state as LoginLocationState | null)?.from;
   const redirectPath = `${from?.pathname ?? '/'}${from?.search ?? ''}`;
 
-  useEffect(() => {
-    let isMounted = true;
-
-    void getCurrentUser()
-      .then(() => {
-        if (isMounted) {
-          setAuthStatus('authenticated');
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setAuthStatus('unauthenticated');
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  if (authStatus === 'authenticated') {
+  if (status === 'authenticated') {
     return <Navigate to={redirectPath} replace />;
   }
 
@@ -58,14 +39,9 @@ export default function LoginPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button asChild className="w-full" disabled={authStatus === 'checking'} size="lg">
-              <a href="/v1/auth/github/login" aria-disabled={authStatus === 'checking'}>
-                {authStatus === 'checking' ? (
-                  <Loader2 className="size-5 animate-spin" aria-hidden="true" />
-                ) : (
-                  <SiGithub className="size-5" aria-hidden="true" />
-                )}
-                {authStatus === 'checking' ? t('auth.loadingAccount') : t('login.continueWithGithub')}
+            <Button asChild className="w-full" size="lg">
+              <a href="/v1/auth/github/login">
+                <SiGithub className="size-5" aria-hidden="true" /> {t('login.continueWithGithub')}
               </a>
             </Button>
           </CardContent>
