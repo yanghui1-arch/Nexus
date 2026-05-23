@@ -40,3 +40,16 @@ def test_frontend_base_url_is_loaded(monkeypatch):
         get_settings.cache_clear()
 
     assert settings.frontend_base_url == "http://localhost:5174"
+
+
+def test_product_discovery_recent_proposal_limit_is_loaded(monkeypatch):
+    """Verify product discovery recent proposal limit is loaded."""
+    get_settings.cache_clear()
+    monkeypatch.setenv("NEXUS_PRODUCT_DISCOVERY_RECENT_PROPOSAL_LIMIT", "3")
+
+    try:
+        settings = get_settings()
+    finally:
+        get_settings.cache_clear()
+
+    assert settings.product_discovery_recent_proposal_limit == 3
