@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,13 +14,11 @@ from src.server.postgres.models import (
     AgentName,
     ProductProposalRecord,
     ProductProposalStatus,
-    TaskCategory,
     WorkspaceRecord,
 )
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
     ProductProposalRepository,
-    TaskRepository,
     WorkspaceRepository,
 )
 from src.server.runner import AgentTaskRunner
@@ -51,8 +48,6 @@ class ProductDiscoveryDecision:
 class ProductDiscoveryProposalMetrics:
     pending_proposal_count: int
     pending_proposal_limit: int
-    cooldown_seconds: int
-    latest_discovery_or_proposal_at: datetime | None = None
 
 
 def _skip(
@@ -68,7 +63,6 @@ def decide_product_discovery_dispatch(
     candidate: AgentInstanceRecord,
     workspace: WorkspaceRecord | None,
     metrics: ProductDiscoveryProposalMetrics,
-    now: datetime | None = None,
 ) -> ProductDiscoveryDecision:
     """Decide whether a product discovery candidate should be dispatched."""
     candidate_id = candidate.id
@@ -99,21 +93,6 @@ def decide_product_discovery_dispatch(
                 "project": project,
             },
         )
-
-    if metrics.latest_discovery_or_proposal_at is not None and metrics.cooldown_seconds > 0:
-        current_time = now or datetime.now(UTC)
-        cooldown_until = metrics.latest_discovery_or_proposal_at + timedelta(seconds=metrics.cooldown_seconds)
-        if current_time < cooldown_until:
-            return _skip(
-                "cooldown_active",
-                "Recent product discovery or proposal is still within cooldown.",
-                {
-                    "latest_discovery_or_proposal_at": metrics.latest_discovery_or_proposal_at.isoformat(),
-                    "cooldown_until": cooldown_until.isoformat(),
-                    "repo": repo,
-                    "project": project,
-                },
-            )
 
     return ProductDiscoveryDecision(
         action="dispatch",
@@ -253,26 +232,15 @@ class ProductDiscoveryPoller:
         workspace: WorkspaceRecord | None,
     ) -> ProductDiscoveryProposalMetrics:
         """Build proposal metrics for a workspace."""
-        interval = self._settings.product_discovery_poll_interval_seconds
         if workspace is None or not workspace.github_repo or not workspace.project:
-            return ProductDiscoveryProposalMetrics(0, PENDING_PROPOSAL_LIMIT, interval)
+            return ProductDiscoveryProposalMetrics(0, PENDING_PROPOSAL_LIMIT)
 
         proposals = await ProductProposalRepository.list(session, repo=workspace.github_repo, project=workspace.project)
         pending_count = sum(
             proposal.status in {ProductProposalStatus.proposed, ProductProposalStatus.approved, ProductProposalStatus.planned}
             for proposal in proposals
         )
-        latest_at = max((proposal.created_at for proposal in proposals), default=None)
-        tasks = await TaskRepository.list(
-            session,
-            category=TaskCategory.pm,
-            repo=workspace.github_repo,
-            project=workspace.project,
-            limit=1,
-        )
-        if tasks:
-            latest_at = tasks[0].created_at if latest_at is None else max(latest_at, tasks[0].created_at)
-        return ProductDiscoveryProposalMetrics(pending_count, PENDING_PROPOSAL_LIMIT, interval, latest_at)
+        return ProductDiscoveryProposalMetrics(pending_count, PENDING_PROPOSAL_LIMIT)
 
     async def _run_loop(self) -> None:
         """Run the background polling loop."""

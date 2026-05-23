@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import uuid
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -17,7 +16,6 @@ from src.server.postgres.models import AgentName, TaskCategory, TaskRecord, Task
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
     ProductProposalRepository,
-    TaskRepository,
     UserRepository,
     WorkspaceRepository,
 )
@@ -57,8 +55,6 @@ def _metrics(**overrides):
     values = {
         "pending_proposal_count": 0,
         "pending_proposal_limit": 3,
-        "cooldown_seconds": 3600,
-        "latest_discovery_or_proposal_at": None,
     }
     values.update(overrides)
     return ProductDiscoveryProposalMetrics(**values)
@@ -77,22 +73,6 @@ def test_decision_skips_when_pending_proposal_limit_reached():
     assert decision.action == "skip"
     assert decision.reason.code == "pending_proposal_limit_reached"
     assert decision.reason.details["pending_proposal_count"] == 3
-
-
-def test_decision_skips_when_cooldown_is_active():
-    now = datetime(2025, 1, 1, tzinfo=UTC)
-    candidate = SimpleNamespace(id=uuid.uuid4())
-    workspace = SimpleNamespace(github_repo="owner/repo", project="nexus")
-
-    decision = decide_product_discovery_dispatch(
-        candidate=candidate,
-        workspace=workspace,
-        metrics=_metrics(latest_discovery_or_proposal_at=now - timedelta(minutes=10)),
-        now=now,
-    )
-
-    assert decision.action == "skip"
-    assert decision.reason.code == "cooldown_active"
 
 
 def test_decision_skips_when_context_is_missing():
@@ -138,14 +118,9 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
         captured["proposal_kwargs"] = kwargs
         return []
 
-    async def fake_tasks(session, **filters):
-        """Provide no existing discovery tasks."""
-        return []
-
     monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
     monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
     monkeypatch.setattr(ProductProposalRepository, "list", fake_proposals)
-    monkeypatch.setattr(TaskRepository, "list", fake_tasks)
 
     poller = ProductDiscoveryPoller(
         settings=_settings(),
@@ -243,14 +218,9 @@ def test_poll_once_continues_after_submit_failure(monkeypatch):
         """Provide no existing proposals."""
         return []
 
-    async def fake_tasks(session, **filters):
-        """Provide no existing discovery tasks."""
-        return []
-
     monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
     monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
     monkeypatch.setattr(ProductProposalRepository, "list", fake_proposals)
-    monkeypatch.setattr(TaskRepository, "list", fake_tasks)
 
     poller = ProductDiscoveryPoller(
         settings=_settings(),
