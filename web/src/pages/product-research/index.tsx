@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useState } from 'react';
+import { startTransition, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Link,
@@ -17,13 +17,18 @@ import { useAppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import {
   EmptyPanel,
-  LoadingPanel,
 } from './components/FeedbackPanels';
 import { FeatureDetailCard } from './components/FeatureDetailCard';
 import { FeatureFilters } from './components/FeatureFilters';
 import { FeatureTable } from './components/FeatureTable';
 import { ProposalDetailCard } from './components/ProposalDetailCard';
 import { ProposalFilters } from './components/ProposalFilters';
+import {
+  FeatureDetailSkeleton,
+  FeatureTableSkeleton,
+  ProposalDetailSkeleton,
+  ProposalTableSkeleton,
+} from './components/ProductResearchSkeletons';
 import { ProposalTable } from './components/ProposalTable';
 import { ALL_PROJECTS } from './constants';
 import { useProductResearchSnapshot } from './hooks/useProductResearchSnapshot';
@@ -37,6 +42,7 @@ import {
   getPageCount,
   getProjectOptions,
   getProposalEmptyMessage,
+  getProposalSummaryCounts,
   getVisiblePage,
   matchesProjectFilter,
 } from './utils';
@@ -51,7 +57,8 @@ export default function ProductResearchPage() {
   }>();
   const { features, isLoading, loadError, proposals, reloadSnapshot } =
     useProductResearchSnapshot();
-  const [proposalFilter, setProposalFilter] = useState<ProposalFilter>('accepted');
+  const [proposalFilter, setProposalFilter] = useState<ProposalFilter>('proposed');
+  const proposalFilterSelectedRef = useRef(false);
   const [proposalProjectFilter, setProposalProjectFilter] =
     useState<string>(ALL_PROJECTS);
   const [featureProjectFilter, setFeatureProjectFilter] =
@@ -63,6 +70,13 @@ export default function ProductResearchPage() {
 
   const isFeatureRoute = location.pathname.startsWith('/product-research/features');
   const viewMode = isFeatureRoute ? 'features' : 'proposals';
+  const proposalSummaryCounts = getProposalSummaryCounts(proposals);
+
+  function handleReviewPendingProposals(): void {
+    setProposalFilter('proposed');
+    setProposalPage(1);
+    navigate('/product-research', { replace: true });
+  }
 
   const statusFilteredProposals = proposals.filter(proposal => {
     if (proposalFilter === 'all') {
@@ -89,6 +103,11 @@ export default function ProductResearchPage() {
   const proposalPageCount = getPageCount(filteredProposals.length);
   const activeProposalPage = Math.min(proposalPage, proposalPageCount);
   const visibleProposals = getVisiblePage(filteredProposals, activeProposalPage);
+  const approvalInboxStats = [
+    { key: 'pending', value: proposalSummaryCounts.proposed, onClick: handleReviewPendingProposals },
+    { key: 'accepted', value: proposalSummaryCounts.accepted },
+    { key: 'rejected', value: proposalSummaryCounts.rejected },
+  ];
 
   const trackedFeatures = (() => {
     const activeFeatures = features.filter(feature => feature.status !== 'closed');
@@ -112,6 +131,16 @@ export default function ProductResearchPage() {
     ? features.filter(feature => feature.proposal_id === proposalId)
     : [];
   const selectedFeature = features.find(feature => feature.id === featureId) ?? null;
+
+  useEffect(() => {
+    if (proposalFilterSelectedRef.current || proposalId || proposals.length === 0) {
+      return;
+    }
+
+    if (!proposals.some(proposal => proposal.status === 'proposed')) {
+      setProposalFilter('accepted');
+    }
+  }, [proposalId, proposals]);
 
   useEffect(() => {
     if (viewMode !== 'proposals') {
@@ -220,7 +249,7 @@ export default function ProductResearchPage() {
         </div>
 
         {isLoading || !selectedProposal ? (
-          <LoadingPanel message={t('productResearch.loadingProposal')} />
+          <ProposalDetailSkeleton label={t('productResearch.loadingProposal')} />
         ) : (
           <ProposalDetailCard
             proposal={selectedProposal}
@@ -245,7 +274,7 @@ export default function ProductResearchPage() {
         </div>
 
         {isLoading || !selectedFeature ? (
-          <LoadingPanel message={t('productResearch.loadingFeature')} />
+          <FeatureDetailSkeleton label={t('productResearch.loadingFeature')} />
         ) : (
           <FeatureDetailCard feature={selectedFeature} />
         )}
@@ -257,16 +286,37 @@ export default function ProductResearchPage() {
     <section className="flex flex-col gap-6">
       {viewMode === 'proposals' ? (
         <div className="flex flex-col gap-4">
+          <section className="border-y px-1 py-3">
+            <dl className="grid gap-6 sm:grid-cols-3">
+              {approvalInboxStats.map(({ key, value, onClick }) => (
+                <button
+                  key={key}
+                  type="button"
+                  className="px-4 py-2 text-left transition-colors hover:text-primary"
+                  onClick={onClick}
+                >
+                  <dt className="text-muted-foreground text-sm font-medium">
+                    {t(`productResearch.approvalInbox.${key}`)}
+                  </dt>
+                  <dd className="mt-2 text-3xl font-semibold">{value}</dd>
+                </button>
+              ))}
+            </dl>
+          </section>
+
           <ProposalFilters
             proposalFilter={proposalFilter}
             projectFilter={activeProposalProjectFilter}
             projectOptions={proposalProjectOptions}
-            onProposalFilterChange={setProposalFilter}
+            onProposalFilterChange={filter => {
+              proposalFilterSelectedRef.current = true;
+              setProposalFilter(filter);
+            }}
             onProjectFilterChange={setProposalProjectFilter}
           />
 
           {isLoading ? (
-            <LoadingPanel message={t('productResearch.loadingRequirements')} />
+            <ProposalTableSkeleton label={t('productResearch.loadingRequirements')} />
           ) : filteredProposals.length === 0 ? (
             <EmptyPanel
               message={getProposalEmptyMessage({
@@ -298,7 +348,7 @@ export default function ProductResearchPage() {
           />
 
           {isLoading ? (
-            <LoadingPanel message={t('productResearch.loadingFeatures')} />
+            <FeatureTableSkeleton label={t('productResearch.loadingFeatures')} />
           ) : filteredFeatures.length === 0 ? (
             <EmptyPanel
               message={getFeatureEmptyMessage({

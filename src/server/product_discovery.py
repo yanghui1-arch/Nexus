@@ -7,7 +7,7 @@ from typing import Any
 from src.logger import logger
 from src.server.config import Settings
 from src.server.postgres.database import Database
-from src.server.postgres.models import AgentName, TaskCategory
+from src.server.postgres.models import AgentName, ProductProposalRecord, TaskCategory
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
     ProductProposalRepository,
@@ -33,6 +33,22 @@ def _is_in_cooldown(
     return (now or datetime.now(UTC)) < latest_activity_at + timedelta(seconds=cooldown_seconds)
 
 
+def build_product_discovery_question(proposals: list[ProductProposalRecord], *, proposal_limit: int) -> str:
+    """Build a bounded product discovery prompt from recent proposals."""
+    lines = [
+        "优化产品并提出一个proposal",
+        "",
+        "Recent proposals context (title and summary only):",
+    ]
+    for proposal in proposals[:proposal_limit]:
+        title = (proposal.title or "").strip()
+        summary = (proposal.summary or "").strip()
+        lines.extend([f"- Title: {title}", f"  Summary: {summary}"])
+    if len(lines) == 3:
+        lines.append("- None")
+    return "\n".join(lines)
+
+
 class ProductDiscoveryPoller:
     def __init__(
         self,
@@ -46,7 +62,7 @@ class ProductDiscoveryPoller:
         self._database = database
         self._runner = runner
         self._stop_event = asyncio.Event()
-        self._task: asyncio.Task[Any] | None = None
+        self._task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
         """Start the product discovery poller.
@@ -113,12 +129,23 @@ class ProductDiscoveryPoller:
                         instance.id,
                     )
                     continue
+                recent_limit = self._settings.product_discovery_recent_proposal_limit
+                async with self._database.session() as session:
+                    recent_proposals = await ProductProposalRepository.list(
+                        session,
+                        project=workspace.project,
+                        repo=workspace.github_repo,
+                        limit=recent_limit,
+                    )
 
                 task_id = await self._runner.submit_task(
                     TaskCreateRequest(
                         agent_instance_id=instance.id,
                         agent=AgentKind(instance.agent.value),
-                        question="优化产品并提出一个proposal",
+                        question=build_product_discovery_question(
+                            recent_proposals,
+                            proposal_limit=recent_limit,
+                        ),
                         external_issue_url=None,
                     )
                 )

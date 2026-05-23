@@ -1,7 +1,6 @@
 import {
   createContext,
   useContext,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useState,
@@ -11,10 +10,9 @@ import { NavLink, Outlet, useMatch } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ChevronsUpDown, LogOut, Sparkles, Wallet } from 'lucide-react';
 import { SiGithub } from 'react-icons/si';
-import { getCurrentUser, logout } from '@/api/auth';
-import type { ApiUser } from '@/api/types';
 import { WORKSPACE_NAV_ITEMS } from '@/lib/dashboard-nav';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/components/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { LanguageSwitch } from '@/components/LanguageSwitch';
 
@@ -91,19 +89,11 @@ function SidebarNavEntry({ item }: { item: (typeof WORKSPACE_NAV_ITEMS)[number] 
 
 function SidebarAccount() {
   const { t } = useTranslation();
-  const [user, setUser] = useState<ApiUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { signOut, status, user } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  useEffect(() => {
-    void getCurrentUser()
-      .then(setUser)
-      .catch(() => setUser(null))
-      .finally(() => setIsLoading(false));
-  }, []);
-
   const handleLogout = async () => {
-    await logout();
+    await signOut();
     window.location.href = '/login';
   };
 
@@ -145,7 +135,7 @@ function SidebarAccount() {
             <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
               <SiGithub className="size-4" />
             </div>
-            <span className="truncate text-sm font-medium">{isLoading ? t('auth.loadingAccount') : t('auth.loginWithGithub')}</span>
+            <span className="truncate text-sm font-medium">{status === 'checking' ? t('auth.loadingAccount') : t('auth.loginWithGithub')}</span>
           </a>
         </Button>
       )}
