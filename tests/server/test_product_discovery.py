@@ -46,6 +46,7 @@ def _settings(**overrides):
         "product_discovery_poll_interval_seconds": 3600,
         "product_discovery_poll_task_limit": 20,
         "product_discovery_recent_proposal_limit": 5,
+        "product_discovery_pending_proposal_limit": 50,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -54,7 +55,7 @@ def _settings(**overrides):
 def _metrics(**overrides):
     values = {
         "pending_proposal_count": 0,
-        "pending_proposal_limit": 3,
+        "pending_proposal_limit": 50,
     }
     values.update(overrides)
     return ProductDiscoveryProposalMetrics(**values)
@@ -67,12 +68,12 @@ def test_decision_skips_when_pending_proposal_limit_reached():
     decision = decide_product_discovery_dispatch(
         candidate=candidate,
         workspace=workspace,
-        metrics=_metrics(pending_proposal_count=3),
+        metrics=_metrics(pending_proposal_count=50),
     )
 
     assert decision.action == "skip"
     assert decision.reason.code == "pending_proposal_limit_reached"
-    assert decision.reason.details["pending_proposal_count"] == 3
+    assert decision.reason.details["pending_proposal_count"] == 50
 
 
 def test_decision_skips_when_context_is_missing():

@@ -26,7 +26,6 @@ from src.server.schemas import AgentKind, TaskCreateRequest
 
 
 PRODUCT_DISCOVERY_AGENT_NAMES = {AgentName.marc}
-PENDING_PROPOSAL_LIMIT = 3
 
 ProductDiscoveryAction = Literal["dispatch", "skip"]
 
@@ -233,14 +232,20 @@ class ProductDiscoveryPoller:
     ) -> ProductDiscoveryProposalMetrics:
         """Build proposal metrics for a workspace."""
         if workspace is None or not workspace.github_repo or not workspace.project:
-            return ProductDiscoveryProposalMetrics(0, PENDING_PROPOSAL_LIMIT)
+            return ProductDiscoveryProposalMetrics(
+                0,
+                self._settings.product_discovery_pending_proposal_limit,
+            )
 
         proposals = await ProductProposalRepository.list(session, repo=workspace.github_repo, project=workspace.project)
         pending_count = sum(
             proposal.status in {ProductProposalStatus.proposed, ProductProposalStatus.approved, ProductProposalStatus.planned}
             for proposal in proposals
         )
-        return ProductDiscoveryProposalMetrics(pending_count, PENDING_PROPOSAL_LIMIT)
+        return ProductDiscoveryProposalMetrics(
+            pending_count,
+            self._settings.product_discovery_pending_proposal_limit,
+        )
 
     async def _run_loop(self) -> None:
         """Run the background polling loop."""
