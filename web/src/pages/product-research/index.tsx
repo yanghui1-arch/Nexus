@@ -17,13 +17,18 @@ import { useAppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import {
   EmptyPanel,
-  LoadingPanel,
 } from './components/FeedbackPanels';
 import { FeatureDetailCard } from './components/FeatureDetailCard';
 import { FeatureFilters } from './components/FeatureFilters';
 import { FeatureTable } from './components/FeatureTable';
 import { ProposalDetailCard } from './components/ProposalDetailCard';
 import { ProposalFilters } from './components/ProposalFilters';
+import {
+  FeatureDetailSkeleton,
+  FeatureTableSkeleton,
+  ProposalDetailSkeleton,
+  ProposalTableSkeleton,
+} from './components/ProductResearchSkeletons';
 import { ProposalTable } from './components/ProposalTable';
 import { ALL_PROJECTS } from './constants';
 import { useProductResearchSnapshot } from './hooks/useProductResearchSnapshot';
@@ -244,7 +249,7 @@ export default function ProductResearchPage() {
         </div>
 
         {isLoading || !selectedProposal ? (
-          <LoadingPanel message={t('productResearch.loadingProposal')} />
+          <ProposalDetailSkeleton label={t('productResearch.loadingProposal')} />
         ) : (
           <ProposalDetailCard
             proposal={selectedProposal}
@@ -269,7 +274,7 @@ export default function ProductResearchPage() {
         </div>
 
         {isLoading || !selectedFeature ? (
-          <LoadingPanel message={t('productResearch.loadingFeature')} />
+          <FeatureDetailSkeleton label={t('productResearch.loadingFeature')} />
         ) : (
           <FeatureDetailCard feature={selectedFeature} />
         )}
@@ -311,7 +316,7 @@ export default function ProductResearchPage() {
           />
 
           {isLoading ? (
-            <LoadingPanel message={t('productResearch.loadingRequirements')} />
+            <ProposalTableSkeleton label={t('productResearch.loadingRequirements')} />
           ) : filteredProposals.length === 0 ? (
             <EmptyPanel
               message={getProposalEmptyMessage({
@@ -343,7 +348,7 @@ export default function ProductResearchPage() {
           />
 
           {isLoading ? (
-            <LoadingPanel message={t('productResearch.loadingFeatures')} />
+            <FeatureTableSkeleton label={t('productResearch.loadingFeatures')} />
           ) : filteredFeatures.length === 0 ? (
             <EmptyPanel
               message={getFeatureEmptyMessage({
