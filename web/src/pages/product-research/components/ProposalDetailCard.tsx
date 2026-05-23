@@ -12,6 +12,11 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs';
 import { PROPOSAL_PLANNING_STATUS_META, PROPOSAL_STATUS_META } from '../constants';
+import {
+  parseProposalAnswerSections,
+  type ProposalAnswerSectionKey,
+  type ProposalAnswerSectionTab,
+} from '../proposalAnswerParser';
 import type { ReviewActionState, ReviewActionStatus } from '../types';
 import {
   formatRelativeTime,
@@ -28,6 +33,20 @@ type ProposalDetailCardProps = {
   relatedFeatures: ApiFeature[];
   recoveringPlanning: boolean;
 };
+
+type SectionTabConfig = {
+  keys: ProposalAnswerSectionKey[];
+  value: ProposalAnswerSectionTab;
+};
+
+const SECTION_TAB_CONFIGS: SectionTabConfig[] = [
+  { value: 'decision-brief', keys: ['problemOpportunity', 'userBusinessImpact'] },
+  { value: 'evidence', keys: ['repositoryEvidence', 'externalEvidence'] },
+  { value: 'scope', keys: ['proposedScope', 'nonGoals'] },
+  { value: 'risks', keys: ['risksMitigations'] },
+  { value: 'breakdown', keys: ['suggestedSmallFeatureBreakdown'] },
+  { value: 'open-questions', keys: ['openQuestions'] },
+];
 
 export function ProposalDetailCard({
   activeReview,
@@ -49,6 +68,9 @@ export function ProposalDetailCard({
   const isPending = proposal.status === 'proposed';
   const canOpenPlanList =
     hasValidatedProposalPlan(proposal) && relatedFeatures.length > 0;
+  const proposalAnswer = parseProposalAnswerSections(proposal.answer);
+  const hasSectionTabs = Object.keys(proposalAnswer.sections).length > 0;
+  const [activeDetailTab, setActiveDetailTab] = useState<ProposalAnswerSectionTab>('decision-brief');
   const [activeTab, setActiveTab] = useState<'description' | 'plan-list'>('description');
   const visibleTab = activeTab === 'plan-list' && !canOpenPlanList
     ? 'description'
@@ -159,19 +181,55 @@ export function ProposalDetailCard({
         </TabsList>
 
         <TabsContent value="description" className="flex flex-col gap-8">
-          <section className="flex flex-col gap-3">
-            <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {t('productResearch.summary')}
-            </h3>
-            <MarkdownContent content={proposal.summary} />
-          </section>
+          {hasSectionTabs ? (
+            <Tabs
+              value={activeDetailTab}
+              onValueChange={value => setActiveDetailTab(value as ProposalAnswerSectionTab)}
+              className="gap-4"
+            >
+              <TabsList className="flex h-auto flex-wrap">
+                {SECTION_TAB_CONFIGS.map(tab => (
+                  <TabsTrigger key={tab.value} value={tab.value}>
+                    {t(`productResearch.proposalSectionTabs.${tab.value}`)}
+                  </TabsTrigger>
+                ))}
+                <TabsTrigger value="full-text">
+                  {t('productResearch.proposalSectionTabs.full-text')}
+                </TabsTrigger>
+              </TabsList>
 
-          <section className="flex flex-col gap-3">
-            <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {t('productResearch.suggestedPlan')}
-            </h3>
-            <MarkdownContent content={proposal.answer} />
-          </section>
+              {SECTION_TAB_CONFIGS.map(tab => (
+                <TabsContent key={tab.value} value={tab.value} className="flex flex-col gap-5">
+                  {tab.keys.map(key => (
+                    <ProposalSectionBlock
+                      key={key}
+                      content={proposalAnswer.sections[key]}
+                      title={t(`productResearch.proposalSections.${key}`)}
+                    />
+                  ))}
+                </TabsContent>
+              ))}
+              <TabsContent value="full-text">
+                <MarkdownContent content={proposalAnswer.fullText} />
+              </TabsContent>
+            </Tabs>
+          ) : (
+            <>
+              <section className="flex flex-col gap-3">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  {t('productResearch.summary')}
+                </h3>
+                <MarkdownContent content={proposal.summary} />
+              </section>
+
+              <section className="flex flex-col gap-3">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  {t('productResearch.suggestedPlan')}
+                </h3>
+                <MarkdownContent content={proposal.answer} />
+              </section>
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="plan-list">
@@ -201,5 +259,20 @@ export function ProposalDetailCard({
         </footer>
       ) : null}
     </article>
+  );
+}
+
+function ProposalSectionBlock({ content, title }: { content?: string; title: string }) {
+  return (
+    <section className="flex flex-col gap-3">
+      <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {title}
+      </h3>
+      {content ? (
+        <MarkdownContent content={content} />
+      ) : (
+        <p className="text-sm text-muted-foreground">—</p>
+      )}
+    </section>
   );
 }
