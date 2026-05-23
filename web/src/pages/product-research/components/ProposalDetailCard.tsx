@@ -19,6 +19,9 @@ import {
   hasValidatedProposalPlan,
 } from '../utils';
 import { ProposalPlanList } from './ProposalPlanList';
+import { getFirstMeaningfulLine, getProposalBriefSections } from '../proposalBrief';
+
+type DetailTab = 'decision-brief' | 'description' | 'plan-list';
 
 type ProposalDetailCardProps = {
   activeReview: ReviewActionState;
@@ -28,6 +31,29 @@ type ProposalDetailCardProps = {
   relatedFeatures: ApiFeature[];
   recoveringPlanning: boolean;
 };
+
+function BriefSection({
+  content,
+  fallback,
+  title,
+}: {
+  content: string | undefined;
+  fallback: string;
+  title: string;
+}) {
+  return (
+    <section className="flex min-w-0 flex-col gap-3 rounded-lg border p-4">
+      <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {title}
+      </h3>
+      {content?.trim() ? (
+        <MarkdownContent content={content} />
+      ) : (
+        <p className="text-sm text-muted-foreground">{fallback}</p>
+      )}
+    </section>
+  );
+}
 
 export function ProposalDetailCard({
   activeReview,
@@ -49,10 +75,14 @@ export function ProposalDetailCard({
   const isPending = proposal.status === 'proposed';
   const canOpenPlanList =
     hasValidatedProposalPlan(proposal) && relatedFeatures.length > 0;
-  const [activeTab, setActiveTab] = useState<'description' | 'plan-list'>('description');
+  const [activeTab, setActiveTab] = useState<DetailTab>('decision-brief');
   const visibleTab = activeTab === 'plan-list' && !canOpenPlanList
-    ? 'description'
+    ? 'decision-brief'
     : activeTab;
+  const answerSections = getProposalBriefSections(proposal.answer);
+  const recommendation = getFirstMeaningfulLine(answerSections.scope)
+    ?? getFirstMeaningfulLine(proposal.summary)
+    ?? t('productResearch.decisionBriefRecommendationFallback');
   const showRetryPlanning = planningStatus === 'failed';
   const showRecoverPlanning =
     planningStatus === 'missing_run' || planningStatus === 'missing_task';
@@ -147,16 +177,65 @@ export function ProposalDetailCard({
           if (value === 'plan-list' && !canOpenPlanList) {
             return;
           }
-          setActiveTab(value as 'description' | 'plan-list');
+          setActiveTab(value as DetailTab);
         }}
         className="gap-3"
       >
         <TabsList>
+          <TabsTrigger value="decision-brief">
+            {t('productResearch.decisionBrief')}
+          </TabsTrigger>
           <TabsTrigger value="description">{t('common.description')}</TabsTrigger>
           <TabsTrigger value="plan-list" disabled={!canOpenPlanList}>
             {t('productResearch.planList')}
           </TabsTrigger>
         </TabsList>
+
+
+        <TabsContent value="decision-brief" className="flex flex-col gap-5">
+          <section className="rounded-lg border bg-muted/30 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              {t('productResearch.decisionBriefApprovalAsk')}
+            </p>
+            <p className="mt-2 text-base font-medium">{recommendation}</p>
+          </section>
+
+          <BriefSection
+            title={t('productResearch.summary')}
+            content={proposal.summary}
+            fallback={t('productResearch.decisionBriefUnavailable')}
+          />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <BriefSection
+              title={t('productResearch.decisionBriefProblem')}
+              content={answerSections.problem}
+              fallback={t('productResearch.decisionBriefUnavailable')}
+            />
+            <BriefSection
+              title={t('productResearch.decisionBriefImpact')}
+              content={answerSections.impact}
+              fallback={t('productResearch.decisionBriefUnavailable')}
+            />
+            <BriefSection
+              title={t('productResearch.decisionBriefEvidence')}
+              content={answerSections.evidence}
+              fallback={t('productResearch.decisionBriefEvidenceFallback')}
+            />
+            <BriefSection
+              title={t('productResearch.decisionBriefRisks')}
+              content={answerSections.risks}
+              fallback={t('productResearch.decisionBriefUnavailable')}
+            />
+          </div>
+          <BriefSection
+            title={t('productResearch.decisionBriefNextSteps')}
+            content={answerSections.nextSteps}
+            fallback={t('productResearch.decisionBriefNextStepsFallback')}
+          />
+          <p className="text-sm text-muted-foreground">
+            {t('productResearch.decisionBriefFullTextHint')}
+          </p>
+        </TabsContent>
 
         <TabsContent value="description" className="flex flex-col gap-8">
           <section className="flex flex-col gap-3">
