@@ -1,10 +1,11 @@
 import type { TFunction } from 'i18next';
 import { getProductFeature, listProductFeatures, listProductProposals } from '@/api/product';
-import type { ApiFeatureItem, ApiTask } from '@/api/types';
+import type { ApiFeatureItem, ApiProductProposal, ApiTask } from '@/api/types';
 import { ALL_PROJECTS, NO_PROJECT, PAGE_SIZE } from './constants';
 import type {
   ProductResearchSnapshot,
   ProjectOption,
+  ProposalPlanningDisplayStatus,
   ProposalFilter,
 } from './types';
 
@@ -85,6 +86,30 @@ export function shortId(value: string): string {
   return value.slice(0, 8);
 }
 
+export function hasValidatedProposalPlan(proposal: ApiProductProposal): boolean {
+  return proposal.status === 'planned' || proposal.status === 'completed';
+}
+
+export function getProposalPlanningDisplayStatus(
+  proposal: ApiProductProposal,
+): ProposalPlanningDisplayStatus | null {
+  if (proposal.status === 'approved') {
+    if (proposal.latest_planning_run == null) {
+      return 'missing_run';
+    }
+    if (proposal.latest_planning_task_exists === false) {
+      return 'missing_task';
+    }
+    return proposal.latest_planning_run.status;
+  }
+
+  if (hasValidatedProposalPlan(proposal)) {
+    return proposal.latest_planning_run?.status ?? 'completed';
+  }
+
+  return proposal.latest_planning_run?.status ?? null;
+}
+
 export function calculateFeatureCompletion(
   items: ApiFeatureItem[] | null | undefined,
 ): number {
@@ -97,6 +122,27 @@ export function calculateFeatureCompletion(
   ).length;
 
   return Math.round((finishedItems / items.length) * 100);
+}
+
+export function getProposalSummaryCounts(proposals: ApiProductProposal[]) {
+  return proposals.reduce(
+    (counts, proposal) => {
+      counts.total += 1;
+      if (proposal.status === 'proposed') {
+        counts.proposed += 1;
+      } else if (proposal.status === 'rejected') {
+        counts.rejected += 1;
+      } else if (
+        proposal.status === 'approved' ||
+        proposal.status === 'planned' ||
+        proposal.status === 'completed'
+      ) {
+        counts.accepted += 1;
+      }
+      return counts;
+    },
+    { proposed: 0, accepted: 0, rejected: 0, total: 0 },
+  );
 }
 
 export function getProjectFilterValue(project: string | null | undefined): string {

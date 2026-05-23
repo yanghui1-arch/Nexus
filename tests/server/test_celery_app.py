@@ -6,6 +6,7 @@ from src.server.config import get_settings
 
 
 def test_celery_app_bounds_global_publish_retries_and_timeouts(monkeypatch) -> None:
+    """Verify celery app bounds global publish retries and timeouts."""
     monkeypatch.setenv("NEXUS_CELERY_QUEUE", "test-agent-tasks")
     monkeypatch.setenv("NEXUS_CELERY_VISIBILITY_TIMEOUT_SECONDS", "123")
     monkeypatch.setenv("NEXUS_CELERY_TASK_PUBLISH_MAX_RETRIES", "3")

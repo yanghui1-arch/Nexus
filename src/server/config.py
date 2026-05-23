@@ -40,10 +40,12 @@ class Settings:
     frontend_base_url: str
     product_discovery_poll_interval_seconds: int
     product_discovery_poll_task_limit: int
+    product_discovery_recent_proposal_limit: int
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    """Return cached application settings."""
     redis_url = os.getenv("NEXUS_REDIS_URL", "redis://localhost:6379/0")
     tela_github_token = os.getenv("NEXUS_GITHUB_TOKEN")
     sophie_github_token = os.getenv("NEXUS_SOPHIE_GITHUB_TOKEN")
@@ -106,9 +108,12 @@ def get_settings() -> Settings:
         auth_session_ttl_seconds=int(os.getenv("NEXUS_AUTH_SESSION_TTL_SECONDS", "2592000")),
         frontend_base_url=os.getenv("NEXUS_FRONTEND_BASE_URL", "http://localhost:5174"),
         product_discovery_poll_interval_seconds=int(
-            os.getenv("NEXUS_PRODUCT_DISCOVERY_POLL_INTERVAL_SECONDS", "10"),
+            os.getenv("NEXUS_PRODUCT_DISCOVERY_POLL_INTERVAL_SECONDS", "3600"),
         ),
         product_discovery_poll_task_limit=int(
             os.getenv("NEXUS_PRODUCT_DISCOVERY_POLL_TASK_LIMIT", "100"),
+        ),
+        product_discovery_recent_proposal_limit=int(
+            os.getenv("NEXUS_PRODUCT_DISCOVERY_RECENT_PROPOSAL_LIMIT", "5"),
         ),
     )

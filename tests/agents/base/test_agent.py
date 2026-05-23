@@ -16,10 +16,12 @@ from src.agents.base.agent import (
 
 
 def make_model_config() -> ModelConfig:
+    """Create a model config for agent tests."""
     return ModelConfig(model="gpt-4o", max_length_context=8192)
 
 
 def make_tool_call(id: str, name: str, arguments: str) -> ChatCompletionMessageToolCall:
+    """Create a chat completion tool call."""
     return ChatCompletionMessageToolCall(
         id=id,
         type="function",
@@ -35,6 +37,7 @@ def _make_message_param_mock(role: str, content: str | None) -> MagicMock:
 
 
 def make_stop_result(content: str = "done") -> BaseAgentStepResult:
+    """Create a stop-step result."""
     return BaseAgentStepResult(
         finish_reason="stop",
         reasoning=None,
@@ -46,6 +49,7 @@ def make_stop_result(content: str = "done") -> BaseAgentStepResult:
 
 
 def make_tool_result(tool_calls: list) -> BaseAgentStepResult:
+    """Create a tool-call step result."""
     return BaseAgentStepResult(
         finish_reason="tool_calls",
         reasoning=None,
@@ -70,13 +74,16 @@ class ConcreteAgent(Agent):
     """Minimal concrete Agent for testing."""
 
     async def step(self, current_turn_ctx: list) -> BaseAgentStepResult:
+        """Return the next queued test step."""
         raise NotImplementedError("patch me")
 
     def last_report_current_process(self, current_turn_ctx: list) -> str:
+        """Return a test progress report."""
         return "partial progress"
 
 
 def make_agent(tool_kits=None, max_attempts=None) -> ConcreteAgent:
+    """Create a test agent instance."""
     with patch("src.agents.base.agent.AsyncOpenAI"):
         agent = ConcreteAgent(
             name="test-agent",
@@ -92,6 +99,7 @@ def make_agent(tool_kits=None, max_attempts=None) -> ConcreteAgent:
 
 
 def set_compact_summary(agent: ConcreteAgent, summary: str) -> None:
+    """Configure the compact summary response."""
     completion = MagicMock()
     completion.choices = [MagicMock(message=MagicMock(content=summary))]
     agent.openai_client.chat.completions.create.return_value = completion
@@ -99,6 +107,7 @@ def set_compact_summary(agent: ConcreteAgent, summary: str) -> None:
 
 class TestProcessCallback:
     def test_calls_callback_with_status(self):
+        """Verify calls callback with status."""
         agent = make_agent()
         cb = MagicMock()
         status: WorkTempStatus = {
@@ -111,6 +120,7 @@ class TestProcessCallback:
         cb.assert_called_once_with(status)
 
     def test_none_callback_does_not_raise(self):
+        """Verify none callback does not raise."""
         agent = make_agent()
         status: WorkTempStatus = {
             "process": "START",
@@ -123,6 +133,7 @@ class TestProcessCallback:
 
 class TestWorkStop:
     async def test_returns_response_on_stop(self):
+        """Verify returns response on stop."""
         agent = make_agent()
         set_step(agent, MagicMock(return_value=make_stop_result("final answer")))
 
@@ -131,6 +142,7 @@ class TestWorkStop:
         assert result.response == "final answer"
 
     async def test_from_checkpoint_uses_checkpoint_as_current_turn_context(self):
+        """Verify from checkpoint uses checkpoint as current turn context."""
         agent = make_agent()
         checkpoint = [
             {"role": "system", "content": "checkpoint system"},
@@ -140,6 +152,7 @@ class TestWorkStop:
         captured_contexts: list[list] = []
 
         async def capture_step(current_turn_ctx: list) -> BaseAgentStepResult:
+            """Capture the context passed to a step."""
             captured_contexts.append(list(current_turn_ctx))
             return make_stop_result("resumed answer")
 
@@ -157,6 +170,7 @@ class TestWorkStop:
         ]
 
     async def test_from_checkpoint_requires_checkpoint(self):
+        """Verify from checkpoint requires checkpoint."""
         agent = make_agent()
 
         with pytest.raises(AssertionError, match="Checkpoint is required when from_checkpoint=True"):
@@ -166,6 +180,7 @@ class TestWorkStop:
             )
 
     async def test_start_and_completed_callbacks_fired(self):
+        """Verify start and completed callbacks fired."""
         agent = make_agent()
         set_step(agent, MagicMock(return_value=make_stop_result("done")))
         events: list[WorkTempStatus] = []
@@ -181,6 +196,7 @@ class TestWorkStop:
         assert "COMPLETED" in processes
 
     async def test_no_callback_does_not_raise(self):
+        """Verify no callback does not raise."""
         agent = make_agent()
         set_step(agent, MagicMock(return_value=make_stop_result("done")))
 
@@ -190,6 +206,7 @@ class TestWorkStop:
 
 class TestWorkToolCalls:
     async def test_sync_tool_is_called_and_result_appended(self):
+        """Verify sync tool is called and result appended."""
         sync_tool = MagicMock(return_value="tool-output")
         agent = make_agent(tool_kits={"my_tool": sync_tool})
 
@@ -205,6 +222,7 @@ class TestWorkToolCalls:
         assert result.response == "done"
 
     async def test_async_tool_is_awaited(self):
+        """Verify async tool is awaited."""
         async_tool = AsyncMock(return_value="async-output")
         agent = make_agent(tool_kits={"async_tool": async_tool})
 
@@ -218,6 +236,7 @@ class TestWorkToolCalls:
         async_tool.assert_awaited_once_with(y=2)
 
     async def test_process_callback_fired_on_tool_call(self):
+        """Verify process callback fired on tool call."""
         tool = MagicMock(return_value="out")
         agent = make_agent(tool_kits={"t": tool})
         tc = make_tool_call("id1", "t", "{}")
@@ -239,15 +258,18 @@ class TestWorkToolCalls:
         assert process_status["current_use_tool"] == ["t"]
 
     async def test_multiple_tool_calls_dispatched_in_parallel(self):
+        """Verify multiple tool calls dispatched in parallel."""
         import asyncio
         order: list[str] = []
 
         async def slow_tool(**_):
+            """Return a slow tool result."""
             await asyncio.sleep(0.05)
             order.append("slow")
             return "slow"
 
         async def fast_tool(**_):
+            """Return a fast tool result."""
             order.append("fast")
             return "fast"
 
@@ -267,6 +289,7 @@ class TestWorkToolCalls:
 
 class TestWorkErrorHandling:
     async def test_unknown_tool_logs_error_no_crash(self):
+        """Verify unknown tool logs error no crash."""
         agent = make_agent(tool_kits={})
         tc = make_tool_call("id1", "ghost_tool", '{}')
         set_step(agent, MagicMock(side_effect=[
@@ -281,6 +304,7 @@ class TestWorkErrorHandling:
         assert result.response == "done"
 
     async def test_bad_json_args_logs_error_no_crash(self):
+        """Verify bad json args logs error no crash."""
         tool = MagicMock(return_value="out")
         agent = make_agent(tool_kits={"t": tool})
         tc = make_tool_call("id1", "t", "not-json{{")
@@ -299,6 +323,7 @@ class TestWorkErrorHandling:
 
 class TestWorkMaxAttempts:
     async def test_exceed_attempts_callback_fired(self):
+        """Verify exceed attempts callback fired."""
         tool = MagicMock(return_value="out")
         agent = make_agent(tool_kits={"t": tool}, max_attempts=1)
         tc = make_tool_call("id1", "t", "{}")
@@ -315,6 +340,7 @@ class TestWorkMaxAttempts:
         assert "EXCEED_ATTEMPTS" in processes
 
     async def test_exceed_attempts_response_is_last_report(self):
+        """Verify exceed attempts response is last report."""
         tool = MagicMock(return_value="out")
         agent = make_agent(tool_kits={"t": tool}, max_attempts=1)
         tc = make_tool_call("id1", "t", "{}")
@@ -325,6 +351,7 @@ class TestWorkMaxAttempts:
         assert result.response == "partial progress"
 
     async def test_none_max_attempts_runs_until_stop(self):
+        """Verify none max attempts runs until stop."""
         tool = MagicMock(return_value="out")
         agent = make_agent(tool_kits={"t": tool}, max_attempts=None)
         tc = make_tool_call("id1", "t", "{}")
@@ -344,6 +371,7 @@ class TestWorkMaxAttempts:
 
 class TestCompactHelpers:
     def test_inject_work_summary_adds_header(self):
+        """Verify inject work summary adds header."""
         agent = make_agent()
 
         result = agent._inject_work_summary_into_system_message(
@@ -357,6 +385,7 @@ class TestCompactHelpers:
         }
 
     def test_inject_work_summary_appends_to_existing_summary(self):
+        """Verify inject work summary appends to existing summary."""
         agent = make_agent()
         system_message = {
             "role": "system",
@@ -374,11 +403,13 @@ class TestCompactHelpers:
 @pytest.mark.asyncio
 class TestCompact:
     async def test_empty_context_returns_unchanged(self):
+        """Verify empty context returns unchanged."""
         agent = make_agent()
 
         assert await agent.compact([]) == []
 
     async def test_single_user_turn_without_assistant_is_unchanged(self):
+        """Verify single user turn without assistant is unchanged."""
         agent = make_agent()
         ctx = [
             {"role": "system", "content": "Base prompt"},
@@ -389,6 +420,7 @@ class TestCompact:
         agent.openai_client.chat.completions.create.assert_not_called()
 
     async def test_single_user_turn_with_one_assistant_is_unchanged(self):
+        """Verify single user turn with one assistant is unchanged."""
         agent = make_agent()
         ctx = [
             {"role": "system", "content": "Base prompt"},
@@ -400,6 +432,7 @@ class TestCompact:
         agent.openai_client.chat.completions.create.assert_not_called()
 
     async def test_compact_keeps_last_user_when_new_request_starts(self):
+        """Verify compact keeps last user when new request starts."""
         agent = make_agent()
         set_compact_summary(agent, "Summarized previous work")
         ctx = [
@@ -426,6 +459,7 @@ class TestCompact:
         assert "Compact the current context" in call_kwargs["messages"][-1]["content"]
 
     async def test_compact_keeps_active_assistant_and_tool_messages(self):
+        """Verify compact keeps active assistant and tool messages."""
         agent = make_agent()
         set_compact_summary(agent, "Finished earlier work")
         ctx = [
@@ -453,6 +487,7 @@ class TestCompact:
         assert summary_messages[:-1] == ctx[:4]
 
     async def test_compact_requires_user_message(self):
+        """Verify compact requires user message."""
         agent = make_agent()
 
         with pytest.raises(AssertionError, match="don't have any user message"):
@@ -461,6 +496,7 @@ class TestCompact:
 
 class TestReportCurrentProcess:
     async def test_appends_consult_message_and_returns_completion(self):
+        """Verify appends consult message and returns completion."""
         agent = make_agent()
         completion = MagicMock()
         completion.choices = [MagicMock(message=MagicMock(content="Current progress reply"))]
@@ -484,6 +520,7 @@ class TestReportCurrentProcess:
         assert "Where is the task now?" in call_kwargs["messages"][-1]["content"]
 
     async def test_returns_raw_completion_content(self):
+        """Verify returns raw completion content."""
         agent = make_agent()
         completion = MagicMock()
         completion.choices = [MagicMock(message=MagicMock(content="magic mock content"))]

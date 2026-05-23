@@ -6,6 +6,7 @@ from src.agents.tela import Tela
 
 
 def make_tela() -> Tela:
+    """Create a Tela test instance."""
     with patch("src.agents.base.agent.AsyncOpenAI"):
         return Tela(
             name="Tela",
@@ -19,12 +20,14 @@ def make_tela() -> Tela:
 
 
 def make_response(status_code: int, payload: dict | None = None, text: str = "error"):
+    """Create a mocked HTTP response."""
     response = MagicMock(status_code=status_code, text=text)
     response.json = MagicMock(return_value=payload or {})
     return response
 
 
 def make_mock_http_client(mock_client_cls, *, get_responses: list[MagicMock], post_response=None):
+    """Create a mocked HTTP client."""
     mock_http = AsyncMock()
     mock_http.get = AsyncMock(side_effect=get_responses)
     mock_http.post = AsyncMock(return_value=post_response or make_response(202, text="accepted"))
@@ -34,6 +37,7 @@ def make_mock_http_client(mock_client_cls, *, get_responses: list[MagicMock], po
 
 
 def test_ensure_fork_checks_tela_fork_repo_endpoint():
+    """Verify ensure fork checks tela fork repo endpoint."""
     tela = make_tela()
 
     with patch("src.agents.base.code_agent.httpx.AsyncClient") as mock_client_cls:
@@ -59,6 +63,7 @@ def test_ensure_fork_checks_tela_fork_repo_endpoint():
 
 
 def test_ensure_fork_creates_tela_fork_when_missing():
+    """Verify ensure fork creates tela fork when missing."""
     tela = make_tela()
 
     with patch("src.agents.base.code_agent.httpx.AsyncClient") as mock_client_cls:
@@ -84,6 +89,7 @@ def test_ensure_fork_creates_tela_fork_when_missing():
 
 
 def test_ensure_fork_skips_creation_when_tela_fork_exists():
+    """Verify ensure fork skips creation when tela fork exists."""
     tela = make_tela()
 
     with patch("src.agents.base.code_agent.httpx.AsyncClient") as mock_client_cls:

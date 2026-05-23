@@ -1,5 +1,6 @@
 from src.tools.code.github.client import GithubTools
 from src.tools.code.github.issue import (
+    CREATE_GITHUB_ISSUE,
     GET_ISSUE_COMMENTS,
     REPLY_TO_ISSUE,
     GET_MY_ISSUES,
@@ -22,6 +23,6 @@ __all__ = [
     "GithubTools",
 ]
 
-issues = [GET_ISSUE_COMMENTS, REPLY_TO_ISSUE, GET_MY_ISSUES]
+issues = [CREATE_GITHUB_ISSUE, GET_ISSUE_COMMENTS, REPLY_TO_ISSUE, GET_MY_ISSUES]
 prs = [PR_TO_GITHUB, GET_PR_REVIEWS, GET_PR_REVIEW_COMMENTS, REPLY_TO_PR_REVIEW_COMMENT, GET_PR_COMMENTS, REPLY_TO_PR, GET_MY_OPEN_PRS]
 notifications = [GET_NOTIFICATIONS]

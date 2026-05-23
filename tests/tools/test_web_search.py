@@ -12,13 +12,16 @@ from src.tools import web_search as web_search_module
 
 class FakeStream:
     def __init__(self, events):
+        """Initialize the test helper."""
         self._events = events
 
     def __aiter__(self):
+        """Return the async iterator."""
         self._iter = iter(self._events)
         return self
 
     async def __anext__(self):
+        """Return the next async stream item."""
         try:
             return next(self._iter)
         except StopIteration:
@@ -26,6 +29,7 @@ class FakeStream:
 
 
 def test_openai_web_search_stream_collects_answer_and_citations():
+    """Verify openai web search stream collects answer and citations."""
     annotation = MagicMock()
     annotation.model_dump.return_value = {"type": "url_citation", "url": "https://example.com"}
     fake_client = MagicMock()
@@ -50,6 +54,7 @@ def test_openai_web_search_stream_collects_answer_and_citations():
         patch("src.tools.web_search.get_settings", return_value=settings),
     ):
         async def run_search():
+            """Run the search test body."""
             return await web_search_module.web_search("nexus growth", max_results=3)
 
         result = anyio.run(run_search)

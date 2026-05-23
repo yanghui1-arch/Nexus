@@ -5,19 +5,23 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from src.agents import Sophie, Tela
 from src.agents.base import Agent
+from src.server.api.dependencies import get_current_user
 from src.server.config import get_settings
 from src.server.postgres.database import Database
 from src.server.postgres.models import (
     TaskCategory,
     TaskStatus,
+    UserRecord,
 )
 from src.server.postgres.repositories import (
+    AgentInstanceRepository,
     TaskRepository,
     TaskWorkItemRepository,
+    WorkspaceRepository,
 )
 from src.server.runner import AgentTaskRunner
 from src.server.schemas import (
@@ -37,13 +41,32 @@ available_agent_factory = {
 }
 
 
+def _resolved_task_repo_project(task, workspace) -> tuple[str | None, str | None]:
+    # Mixed datasets still exist here:
+    # - current task rows snapshot repo/project directly on TaskRecord
+    # - older rows may still need a workspace fallback
+    # Prefer the explicit task snapshot when present so later workspace edits do
+    # not rewrite historical tasks in the API.
+    """Resolve task repo and project from task and workspace data."""
+    repo = task.repo or (workspace.github_repo if workspace is not None else None)
+    project = task.project if task.project is not None else (workspace.project if workspace is not None else None)
+    return repo, project
+
+
 @router.post("", response_model=TaskSubmitResponse, status_code=202)
 async def create_task(
     request: Request,
     payload: TaskCreateRequest,
+    user: UserRecord = Depends(get_current_user),
 ) -> TaskSubmitResponse:
+    """Create and dispatch a new agent task."""
     runner: AgentTaskRunner = request.app.state.runner
     database: Database = request.app.state.database
+    async with database.session() as session:
+        instance = await AgentInstanceRepository.get(session, payload.agent_instance_id)
+    if instance is None or instance.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Agent instance not found")
+
     try:
         task_id = await runner.submit_task(payload)
     except ValueError as exc:
@@ -71,7 +94,9 @@ async def list_tasks(
     repo: str | None = Query(default=None),
     project: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
+    user: UserRecord = Depends(get_current_user),
 ) -> list[TaskResponse]:
+    """List tasks owned by the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
         tasks = await TaskRepository.list(
@@ -81,34 +106,59 @@ async def list_tasks(
             category=category,
             repo=repo,
             project=project,
+            user_id=user.id,
             limit=limit,
         )
+        workspace_by_agent_instance_id = {
+            workspace.agent_instance_id: workspace
+            for workspace in await WorkspaceRepository.list_for_user(session, user_id=user.id)
+        }
     tasks = sorted(tasks, key=lambda task: task.created_at, reverse=True)
-    return [TaskResponse.from_record(task) for task in tasks]
+    responses: list[TaskResponse] = []
+    for task in tasks:
+        # Preserve one response shape across old task rows and new workspace-backed rows.
+        resolved_repo, resolved_project = _resolved_task_repo_project(
+            task,
+            workspace_by_agent_instance_id.get(task.agent_instance_id),
+        )
+        responses.append(TaskResponse.from_record(task, repo=resolved_repo, project=resolved_project))
+    return responses
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(
     request: Request,
     task_id: uuid.UUID,
+    user: UserRecord = Depends(get_current_user),
 ) -> TaskResponse:
+    """Return one task owned by the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
         task = await TaskRepository.get(session, task_id)
-    if task is None:
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
+        workspace = await WorkspaceRepository.get_by_agent_instance_id(session, task.agent_instance_id)
+    if instance is None or instance.user_id != user.id:
         raise HTTPException(status_code=404, detail="Task not found")
-    return TaskResponse.from_record(task)
+    repo, project = _resolved_task_repo_project(task, workspace)
+    return TaskResponse.from_record(task, repo=repo, project=project)
 
 
 @router.get("/{task_id}/work-items", response_model=list[TaskWorkItemResponse])
 async def list_task_work_items(
     request: Request,
     task_id: uuid.UUID,
+    user: UserRecord = Depends(get_current_user),
 ) -> list[TaskWorkItemResponse]:
+    """List review work items for a task."""
     database: Database = request.app.state.database
     async with database.session() as session:
         task = await TaskRepository.get(session, task_id)
         if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
+        if instance is None or instance.user_id != user.id:
             raise HTTPException(status_code=404, detail="Task not found")
         work_items = await TaskWorkItemRepository.list_by_task(session, task_id)
     return [TaskWorkItemResponse.from_record(work_item) for work_item in work_items]
@@ -119,12 +169,17 @@ async def update_task_status(
     request: Request,
     task_id: uuid.UUID,
     payload: TaskStatusUpdateRequest,
+    user: UserRecord = Depends(get_current_user),
 ) -> TaskResponse:
+    """Update review status for a task."""
     database: Database = request.app.state.database
 
     async with database.session() as session:
         task = await TaskRepository.get(session, task_id)
         if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
+        if instance is None or instance.user_id != user.id:
             raise HTTPException(status_code=404, detail="Task not found")
 
         if payload.status == TaskStatus.merged:
@@ -169,11 +224,17 @@ async def consult_task(
     request: Request,
     task_id: uuid.UUID,
     payload: TaskConsultRequest,
+    user: UserRecord = Depends(get_current_user),
 ) -> TaskConsultResponse:
+    """Ask an agent to report progress for an existing task."""
     database: Database = request.app.state.database
     async with database.session() as session:
         task = await TaskRepository.get(session, task_id)
-    if task is None:
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
+        workspace = await WorkspaceRepository.get_by_agent_instance_id(session, task.agent_instance_id)
+    if instance is None or instance.user_id != user.id:
         raise HTTPException(status_code=404, detail="Task not found")
     if task.agent.value not in available_agent_factory.keys():
         raise HTTPException(status_code=404, detail=f"Unsupported agent: {task.agent.value}")
@@ -181,7 +242,8 @@ async def consult_task(
     settings = get_settings()
     if not settings.api_key:
         raise HTTPException(status_code=503, detail="NEXUS_API_KEY is not configured")
-    if not task.repo:
+    repo, _ = _resolved_task_repo_project(task, workspace)
+    if not repo:
         raise HTTPException(status_code=409, detail="Task repo is required for consult")
 
     github_token = settings.github_tokens.get(task.agent.value)
@@ -191,7 +253,7 @@ async def consult_task(
         api_key=settings.api_key,
         model=settings.model,
         max_context=settings.max_context,
-        github_repo=task.repo,
+        github_repo=repo,
         max_attempts=settings.max_attempts,
         github_token=github_token,
     )

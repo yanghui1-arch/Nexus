@@ -14,6 +14,7 @@ from src.sandbox import PYTHON_312
 
 
 def make_pool_manager(mock_sandbox):
+    """Create a mocked sandbox pool manager."""
     pool_manager = AsyncMock()
     pool_manager.acquire = AsyncMock(return_value=mock_sandbox)
     pool_manager.release = AsyncMock(return_value=None)
@@ -121,13 +122,14 @@ class TestSophieAsyncContext:
         mock_sandbox_tools.all_tools = {
             "RunCode": AsyncMock(),
             "RunCommand": AsyncMock(),
-            "WriteFile": AsyncMock(),
+            "CreateFile": AsyncMock(),
             "ReadFile": AsyncMock(),
             "AppendFile": AsyncMock(),
             "EditFile": AsyncMock(),
             "ListFiles": AsyncMock(),
         }
         mock_github_kit_class.return_value.all_tools = {
+            "create_github_issue": AsyncMock(),
             "get_issue_comments": AsyncMock(),
             "pr_to_github": AsyncMock(),
             "get_notifications": AsyncMock(),
@@ -147,6 +149,7 @@ class TestSophieAsyncContext:
 
                 async with sophie as s:
                     assert s.tool_kits is not None
+                    assert "create_github_issue" in s.tool_kits
                     assert "get_issue_comments" in s.tool_kits
                     assert "pr_to_github" in s.tool_kits
                     assert "get_notifications" in s.tool_kits
@@ -157,6 +160,7 @@ class TestSophieCompact:
     """Test Sophie inherits the shared compact behavior."""
 
     async def test_compact_single_turn_is_unchanged(self):
+        """Verify compact single turn is unchanged."""
         with patch("src.agents.base.agent.AsyncOpenAI"):
             sophie = Sophie.create(
                 base_url="https://api.openai.com/v1",
@@ -175,6 +179,7 @@ class TestSophieCompact:
         assert await sophie.compact(context) == context
 
     async def test_compact_summarizes_previous_work(self):
+        """Verify compact summarizes previous work."""
         with patch("src.agents.base.agent.AsyncOpenAI"):
             sophie = Sophie.create(
                 base_url="https://api.openai.com/v1",
@@ -264,7 +269,7 @@ class TestSophieToolAccess:
                 mock_sandbox_tools.all_tools = {
                     "RunCode": AsyncMock(),
                     "RunCommand": AsyncMock(),
-                    "WriteFile": AsyncMock(),
+                    "CreateFile": AsyncMock(),
                     "ReadFile": AsyncMock(),
                     "AppendFile": AsyncMock(),
                     "EditFile": AsyncMock(),
@@ -283,7 +288,7 @@ class TestSophieToolAccess:
                 async with sophie as s:
                     assert "RunCode" in s.tool_kits
                     assert "RunCommand" in s.tool_kits
-                    assert "WriteFile" in s.tool_kits
+                    assert "CreateFile" in s.tool_kits
                     assert "ReadFile" in s.tool_kits
                     assert "EditFile" in s.tool_kits
                     assert "ListFiles" in s.tool_kits
@@ -309,6 +314,7 @@ class TestSophieToolAccess:
                 )
 
                 async with sophie as s:
+                    assert "create_github_issue" in s.tool_kits
                     assert "get_issue_comments" in s.tool_kits
                     assert "reply_to_issue" in s.tool_kits
                     assert "get_pr_reviews" in s.tool_kits

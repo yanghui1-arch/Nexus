@@ -10,7 +10,12 @@ from src.logger import logger
 from .docker_sandbox import Sandbox, SandboxConfig
 
 
+_POOL_MANAGED_LABEL = "nexus.sandbox.managed"
+_POOL_KEY_LABEL = "nexus.sandbox.pool_key"
+
+
 def _sandbox_config_fingerprint(config: SandboxConfig) -> str:
+    """Return a stable fingerprint for a sandbox config."""
     payload = {
         "image": config.image,
         "code_runner": config.code_runner,
@@ -35,6 +40,7 @@ def _build_pool_key(
     workspace_key: str | None,
     env: dict[str, str] | None = None,
 ) -> str:
+    """Build a sandbox pool key."""
     base_key = workspace_key or ("__no_repo__" if repo_url is None else repo_url)
     env_names = ",".join(sorted((env or {}).keys()))
     return f"{base_key}::{_sandbox_config_fingerprint(config)}::{env_names}"
@@ -53,12 +59,14 @@ class SandboxPoolManager:
     """In-process pool that reuses warm sandboxes with explicit workspace affinity."""
 
     def __init__(self) -> None:
+        """Initialize the object."""
         self._entries_by_key: dict[str, list[_SandboxPoolEntry]] = {}
         self._lock = asyncio.Lock()
 
     def _find_entry_for_sandbox(
         self, sandbox: Sandbox
     ) -> tuple[str, _SandboxPoolEntry, list[_SandboxPoolEntry]] | None:
+        """Find a managed pool entry for a sandbox."""
         sandbox_id = id(sandbox)
         for key, entries in self._entries_by_key.items():
             for entry in entries:
@@ -73,6 +81,7 @@ class SandboxPoolManager:
         workspace_key: str | None = None,
         env: dict[str, str] | None = None,
     ) -> Sandbox:
+        """Acquire a sandbox from the pool."""
         key = _build_pool_key(config=config, repo_url=repo_url, workspace_key=workspace_key, env=env)
 
         async with self._lock:
@@ -84,7 +93,8 @@ class SandboxPoolManager:
                     return entry.sandbox
 
             sandbox = Sandbox(config, env=env)
-            await sandbox.__aenter__()
+            labels = {_POOL_MANAGED_LABEL: "true", _POOL_KEY_LABEL: key}
+            await sandbox.start(labels=labels)
             now = time.time()
             entry = _SandboxPoolEntry(
                 key=key,
@@ -98,6 +108,7 @@ class SandboxPoolManager:
             return sandbox
 
     async def release(self, sandbox: Sandbox) -> None:
+        """Release a sandbox back to the pool."""
         async with self._lock:
             located_entry = self._find_entry_for_sandbox(sandbox)
             if located_entry is None:
@@ -107,6 +118,7 @@ class SandboxPoolManager:
             entry.last_used_at = time.time()
 
     async def invalidate(self, sandbox: Sandbox) -> None:
+        """Remove a sandbox from pool management."""
         async with self._lock:
             located_entry = self._find_entry_for_sandbox(sandbox)
             if located_entry is None:
@@ -123,6 +135,7 @@ class SandboxPoolManager:
         logger.info("Invalidated sandbox and removed it from pool")
 
     async def shutdown(self) -> None:
+        """Shut down all managed sandboxes."""
         async with self._lock:
             sandboxes = [
                 entry.sandbox
@@ -135,6 +148,7 @@ class SandboxPoolManager:
             await sandbox.__aexit__(None, None, None)
 
     def is_managed(self, sandbox: Sandbox) -> bool:
+        """Return whether a sandbox is pool-managed."""
         return self._find_entry_for_sandbox(sandbox) is not None
 
 
@@ -142,6 +156,7 @@ _SANDBOX_POOL_MANAGER: SandboxPoolManager | None = None
 
 
 def get_sandbox_pool_manager() -> SandboxPoolManager:
+    """Return the process-wide sandbox pool manager."""
     global _SANDBOX_POOL_MANAGER
     if _SANDBOX_POOL_MANAGER is None:
         _SANDBOX_POOL_MANAGER = SandboxPoolManager()

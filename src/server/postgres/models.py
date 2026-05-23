@@ -26,6 +26,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 def utc_now() -> datetime:
+    """Return the current UTC timestamp."""
     return datetime.now(timezone.utc)
 
 
@@ -68,10 +69,43 @@ class TaskWorkItemStatus(str, enum.Enum):
 
 
 class ProductProposalStatus(str, enum.Enum):
+    """Business-level proposal lifecycle.
+
+    proposed:
+        Proposal exists and is waiting for human review.
+    approved:
+        Human approved the proposal, but planning may still be queued/running/failed.
+    rejected:
+        Human rejected the proposal.
+    planned:
+        Planning finished and produced a valid implementation plan with feature items.
+    completed:
+        All linked features are completed or closed.
+    """
+
     proposed = "proposed"
     approved = "approved"
     rejected = "rejected"
     planned = "planned"
+    completed = "completed"
+
+
+class ProposalPlanningRunStatus(str, enum.Enum):
+    """Execution state of a single planning attempt for an approved proposal.
+
+    queued:
+        Planning task row exists and is waiting to be dispatched/claimed.
+    running:
+        The worker has claimed the planning task and is generating features/items.
+    failed:
+        Dispatch, execution, or post-run validation failed.
+    completed:
+        The planning task succeeded and produced a valid plan.
+    """
+
+    queued = "queued"
+    running = "running"
+    failed = "failed"
     completed = "completed"
 
 
@@ -145,9 +179,15 @@ class AgentInstanceRecord(Base):
     __tablename__ = "agent_instance"
     __table_args__ = (
         Index("ix_agent_instance_agent_client", "agent", "client_id"),
+        Index("ix_agent_instance_user_agent", "user_id", "agent"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("user_account.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     agent: Mapped[AgentName] = mapped_column(
         Enum(AgentName, native_enum=False),
         nullable=False,
@@ -173,6 +213,9 @@ class AgentInstanceRecord(Base):
 
 
 class WorkspaceRecord(Base):
+    # Workspace is the durable per-agent-instance context chosen by the frontend.
+    # It owns the repo/project binding; workers may transition status, but they
+    # must not rewrite github_repo/project during task execution.
     __tablename__ = "workspace"
     __table_args__ = (
         UniqueConstraint("agent_instance_id", name="uq_workspace_agent_instance_id"),
@@ -253,9 +296,14 @@ class TaskRecord(Base):
         server_default=TaskCategory.coding.value,
     )
     question: Mapped[str] = mapped_column(Text, nullable=False)
+    # Snapshot the repo/project chosen at task submission time so later workspace
+    # edits do not rewrite historical task execution context. Legacy rows may still
+    # leave these fields empty and rely on workspace fallback paths.
     repo: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     project: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     external_issue_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    # Unlike repo/project, the external PR URL remains task-scoped because GitHub
+    # feedback resumes the same task/PR conversation instead of a workspace-wide thread.
     external_pull_request_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     checkpoint: Mapped[list[ChatCompletionMessageParam] | None] = mapped_column(JSON, nullable=True)
     dispatch_token: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
@@ -328,6 +376,52 @@ class ProductProposalRecord(Base):
         onupdate=utc_now,
         server_default=func.now(),
     )
+
+
+class ProposalPlanningRunRecord(Base):
+    __tablename__ = "proposal_planning_run"
+    __table_args__ = (
+        UniqueConstraint("proposal_id", "attempt", name="uq_proposal_planning_run_attempt"),
+        UniqueConstraint("task_id", name="uq_proposal_planning_run_task_id"),
+        Index("ix_proposal_planning_run_proposal_created_at", "proposal_id", "created_at"),
+        Index("ix_proposal_planning_run_status_created_at", "status", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    proposal_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("product_proposal.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("task.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[ProposalPlanningRunStatus] = mapped_column(
+        Enum(ProposalPlanningRunStatus, native_enum=False, length=32),
+        nullable=False,
+        index=True,
+        default=ProposalPlanningRunStatus.queued,
+        server_default=ProposalPlanningRunStatus.queued.value,
+    )
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+        server_default=func.now(),
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class FeatureRecord(Base):

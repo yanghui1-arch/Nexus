@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import secrets
 import uuid
 from datetime import timedelta
@@ -14,6 +13,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 
+from src.server.api.dependencies import get_current_user, hash_token
 from src.server.config import get_settings
 from src.server.postgres.database import Database
 from src.server.postgres.models import AgentName, UserRecord
@@ -34,25 +34,10 @@ router = APIRouter(prefix="/v1", tags=["auth"])
 AGENT_PRICES = {AgentName.tela: Decimal("5500.00"), AgentName.sophie: Decimal("6000.00")}
 
 
-def _hash_token(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
-
-
-async def get_current_user(request: Request) -> UserRecord:
-    settings = get_settings()
-    token = request.cookies.get(settings.auth_session_cookie_name)
-    if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    database: Database = request.app.state.database
-    async with database.session() as session:
-        user = await AuthSessionRepository.get_user_by_token_hash(session, _hash_token(token))
-    if user is None:
-        raise HTTPException(status_code=401, detail="Invalid or expired session")
-    return user
-
 
 @router.get("/auth/github/login")
 async def github_login() -> RedirectResponse:
+    """Redirect the user to GitHub OAuth authorization."""
     settings = get_settings()
     if not settings.github_oauth_client_id:
         raise HTTPException(status_code=500, detail="GitHub OAuth client id is not configured")
@@ -68,6 +53,7 @@ async def github_login() -> RedirectResponse:
 
 @router.get("/auth/github/callback")
 async def github_callback(request: Request, code: str) -> RedirectResponse:
+    """Complete GitHub OAuth and create an auth session."""
     settings = get_settings()
     if not settings.github_oauth_client_id or not settings.github_oauth_client_secret:
         raise HTTPException(status_code=500, detail="GitHub OAuth is not configured")
@@ -102,7 +88,7 @@ async def github_callback(request: Request, code: str) -> RedirectResponse:
         )
         await AuthSessionRepository.create(
             session,
-            token_hash=_hash_token(session_token),
+            token_hash=hash_token(session_token),
             user_id=user.id,
             expires_at=expires_at,
         )
@@ -120,6 +106,7 @@ async def github_callback(request: Request, code: str) -> RedirectResponse:
 
 @router.get("/auth/me", response_model=UserResponse)
 async def get_me(user: UserRecord = Depends(get_current_user)) -> UserResponse:
+    """Return the authenticated user's profile."""
     return UserResponse(
         id=user.id,
         github_login=user.github_login,
@@ -130,12 +117,13 @@ async def get_me(user: UserRecord = Depends(get_current_user)) -> UserResponse:
 
 @router.post("/auth/logout", status_code=204)
 async def logout(request: Request, response: Response) -> None:
+    """Delete the current auth session and clear its cookie."""
     settings = get_settings()
     token = request.cookies.get(settings.auth_session_cookie_name)
     if token:
         database: Database = request.app.state.database
         async with database.session() as session:
-            await AuthSessionRepository.delete(session, _hash_token(token))
+            await AuthSessionRepository.delete(session, hash_token(token))
     response.delete_cookie(settings.auth_session_cookie_name)
 
 
@@ -145,6 +133,7 @@ async def recharge_balance(
     payload: RechargeRequest,
     user: UserRecord = Depends(get_current_user),
 ) -> UserResponse:
+    """Add demo balance to the authenticated user's account."""
     database: Database = request.app.state.database
     # TODO: Replace this demo recharge endpoint with real payment provider callbacks.
     async with database.session() as session:
@@ -165,6 +154,7 @@ async def purchase_agent(
     payload: PurchaseAgentRequest,
     user: UserRecord = Depends(get_current_user),
 ) -> PurchaseAgentResponse:
+    """Purchase an agent subscription for the authenticated user."""
     agent = AgentName(payload.agent.value)
     price = AGENT_PRICES[agent]
     expires_at = utc_now() + timedelta(days=30)
