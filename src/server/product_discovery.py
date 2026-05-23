@@ -67,12 +67,12 @@ def decide_product_discovery_dispatch(
     now: datetime | None = None,
 ) -> ProductDiscoveryDecision:
     """Decide whether a product discovery candidate should be dispatched."""
-    candidate_id = getattr(candidate, "id", None)
+    candidate_id = candidate.id
     if workspace is None:
         return _skip("missing_workspace", "Workspace context is missing.", candidate_id=candidate_id)
 
-    repo = getattr(workspace, "github_repo", None)
-    project = getattr(workspace, "project", None)
+    repo = workspace.github_repo
+    project = workspace.project
     if not repo or not project:
         return _skip(
             "missing_workspace_context",
@@ -244,7 +244,7 @@ class ProductDiscoveryPoller:
     ) -> ProductDiscoveryProposalMetrics:
         """Build proposal metrics for a workspace."""
         interval = self._settings.product_discovery_poll_interval_seconds
-        if workspace is None or not getattr(workspace, "github_repo", None) or not getattr(workspace, "project", None):
+        if workspace is None or not workspace.github_repo or not workspace.project:
             return ProductDiscoveryProposalMetrics(0, PENDING_PROPOSAL_LIMIT, interval)
 
         proposals = await ProductProposalRepository.list(session, repo=workspace.github_repo, project=workspace.project)
