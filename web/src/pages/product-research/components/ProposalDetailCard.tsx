@@ -19,6 +19,63 @@ import {
   hasValidatedProposalPlan,
 } from '../utils';
 import { ProposalPlanList } from './ProposalPlanList';
+import {
+  parseProposalAnswerSections,
+  type ProposalAnswerSectionMap,
+} from '../proposalAnswerParser';
+
+type DetailTab = {
+  content: string;
+  labelKey: string;
+  value: string;
+};
+
+function combineSections(sections: ProposalAnswerSectionMap, keys: (keyof ProposalAnswerSectionMap)[]) {
+  return keys
+    .map(key => sections[key])
+    .filter((content): content is string => Boolean(content?.trim()))
+    .join('\n\n');
+}
+
+function buildDetailTabs(sections: ProposalAnswerSectionMap, fullText: string): DetailTab[] {
+  const tabs = [
+    {
+      content: combineSections(sections, ['repositoryEvidence', 'externalEvidence']),
+      labelKey: 'productResearch.proposalSectionTabs.evidence',
+      value: 'evidence',
+    },
+    {
+      content: combineSections(sections, ['problemOpportunity', 'userBusinessImpact', 'proposedScope', 'nonGoals']),
+      labelKey: 'productResearch.proposalSectionTabs.scope',
+      value: 'scope',
+    },
+    {
+      content: combineSections(sections, ['risksMitigations']),
+      labelKey: 'productResearch.proposalSectionTabs.risks',
+      value: 'risks',
+    },
+    {
+      content: combineSections(sections, ['suggestedSmallFeatureBreakdown']),
+      labelKey: 'productResearch.proposalSectionTabs.breakdown',
+      value: 'breakdown',
+    },
+    {
+      content: combineSections(sections, ['openQuestions']),
+      labelKey: 'productResearch.proposalSectionTabs.openQuestions',
+      value: 'open-questions',
+    },
+  ].filter(tab => tab.content.trim());
+
+  if (fullText.trim()) {
+    tabs.push({
+      content: fullText,
+      labelKey: 'productResearch.proposalSectionTabs.fullText',
+      value: 'full-text',
+    });
+  }
+
+  return tabs;
+}
 
 type ProposalDetailCardProps = {
   activeReview: ReviewActionState;
