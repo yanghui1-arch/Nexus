@@ -96,10 +96,9 @@ def test_product_discovery_prompt_limits_and_sanitizes_proposals() -> None:
     assert question.count("- Title:") == 2
     assert "Drop me" not in question
     assert "SECRET_ANSWER" not in question
-    assert "T" * 150 not in question
-    assert "S" * 550 not in question
-    assert "…" in question
-    assert len(question) <= 2 * (120 + 500) + 200
+    assert "T" * 150 in question
+    assert "S" * 550 in question
+    assert len(question) == len(build_product_discovery_question(proposals[:2], proposal_limit=2))
 
 
 def test_product_discovery_prompt_handles_empty_proposals() -> None:

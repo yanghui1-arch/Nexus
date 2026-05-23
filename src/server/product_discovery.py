@@ -12,8 +12,6 @@ from src.server.schemas import AgentKind, TaskCreateRequest
 
 
 PRODUCT_DISCOVERY_AGENT_NAMES = {AgentName.marc}
-MAX_PROPOSAL_TITLE_CHARS = 120
-MAX_PROPOSAL_SUMMARY_CHARS = 500
 
 
 def build_product_discovery_question(proposals: list[ProductProposalRecord], *, proposal_limit: int) -> str:
@@ -23,13 +21,9 @@ def build_product_discovery_question(proposals: list[ProductProposalRecord], *, 
         "",
         "Recent proposals context (title and summary only):",
     ]
-    for proposal in proposals[: max(0, proposal_limit)]:
+    for proposal in proposals[:proposal_limit]:
         title = (proposal.title or "").strip()
         summary = (proposal.summary or "").strip()
-        if len(title) > MAX_PROPOSAL_TITLE_CHARS:
-            title = f"{title[: MAX_PROPOSAL_TITLE_CHARS - 1]}…"
-        if len(summary) > MAX_PROPOSAL_SUMMARY_CHARS:
-            summary = f"{summary[: MAX_PROPOSAL_SUMMARY_CHARS - 1]}…"
         lines.extend([f"- Title: {title}", f"  Summary: {summary}"])
     if len(lines) == 3:
         lines.append("- None")
