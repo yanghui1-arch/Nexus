@@ -112,6 +112,7 @@ class TestContextManager:
                 assert "create_github_issue" in tela.tool_kits
                 assert "get_issue_comments" in tela.tool_kits
                 assert "pr_to_github" in tela.tool_kits
+                assert "bind_pr_to_task" in tela.tool_kits
                 assert "WebFetch" in tela.tool_kits
                 assert "web_search_agent" in tela.tool_kits
 
@@ -534,7 +535,6 @@ class TestFactory:
             )
         assert tela.llm_config.model == "gpt-4o-mini"
         assert tela.github_token == "ghp_abc"
-
 
 
 
