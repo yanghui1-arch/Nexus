@@ -12,6 +12,10 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs';
 import { PROPOSAL_PLANNING_STATUS_META, PROPOSAL_STATUS_META } from '../constants';
+import {
+  getProposalReviewReadinessItems,
+  parseProposalAnswerSections,
+} from '../proposalAnswerParser';
 import type { ReviewActionState, ReviewActionStatus } from '../types';
 import {
   formatRelativeTime,
@@ -41,6 +45,9 @@ export function ProposalDetailCard({
   const statusMeta = PROPOSAL_STATUS_META[proposal.status];
   const planningStatus = getProposalPlanningDisplayStatus(proposal);
   const planningRun = proposal.latest_planning_run;
+  const reviewReadinessItems = getProposalReviewReadinessItems(
+    parseProposalAnswerSections(proposal.answer),
+  );
   const isApproving =
     activeReview?.proposalId === proposal.id && activeReview.status === 'approved';
   const isRejecting =
@@ -140,6 +147,38 @@ export function ProposalDetailCard({
           </div>
         </div>
       </header>
+
+      <section className="rounded-lg border bg-muted/20 p-4" aria-label={t('productResearch.reviewReadinessChecklist')}>
+        <div className="mb-3 flex flex-col gap-1">
+          <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            {t('productResearch.reviewReadinessChecklist')}
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            {t('productResearch.reviewReadinessHint')}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {reviewReadinessItems.map(item => (
+            <Badge
+              key={item.key}
+              variant="outline"
+              className={item.present
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : 'border-amber-200 bg-amber-50 text-amber-800'}
+            >
+              <span aria-hidden="true" className="mr-1">
+                {item.present ? '✓' : '!'}
+              </span>
+              {t(`productResearch.reviewReadiness.${item.key}`)}
+              <span className="ml-1 text-[10px] uppercase tracking-wide opacity-75">
+                {item.present
+                  ? t('productResearch.reviewReadinessPresent')
+                  : t('productResearch.reviewReadinessMissing')}
+              </span>
+            </Badge>
+          ))}
+        </div>
+      </section>
 
       <Tabs
         value={visibleTab}

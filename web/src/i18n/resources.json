@@ -266,6 +266,18 @@
           "in_progress": "进行中",
           "completed": "已完成",
           "closed": "已关闭"
+        },
+        "reviewReadinessChecklist": "评审就绪检查清单",
+        "reviewReadinessHint": "这些提示来自提案内容解析，仅用于提高可读性，不会阻止批准或拒绝。",
+        "reviewReadinessPresent": "已包含",
+        "reviewReadinessMissing": "缺失",
+        "reviewReadiness": {
+          "repositoryEvidence": "Repository Evidence",
+          "externalEvidence": "External Evidence",
+          "nonGoals": "Non-goals",
+          "risks": "Risks",
+          "openQuestions": "Open Questions",
+          "suggestedBreakdown": "Suggested Breakdown"
         }
       },
       "taskDetail": {
@@ -561,6 +573,18 @@
           "in_progress": "In Progress",
           "completed": "Completed",
           "closed": "Closed"
+        },
+        "reviewReadinessChecklist": "Review Readiness Checklist",
+        "reviewReadinessHint": "Derived from parsed proposal sections. Missing items are readability prompts only and do not block approval or rejection.",
+        "reviewReadinessPresent": "Included",
+        "reviewReadinessMissing": "Missing",
+        "reviewReadiness": {
+          "repositoryEvidence": "Repository Evidence",
+          "externalEvidence": "External Evidence",
+          "nonGoals": "Non-goals",
+          "risks": "Risks",
+          "openQuestions": "Open Questions",
+          "suggestedBreakdown": "Suggested Breakdown"
         }
       },
       "taskDetail": {
