@@ -6,7 +6,11 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from src.server.product_discovery import ProductDiscoveryPoller, build_product_discovery_prompt
+from src.server.product_discovery import (
+    ProductDiscoveryPoller,
+    build_product_discovery_prompt,
+    build_product_discovery_question,
+)
 from src.server.postgres.models import AgentName, ProductProposalStatus, TaskCategory, TaskRecord, TaskStatus
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
@@ -40,6 +44,7 @@ def _settings(**overrides):
     values = {
         "product_discovery_poll_interval_seconds": 3600,
         "product_discovery_poll_task_limit": 20,
+        "product_discovery_recent_proposal_limit": 5,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -62,6 +67,7 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
 
     async def fake_proposals(session, **kwargs):
         """Provide fake proposal metrics."""
+        captured["proposal_kwargs"] = kwargs
         return [
             SimpleNamespace(
                 title="Improve onboarding",
@@ -84,6 +90,7 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
 
     assert result == 1
     assert captured["limit"] == 20
+    assert captured["proposal_kwargs"] == {"project": "nexus", "repo": "owner/repo", "limit": 200}
     runner.submit_task.assert_awaited_once()
     payload = runner.submit_task.await_args.args[0]
     assert payload.agent_instance_id == candidate.id
@@ -127,6 +134,32 @@ def test_build_product_discovery_prompt_includes_status_counts_and_recent_propos
     assert "repo=owner/repo, project=nexus" in prompt
     assert "pending(proposed)=2, approved=1, rejected=3" in prompt
     assert "Existing proposal / rejected / Already considered." in prompt
+
+
+def test_product_discovery_prompt_limits_and_sanitizes_proposals() -> None:
+    """Verify product discovery prompt keeps recent proposal context bounded."""
+    proposals = [
+        SimpleNamespace(title="T" * 150, summary="S" * 550, answer="SECRET_ANSWER_ONE"),
+        SimpleNamespace(title="Keep me", summary="Short summary", answer="SECRET_ANSWER_TWO"),
+        SimpleNamespace(title="Drop me", summary="Should not appear", answer="SECRET_ANSWER_THREE"),
+    ]
+
+    question = build_product_discovery_question(proposals, proposal_limit=2)
+
+    assert question.count("unknown / ") == 2
+    assert "Drop me" not in question
+    assert "SECRET_ANSWER" not in question
+    assert "T" * 150 in question
+    assert "S" * 550 in question
+    assert len(question) == len(build_product_discovery_question(proposals[:2], proposal_limit=2))
+
+
+def test_product_discovery_prompt_handles_empty_proposals() -> None:
+    """Verify empty recent proposals render predictable context."""
+    question = build_product_discovery_question([], proposal_limit=5)
+
+    assert "最近 proposal 信息不可用" in question
+    assert "Answer:" not in question
 
 
 def test_poll_once_skips_when_stop_requested(monkeypatch):
@@ -174,10 +207,15 @@ def test_poll_once_continues_after_submit_failure(monkeypatch):
         """Provide a fake workspace."""
         return SimpleNamespace(github_repo="owner/repo", project="nexus")
 
+    async def fake_proposals(session, **kwargs):
+        """Provide fake recent proposals."""
+        return []
+
     runner = FakeRunner()
     runner.submit_task = AsyncMock(side_effect=fake_submit)
     monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
     monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
+    monkeypatch.setattr(ProductProposalRepository, "list", fake_proposals)
 
     poller = ProductDiscoveryPoller(
         settings=_settings(),

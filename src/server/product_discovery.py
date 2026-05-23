@@ -26,8 +26,9 @@ def build_product_discovery_prompt(
     repo: str | None = None,
     proposal_counts: dict[ProductProposalStatus, int] | None = None,
     recent_proposals: list[Any] | None = None,
+    proposal_limit: int = 5,
 ) -> str:
-    """Build a context-aware prompt for periodic product discovery."""
+    """Build a context-aware product discovery prompt."""
     identity = f"project={project}"
     if repo:
         identity = f"repo={repo}, {identity}"
@@ -44,18 +45,29 @@ def build_product_discovery_prompt(
     else:
         lines.append("当前 proposal 计数不可用；请基于仓库和项目上下文谨慎判断。")
 
-    if recent_proposals:
-        lines.append("最近已有 proposals（title / status / summary）：")
-        for proposal in recent_proposals:
-            title = getattr(proposal, "title", "Untitled") or "Untitled"
-            status = getattr(getattr(proposal, "status", None), "value", getattr(proposal, "status", "unknown"))
-            summary = getattr(proposal, "summary", "") or "无摘要"
-            lines.append(f"- {title} / {status} / {summary}")
-    else:
-        lines.append("最近 proposal 信息不可用；请避免提出泛泛而谈或明显重复的建议。")
+    lines.append("最近已有 proposals（title / status / summary）：")
+    shown = 0
+    for proposal in (recent_proposals or [])[:proposal_limit]:
+        title = getattr(proposal, "title", "Untitled") or "Untitled"
+        status = getattr(getattr(proposal, "status", None), "value", getattr(proposal, "status", "unknown"))
+        summary = getattr(proposal, "summary", "") or "无摘要"
+        lines.append(f"- {title} / {status} / {summary}")
+        shown += 1
+    if shown == 0:
+        lines.append("- 最近 proposal 信息不可用；请避免提出泛泛而谈或明显重复的建议。")
 
     lines.append("明确要求：不要重复已有 proposal，优先发现不同且高价值的产品机会。")
     return "\n".join(lines)
+
+
+def build_product_discovery_question(proposals: list[Any], *, proposal_limit: int) -> str:
+    """Build a bounded fallback discovery prompt from recent proposals."""
+    return build_product_discovery_prompt(
+        project="unknown",
+        proposal_counts=None,
+        recent_proposals=proposals,
+        proposal_limit=proposal_limit,
+    )
 
 
 class ProductDiscoveryPoller:
@@ -71,7 +83,7 @@ class ProductDiscoveryPoller:
         self._database = database
         self._runner = runner
         self._stop_event = asyncio.Event()
-        self._task: asyncio.Task[Any] | None = None
+        self._task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
         """Start the product discovery poller.
@@ -129,34 +141,36 @@ class ProductDiscoveryPoller:
                     )
                     continue
 
-                recent_proposals = None
                 proposal_counts = None
+                recent_proposals = None
+                recent_limit = self._settings.product_discovery_recent_proposal_limit
                 try:
                     async with self._database.session() as session:
                         proposals = await ProductProposalRepository.list(
                             session,
                             project=workspace.project,
                             repo=workspace.github_repo,
-                            limit=200,
+                            limit=max(recent_limit, 200),
                         )
                     proposal_counts = {
                         status: sum(1 for proposal in proposals if proposal.status == status)
                         for status in DISCOVERY_PROPOSAL_STATUS_LABELS
                     }
-                    recent_proposals = proposals[:5]
+                    recent_proposals = proposals[:recent_limit]
                 except Exception as exc:
                     logger.warning(
                         "Build product discovery prompt without proposal metrics for agent instance %s: %s",
                         instance.id,
                         str(exc),
                     )
+
                 question = build_product_discovery_prompt(
                     project=workspace.project,
                     repo=workspace.github_repo,
                     proposal_counts=proposal_counts,
                     recent_proposals=recent_proposals,
+                    proposal_limit=recent_limit,
                 )
-
                 task_id = await self._runner.submit_task(
                     TaskCreateRequest(
                         agent_instance_id=instance.id,
