@@ -3,12 +3,21 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal
+from typing import Literal
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.logger import logger
 from src.server.config import Settings
 from src.server.postgres.database import Database
-from src.server.postgres.models import AgentName, ProductProposalRecord, ProductProposalStatus, TaskCategory
+from src.server.postgres.models import (
+    AgentInstanceRecord,
+    AgentName,
+    ProductProposalRecord,
+    ProductProposalStatus,
+    TaskCategory,
+    WorkspaceRecord,
+)
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
     ProductProposalRepository,
@@ -29,7 +38,7 @@ ProductDiscoveryAction = Literal["dispatch", "skip"]
 class ProductDiscoveryDecisionReason:
     code: str
     message: str
-    details: dict[str, Any] = field(default_factory=dict)
+    details: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -46,10 +55,14 @@ class ProductDiscoveryProposalMetrics:
     latest_discovery_or_proposal_at: datetime | None = None
 
 
+def _skip(code: str, message: str, **details: object) -> ProductDiscoveryDecision:
+    return ProductDiscoveryDecision("skip", ProductDiscoveryDecisionReason(code, message, details))
+
+
 def decide_product_discovery_dispatch(
     *,
-    candidate: Any,
-    workspace: Any | None,
+    candidate: AgentInstanceRecord,
+    workspace: WorkspaceRecord | None,
     metrics: ProductDiscoveryProposalMetrics,
     now: datetime | None = None,
 ) -> ProductDiscoveryDecision:
@@ -100,10 +113,6 @@ def decide_product_discovery_dispatch(
             {"candidate_id": str(candidate_id), "repo": repo, "project": project},
         ),
     )
-
-
-def _skip(code: str, message: str, **details: Any) -> ProductDiscoveryDecision:
-    return ProductDiscoveryDecision("skip", ProductDiscoveryDecisionReason(code, message, details))
 
 
 def build_product_discovery_question(proposals: list[ProductProposalRecord], *, proposal_limit: int) -> str:
@@ -228,7 +237,11 @@ class ProductDiscoveryPoller:
 
         return dispatched_count
 
-    async def _proposal_metrics(self, session: Any, workspace: Any | None) -> ProductDiscoveryProposalMetrics:
+    async def _proposal_metrics(
+        self,
+        session: AsyncSession,
+        workspace: WorkspaceRecord | None,
+    ) -> ProductDiscoveryProposalMetrics:
         """Build proposal metrics for a workspace."""
         interval = self._settings.product_discovery_poll_interval_seconds
         if workspace is None or not getattr(workspace, "github_repo", None) or not getattr(workspace, "project", None):
