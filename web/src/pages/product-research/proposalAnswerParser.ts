@@ -18,75 +18,92 @@ export type ProposalAnswerSectionTab =
   | 'open-questions'
   | 'full-text';
 
-export type ProposalAnswerParseStatus = 'parsed' | 'empty' | 'unrecognized';
-
-export type ProposalAnswerSections = Partial<Record<ProposalAnswerSectionKey, string>>;
-
-export type ParsedProposalAnswer = {
+export type ProposalAnswerSectionMap = Partial<Record<ProposalAnswerSectionKey, string>>;
+export type ProposalAnswerParseStatus = 'empty' | 'parsed' | 'partial' | 'unrecognized';
+export type ProposalAnswerParseResult = {
+  sections: ProposalAnswerSectionMap;
   fullText: string;
-  sections: ProposalAnswerSections;
-  status: ProposalAnswerParseStatus;
   unrecognizedContent: string;
+  status: ProposalAnswerParseStatus;
 };
 
 const SECTION_ALIASES: Record<string, ProposalAnswerSectionKey> = {
-  'Problem / Opportunity': 'problemOpportunity',
-  'User / Business Impact': 'userBusinessImpact',
-  'Repository Evidence': 'repositoryEvidence',
-  'External Evidence': 'externalEvidence',
-  'Proposed Scope': 'proposedScope',
-  'Non-Goals': 'nonGoals',
-  'Risks & Mitigations': 'risksMitigations',
-  'Suggested Small Feature Breakdown': 'suggestedSmallFeatureBreakdown',
-  'Open Questions': 'openQuestions',
+  problem: 'problemOpportunity',
+  opportunity: 'problemOpportunity',
+  problemopportunity: 'problemOpportunity',
+  userbusinessimpact: 'userBusinessImpact',
+  businessimpact: 'userBusinessImpact',
+  userimpact: 'userBusinessImpact',
+  repositoryevidence: 'repositoryEvidence',
+  repoevidence: 'repositoryEvidence',
+  externalevidence: 'externalEvidence',
+  proposedscope: 'proposedScope',
+  scope: 'proposedScope',
+  nongoals: 'nonGoals',
+  outofscope: 'nonGoals',
+  risksmitigations: 'risksMitigations',
+  risks: 'risksMitigations',
+  mitigations: 'risksMitigations',
+  suggestedsmallfeaturebreakdown: 'suggestedSmallFeatureBreakdown',
+  smallfeaturebreakdown: 'suggestedSmallFeatureBreakdown',
+  featurebreakdown: 'suggestedSmallFeatureBreakdown',
+  openquestions: 'openQuestions',
+  questions: 'openQuestions',
 };
+const SECOND_LEVEL_HEADING_PATTERN = /^##(?!#)\s+(.+?)\s*#*\s*$/;
 
-const NORMALIZED_SECTION_ALIASES = new Map(
-  Object.entries(SECTION_ALIASES).map(([heading, key]) => [normalizeHeading(heading), key]),
-);
-
-export const SECOND_LEVEL_HEADING_PATTERN = /^##(?!#)\s+(.+)\s*$/;
-
-export function parseProposalAnswerSections(answer: string): ParsedProposalAnswer {
+export function parseProposalAnswerSections(
+  answer: string | null | undefined,
+): ProposalAnswerParseResult {
   const fullText = answer ?? '';
-
   if (!fullText.trim()) {
-    return { fullText, sections: {}, status: 'empty', unrecognizedContent: '' };
+    return { sections: {}, fullText, unrecognizedContent: '', status: 'empty' };
   }
 
-  const sections: ProposalAnswerSections = {};
-  const unrecognizedBlocks: string[] = [];
+  const sections: ProposalAnswerSectionMap = {};
+  const unrecognizedParts: string[] = [];
   let currentKey: ProposalAnswerSectionKey | null = null;
   let currentHeading: string | null = null;
   let currentLines: string[] = [];
-
   const flush = () => {
     const content = currentLines.join('\n').trim();
-    if (!content && !currentHeading) return;
     if (currentKey) {
-      sections[currentKey] = content;
-    } else {
-      unrecognizedBlocks.push([currentHeading, content].filter(Boolean).join('\n').trim());
+      sections[currentKey] = sections[currentKey]
+        ? [sections[currentKey], content].filter(Boolean).join('\n\n')
+        : content;
+    } else if (currentHeading || content) {
+      unrecognizedParts.push([currentHeading ? `## ${currentHeading}` : '', content]
+        .filter(Boolean).join('\n').trim());
     }
   };
 
   for (const line of fullText.split(/\r?\n/)) {
-    const match = line.match(SECOND_LEVEL_HEADING_PATTERN);
-    if (match) {
+    const headingMatch = line.match(SECOND_LEVEL_HEADING_PATTERN);
+    if (headingMatch) {
       flush();
-      currentHeading = line.trim();
-      currentKey = NORMALIZED_SECTION_ALIASES.get(normalizeHeading(match[1])) ?? null;
+      currentHeading = headingMatch[1].trim();
+      currentKey = SECTION_ALIASES[normalizeHeading(currentHeading)] ?? null;
       currentLines = [];
-      continue;
+    } else {
+      currentLines.push(line);
     }
-    currentLines.push(line);
   }
   flush();
 
-  const status = Object.keys(sections).length > 0 ? 'parsed' : 'unrecognized';
-  return { fullText, sections, status, unrecognizedContent: unrecognizedBlocks.join('\n\n') };
+  const recognizedCount = Object.keys(sections).length;
+  const unrecognizedContent = unrecognizedParts.filter(Boolean).join('\n\n').trim();
+  const status = recognizedCount === 0
+    ? 'unrecognized'
+    : unrecognizedContent
+      ? 'partial'
+      : 'parsed';
+  return { fullText, sections, status, unrecognizedContent };
 }
 
-function normalizeHeading(heading: string) {
-  return heading.replace(/[*_`#]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+function normalizeHeading(heading: string): string {
+  return heading
+    .replace(/[`*_~[\]()]/g, '')
+    .replace(/&|\band\b/gi, '')
+    .replace(/[^a-z0-9]/gi, '')
+    .toLowerCase();
 }
