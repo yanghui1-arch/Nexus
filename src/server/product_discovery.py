@@ -63,7 +63,16 @@ def decide_product_discovery_dispatch(
     workspace: WorkspaceRecord | None,
     metrics: ProductDiscoveryProposalMetrics,
 ) -> ProductDiscoveryDecision:
-    """Decide whether a product discovery candidate should be dispatched."""
+    """Decide whether a product discovery candidate should be dispatched.
+
+    Args:
+        candidate: Agent instance being considered for product discovery.
+        workspace: Workspace context associated with the agent instance.
+        metrics: Proposal metrics used to avoid over-producing pending proposals.
+
+    Returns:
+        Dispatch decision with a structured reason for logging and tests.
+    """
     candidate_id = candidate.id
     if workspace is None:
         return _skip(
