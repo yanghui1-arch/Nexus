@@ -266,7 +266,19 @@
           "in_progress": "进行中",
           "completed": "已完成",
           "closed": "已关闭"
-        }
+        },
+        "decisionBrief": "决策摘要",
+        "decisionBriefApprovalAsk": "Approval ask / 一句话推荐",
+        "decisionBriefProblem": "Problem / Opportunity 摘要",
+        "decisionBriefImpact": "User & Business Impact 摘要",
+        "decisionBriefEvidence": "Top Repository Evidence",
+        "decisionBriefRisks": "Top Risks & Mitigations",
+        "decisionBriefNextSteps": "下一步计划概览",
+        "decisionBriefUnavailable": "该章节暂无结构化摘要。请切换到“描述”查看原始内容。",
+        "decisionBriefEvidenceFallback": "暂无可提取的仓库证据摘要。请在原始内容中查看完整证据。",
+        "decisionBriefNextStepsFallback": "暂无可提取的下一步计划。请查看原始建议计划。",
+        "decisionBriefFullTextHint": "需要完整上下文时，请切换到“描述”查看原始摘要和建议计划。",
+        "decisionBriefRecommendationFallback": "请评审该提案，并参考下方摘要决定是否批准。"
       },
       "taskDetail": {
         "title": "任务详情",
@@ -561,7 +573,19 @@
           "in_progress": "In Progress",
           "completed": "Completed",
           "closed": "Closed"
-        }
+        },
+        "decisionBrief": "Decision Brief",
+        "decisionBriefApprovalAsk": "Approval ask / one-line recommendation",
+        "decisionBriefProblem": "Problem / Opportunity summary",
+        "decisionBriefImpact": "User & Business Impact summary",
+        "decisionBriefEvidence": "Top Repository Evidence",
+        "decisionBriefRisks": "Top Risks & Mitigations",
+        "decisionBriefNextSteps": "Next-step plan overview",
+        "decisionBriefUnavailable": "This section is not available as a structured summary. Open Description for the original content.",
+        "decisionBriefEvidenceFallback": "No repository evidence summary could be extracted. Check the original content for full evidence.",
+        "decisionBriefNextStepsFallback": "No next-step plan could be extracted. Check the original suggested plan.",
+        "decisionBriefFullTextHint": "For full context, open Description to view the original summary and suggested plan.",
+        "decisionBriefRecommendationFallback": "Review this proposal and use the summary below to decide whether to approve it."
       },
       "taskDetail": {
         "title": "Task Detail",
