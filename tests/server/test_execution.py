@@ -5,7 +5,14 @@ from unittest.mock import AsyncMock
 from src.agents.base.agent import BaseAgentResponse
 from src.server.celery import execution
 from src.server.postgres.models import GithubPullRequestFeedbackKind, TaskCategory, TaskStatus, TaskWorkItemStatus
-from src.server.postgres.repositories import ProductProposalRepository, ProposalPlanningRunRepository, TaskRepository, TaskWorkItemRepository
+from src.server.postgres.repositories import (
+    AgentInstanceRepository,
+    ProductProposalRepository,
+    ProposalPlanningRunRepository,
+    TaskRepository,
+    TaskWorkItemRepository,
+    WorkspaceRepository,
+)
 
 
 class FakeAgent:
@@ -129,6 +136,45 @@ class FakeDatabase:
     async def __aexit__(self, *args):
         """Exit the async test context."""
         return None
+
+
+def test_load_binding_prefers_task_snapshot_over_workspace_context(monkeypatch):
+    """Verify binding uses the task snapshot before current workspace context."""
+    agent_instance_id = "agent-instance-id"
+    task = make_task(
+        agent_instance_id=agent_instance_id,
+        repo="snapshot/repo",
+        project="snapshot-project",
+    )
+    instance = SimpleNamespace(
+        id=agent_instance_id,
+        is_active=True,
+        agent=SimpleNamespace(value="sophie"),
+    )
+    workspace = SimpleNamespace(
+        workspace_key="workspace-key",
+        github_repo="current/repo",
+        project="current-project",
+    )
+
+    async def fake_get(session, requested_agent_instance_id):
+        """Provide a fake agent instance lookup."""
+        assert requested_agent_instance_id == agent_instance_id
+        return instance
+
+    async def fake_ensure(session, agent_instance):
+        """Provide a fake workspace binding."""
+        assert agent_instance is instance
+        return workspace
+
+    monkeypatch.setattr(AgentInstanceRepository, "get", fake_get)
+    monkeypatch.setattr(WorkspaceRepository, "ensure_for_agent_instance", fake_ensure)
+
+    binding = asyncio.run(execution._load_binding(FakeDatabase(), task))
+
+    assert binding.github_repo == "snapshot/repo"
+    assert binding.project == "snapshot-project"
+    assert binding.workspace_key == "workspace-key"
 
 
 def test_build_marc_agent_with_optional_repo_context(monkeypatch):

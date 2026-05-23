@@ -43,10 +43,10 @@ available_agent_factory = {
 
 def _resolved_task_repo_project(task, workspace) -> tuple[str | None, str | None]:
     # Mixed datasets still exist here:
-    # - older task rows persisted repo/project directly on TaskRecord
-    # - newer task rows read repo/project from the agent-instance workspace
-    # Prefer the explicit task value when present so old rows render as-is, then
-    # fall back to the current workspace context for newer rows.
+    # - current task rows snapshot repo/project directly on TaskRecord
+    # - older rows may still need a workspace fallback
+    # Prefer the explicit task snapshot when present so later workspace edits do
+    # not rewrite historical tasks in the API.
     """Resolve task repo and project from task and workspace data."""
     repo = task.repo or (workspace.github_repo if workspace is not None else None)
     project = task.project if task.project is not None else (workspace.project if workspace is not None else None)

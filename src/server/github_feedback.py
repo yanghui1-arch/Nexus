@@ -145,8 +145,8 @@ class GithubFeedbackPoller:
         client: httpx.AsyncClient,
         task: TaskRecord,
     ) -> int:
-        # PR feedback resumes the original task/PR thread, so the PR URL stays task-scoped
-        # even though repo/project for newer tasks now come from workspace.
+        # PR feedback resumes the original task/PR thread, so the PR URL remains
+        # task-scoped alongside the repo snapshot captured when the task was submitted.
         """Poll one task for GitHub feedback."""
         repo = await self._resolve_task_repo(task)
         if not repo or not task.external_pull_request_url:
@@ -280,9 +280,9 @@ class GithubFeedbackPoller:
 
     async def _resolve_task_repo(self, task: TaskRecord) -> str | None:
         # GitHub feedback sees mixed task history:
-        # - older tasks stored repo directly on the task row
-        # - newer tasks store repo on workspace and only keep PR state on the task row
-        # Prefer workspace-era behavior, but keep old rows replayable.
+        # - current tasks snapshot repo directly on the task row
+        # - older tasks may still need workspace fallback
+        # Prefer the task snapshot so later workspace edits do not retarget PR polling.
         """Resolve the GitHub repository for a task."""
         if task.repo:
             return task.repo
