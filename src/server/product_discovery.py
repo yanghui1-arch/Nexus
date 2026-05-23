@@ -55,8 +55,12 @@ class ProductDiscoveryProposalMetrics:
     latest_discovery_or_proposal_at: datetime | None = None
 
 
-def _skip(code: str, message: str, **details: object) -> ProductDiscoveryDecision:
-    return ProductDiscoveryDecision("skip", ProductDiscoveryDecisionReason(code, message, details))
+def _skip(
+    code: str,
+    message: str,
+    details: dict[str, object] | None = None,
+) -> ProductDiscoveryDecision:
+    return ProductDiscoveryDecision("skip", ProductDiscoveryDecisionReason(code, message, details or {}))
 
 
 def decide_product_discovery_dispatch(
@@ -69,7 +73,11 @@ def decide_product_discovery_dispatch(
     """Decide whether a product discovery candidate should be dispatched."""
     candidate_id = candidate.id
     if workspace is None:
-        return _skip("missing_workspace", "Workspace context is missing.", candidate_id=candidate_id)
+        return _skip(
+            "missing_workspace",
+            "Workspace context is missing.",
+            {"candidate_id": candidate_id},
+        )
 
     repo = workspace.github_repo
     project = workspace.project
@@ -77,19 +85,19 @@ def decide_product_discovery_dispatch(
         return _skip(
             "missing_workspace_context",
             "Workspace repository or project context is missing.",
-            candidate_id=candidate_id,
-            repo=repo,
-            project=project,
+            {"candidate_id": candidate_id, "repo": repo, "project": project},
         )
 
     if metrics.pending_proposal_count >= metrics.pending_proposal_limit:
         return _skip(
             "pending_proposal_limit_reached",
             "Pending product proposal limit has been reached.",
-            pending_proposal_count=metrics.pending_proposal_count,
-            pending_proposal_limit=metrics.pending_proposal_limit,
-            repo=repo,
-            project=project,
+            {
+                "pending_proposal_count": metrics.pending_proposal_count,
+                "pending_proposal_limit": metrics.pending_proposal_limit,
+                "repo": repo,
+                "project": project,
+            },
         )
 
     if metrics.latest_discovery_or_proposal_at is not None and metrics.cooldown_seconds > 0:
@@ -99,10 +107,12 @@ def decide_product_discovery_dispatch(
             return _skip(
                 "cooldown_active",
                 "Recent product discovery or proposal is still within cooldown.",
-                latest_discovery_or_proposal_at=metrics.latest_discovery_or_proposal_at.isoformat(),
-                cooldown_until=cooldown_until.isoformat(),
-                repo=repo,
-                project=project,
+                {
+                    "latest_discovery_or_proposal_at": metrics.latest_discovery_or_proposal_at.isoformat(),
+                    "cooldown_until": cooldown_until.isoformat(),
+                    "repo": repo,
+                    "project": project,
+                },
             )
 
     return ProductDiscoveryDecision(
