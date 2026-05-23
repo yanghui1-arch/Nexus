@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 from sqlalchemy import (
-    BigInteger,
     Boolean,
     DateTime,
     Enum,
@@ -585,7 +584,9 @@ class GithubPullRequestFeedbackRecord(Base):
         index=True,
         default=GithubPullRequestFeedbackStatus.pending,
     )
-    external_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    # External GitHub ids are mostly numeric, but merge-conflict feedback uses a
+    # synthetic hash key so we persist all source ids as text.
+    external_id: Mapped[str] = mapped_column(String(128), nullable=False)
     author: Mapped[str | None] = mapped_column(String(255), nullable=True)
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
     review_state: Mapped[str | None] = mapped_column(String(64), nullable=True)

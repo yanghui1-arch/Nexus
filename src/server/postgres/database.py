@@ -133,6 +133,17 @@ class Database:
 
         async with self._engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            if conn.dialect.name == "postgresql":
+                # Older deployments stored GitHub feedback source ids as BIGINT.
+                # Merge-conflict feedback now uses hashed episode ids, so migrate
+                # the column to text before the poller starts reading or writing it.
+                await conn.execute(
+                    text(
+                        "ALTER TABLE github_pull_request_feedback "
+                        "ALTER COLUMN external_id TYPE VARCHAR(128) "
+                        "USING external_id::text"
+                    )
+                )
             await conn.execute(text("ALTER TABLE workspace ADD COLUMN IF NOT EXISTS github_repo VARCHAR(255)"))
             await conn.execute(text("ALTER TABLE workspace ADD COLUMN IF NOT EXISTS project VARCHAR(255)"))
             await conn.execute(
