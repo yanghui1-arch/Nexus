@@ -16,6 +16,18 @@ export type ProposalAnswerParseResult = {
   unrecognizedContent: string;
   status: ProposalAnswerParseStatus;
 };
+export type ProposalReviewReadinessKey =
+  | 'repositoryEvidence'
+  | 'externalEvidence'
+  | 'nonGoals'
+  | 'risks'
+  | 'openQuestions'
+  | 'suggestedBreakdown';
+export type ProposalReviewReadinessItem = {
+  key: ProposalReviewReadinessKey;
+  sectionKey: ProposalAnswerSectionKey;
+  present: boolean;
+};
 
 const SECTION_ALIASES: Record<string, ProposalAnswerSectionKey> = {
   problem: 'problemOpportunity',
@@ -41,6 +53,14 @@ const SECTION_ALIASES: Record<string, ProposalAnswerSectionKey> = {
   questions: 'openQuestions',
 };
 const SECOND_LEVEL_HEADING_PATTERN = /^##(?!#)\s+(.+?)\s*#*\s*$/;
+const REVIEW_READINESS_SECTIONS: Array<Omit<ProposalReviewReadinessItem, 'present'>> = [
+  { key: 'repositoryEvidence', sectionKey: 'repositoryEvidence' },
+  { key: 'externalEvidence', sectionKey: 'externalEvidence' },
+  { key: 'nonGoals', sectionKey: 'nonGoals' },
+  { key: 'risks', sectionKey: 'risksMitigations' },
+  { key: 'openQuestions', sectionKey: 'openQuestions' },
+  { key: 'suggestedBreakdown', sectionKey: 'suggestedSmallFeatureBreakdown' },
+];
 
 export function parseProposalAnswerSections(
   answer: string | null | undefined,
@@ -88,6 +108,15 @@ export function parseProposalAnswerSections(
       ? 'partial'
       : 'parsed';
   return { sections, fullText, unrecognizedContent, status };
+}
+
+export function getProposalReviewReadinessItems(
+  parseResult: ProposalAnswerParseResult,
+): ProposalReviewReadinessItem[] {
+  return REVIEW_READINESS_SECTIONS.map(item => ({
+    ...item,
+    present: Boolean(parseResult.sections[item.sectionKey]?.trim()),
+  }));
 }
 
 function normalizeHeading(heading: string): string {
