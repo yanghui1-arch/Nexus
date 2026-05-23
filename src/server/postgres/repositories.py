@@ -1645,7 +1645,7 @@ class GithubPullRequestFeedbackRepository:
         task_id: uuid.UUID,
         pull_request_number: int,
         kind: GithubPullRequestFeedbackKind,
-        external_id: int,
+        external_id: str,
         status: GithubPullRequestFeedbackStatus,
         author: str | None,
         body: str | None,
@@ -1660,11 +1660,44 @@ class GithubPullRequestFeedbackRepository:
         ignored_reason: str | None = None,
         payload: dict[str, Any] | None = None,
     ) -> tuple[GithubPullRequestFeedbackRecord, bool]:
-        """Create or update discovered GitHub feedback."""
+        """Create or refresh one discovered GitHub feedback record.
+
+        Args:
+            session: Active database session.
+            task_id: Nexus task that owns the external pull request.
+            pull_request_number: GitHub pull request number for this feedback item.
+            kind: Normalized feedback kind, such as review, comment, or merge conflict.
+            external_id: Stable source identifier used to deduplicate one feedback
+                item within a task. GitHub-native events use GitHub's own id as
+                text; merge conflicts use a synthetic episode id.
+            status: Initial local lifecycle status for the discovered feedback.
+            author: GitHub login of the feedback author when available.
+            body: Human-readable feedback body.
+            review_state: Optional GitHub review state such as APPROVED or
+                CHANGES_REQUESTED.
+            file_path: Optional file path for inline review comments.
+            line: Optional current line number for inline review comments.
+            original_line: Optional original line number for inline review comments.
+            commit_id: Optional commit SHA associated with the feedback.
+            html_url: Optional GitHub URL pointing to the feedback item.
+            external_created_at: Creation time reported by GitHub.
+            external_updated_at: Last update time reported by GitHub.
+            ignored_reason: Local reason for storing the item as ignored.
+            payload: Raw GitHub payload kept for debugging and recovery.
+
+        Returns:
+            A tuple of ``(record, created)`` where ``record`` is the persisted
+            feedback row and ``created`` indicates whether a new row had to be
+            inserted instead of refreshing an existing one.
+        """
+        # Compatibility normalization: the column now stores textual external ids,
+        # but older call sites/tests may still pass numeric ids. Keep coercion here
+        # for now so cleanup can happen incrementally in one place.
+        external_id_value = str(external_id)
         query = select(GithubPullRequestFeedbackRecord).where(
             GithubPullRequestFeedbackRecord.task_id == task_id,
             GithubPullRequestFeedbackRecord.kind == kind,
-            GithubPullRequestFeedbackRecord.external_id == external_id,
+            GithubPullRequestFeedbackRecord.external_id == external_id_value,
         )
         result = await session.execute(query)
         record = result.scalar_one_or_none()
@@ -1676,7 +1709,7 @@ class GithubPullRequestFeedbackRepository:
                 pull_request_number=pull_request_number,
                 kind=kind,
                 status=status,
-                external_id=external_id,
+                external_id=external_id_value,
                 author=author,
                 body=body,
                 review_state=review_state,
@@ -1708,12 +1741,17 @@ class GithubPullRequestFeedbackRepository:
         record.payload = payload
         record.updated_at = now
 
+        # Only the poller may refresh the lifecycle of feedback that has not been
+        # claimed/finished yet. Once a worker has moved a record into processing or
+        # processed, preserve that worker-owned state and only update the mirrored
+        # GitHub metadata above.
         if record.status in {
             GithubPullRequestFeedbackStatus.pending,
             GithubPullRequestFeedbackStatus.ignored,
         }:
             record.status = status
             record.ignored_reason = ignored_reason
+            # Reopened actionable feedback should no longer look completed.
             if status != GithubPullRequestFeedbackStatus.processed:
                 record.processed_at = None
 
