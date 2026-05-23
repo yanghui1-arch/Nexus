@@ -287,7 +287,7 @@ export default function ProductResearchPage() {
                 <button
                   key={key}
                   type="button"
-                  className="border-l px-4 py-2 text-left transition-colors hover:border-primary hover:text-primary"
+                  className="px-4 py-2 text-left transition-colors hover:text-primary"
                   onClick={onClick}
                 >
                   <dt className="text-muted-foreground text-sm font-medium">
