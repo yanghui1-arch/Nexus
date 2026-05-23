@@ -350,8 +350,8 @@ class TaskResponse(BaseModel):
         project: str | None | object = ...,
     ) -> "TaskResponse":
         # Routes may override repo/project so one API payload can represent both:
-        # - legacy tasks that stored repo/project on the task row
-        # - newer tasks that hydrate repo/project from the workspace at read time
+        # - current tasks that snapshot repo/project on the task row
+        # - legacy tasks that still need workspace fallback at read time
         resolved_repo = task.repo if repo is ... else repo
         resolved_project = task.project if project is ... else project
         return cls(

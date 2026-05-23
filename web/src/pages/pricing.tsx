@@ -1,10 +1,11 @@
-import { startTransition, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, Coins } from 'lucide-react';
 import { toast } from 'sonner';
-import { getCurrentUser, purchaseAgent, rechargeBalance } from '@/api/auth';
+import { purchaseAgent, rechargeBalance } from '@/api/auth';
 import { getErrorDetail } from '@/api/client';
-import type { ApiAgentKind, ApiUser } from '@/api/types';
+import type { ApiAgentKind } from '@/api/types';
+import { useAuth } from '@/components/AuthProvider';
 import { useAppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,8 +35,7 @@ function formatCny(amount: string): string {
 
 export default function PricingPage() {
   const { t } = useTranslation();
-  const [user, setUser] = useState<ApiUser | null>(null);
-  const [isLoadingUser, setIsLoadingUser] = useState(true);
+  const { status, user, refreshUser } = useAuth();
   const [rechargeYuan, setRechargeYuan] = useState('1000');
   const [busyAgent, setBusyAgent] = useState<ApiAgentKind | null>(null);
 
@@ -46,13 +46,6 @@ export default function PricingPage() {
     mainClassName: 'gap-8',
   });
 
-  useEffect(() => {
-    void getCurrentUser()
-      .then(nextUser => startTransition(() => setUser(nextUser)))
-      .catch(() => startTransition(() => setUser(null)))
-      .finally(() => startTransition(() => setIsLoadingUser(false)));
-  }, []);
-
   const handleRecharge = async () => {
     const amount = Number(rechargeYuan);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -61,7 +54,7 @@ export default function PricingPage() {
     }
     try {
       const nextUser = await rechargeBalance({ amount: amount.toFixed(2) });
-      setUser(nextUser);
+      await refreshUser();
       toast.success(t('pricing.balanceRecharged'), { description: t('pricing.currentBalance', { balance: formatCny(nextUser.balance) }) });
     } catch (error) {
       toast.error(t('pricing.rechargeFailed'), { description: getErrorDetail(error) });
@@ -72,7 +65,7 @@ export default function PricingPage() {
     setBusyAgent(agent);
     try {
       const purchase = await purchaseAgent({ agent });
-      setUser(current => current ? { ...current, balance: purchase.balance } : current);
+      await refreshUser();
       toast.success(t('pricing.agentPurchased', { agent }), { description: t('pricing.validUntil', { date: new Date(purchase.expires_at).toLocaleDateString() }) });
     } catch (error) {
       toast.error(t('pricing.purchaseFailed'), { description: getErrorDetail(error) });
@@ -122,7 +115,7 @@ export default function PricingPage() {
                 <ul className="space-y-3 text-sm">
                   {plan.featureKeys.map(featureKey => <li key={featureKey} className="flex gap-2"><Check className="mt-0.5 size-4 text-primary" />{t(featureKey)}</li>)}
                 </ul>
-                <Button className="w-full" onClick={() => handlePurchase(plan.agent)} disabled={!user || isLoadingUser || busyAgent === plan.agent}>
+                <Button className="w-full" onClick={() => handlePurchase(plan.agent)} disabled={!user || status === 'checking' || busyAgent === plan.agent}>
                   {t('pricing.buyPlan', { plan: plan.name })}
                 </Button>
               </CardContent>

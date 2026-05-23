@@ -135,9 +135,8 @@ async def execute_agent_task(
             return
 
         binding = await _load_binding(database, task)
-        # Populate the in-memory task object so existing downstream helpers can keep
-        # reading task.repo/project. This keeps old helper paths working across mixed
-        # old/new task data without restoring task.repo/project as persisted state.
+        # Populate the in-memory task object so downstream helpers keep reading the
+        # resolved repo/project, including legacy rows that still used workspace fallback.
         task.repo = binding.github_repo
         task.project = binding.project
         await _mark_workspace_running(database, task.agent_instance_id)
@@ -483,7 +482,7 @@ def _build_agent(
     agent_name = task.agent.value
     resolved_repo = task.repo or github_repo
     if agent_name in _CODING_AGENTS and not resolved_repo:
-        raise RuntimeError("Missing workspace repo.")
+        raise RuntimeError("Missing repo context.")
 
     shared = {
         "base_url": settings.base_url,
@@ -571,13 +570,13 @@ async def _load_binding(database: Database, task: TaskRecord) -> _ExecutionBindi
             instance,
         )
 
-        # Workspace is the primary source of repo/project for newly created tasks.
-        # Legacy task fields remain a read-only fallback so older rows and in-flight
-        # tasks created before that shift can still execute correctly.
-        github_repo = workspace.github_repo or task.repo
-        project = workspace.project if workspace.project is not None else task.project
+        # Newer tasks snapshot repo/project at submission time so later workspace edits
+        # do not retarget in-flight or recoverable work. Keep workspace as a fallback
+        # for legacy rows that predate that snapshot behavior.
+        github_repo = task.repo or workspace.github_repo
+        project = task.project if task.project is not None else workspace.project
         if task.agent.value in _CODING_AGENTS and github_repo is None:
-            raise RuntimeError("Missing workspace repo.")
+            raise RuntimeError("Missing repo context.")
 
     return _ExecutionBinding(
         github_repo=github_repo,
