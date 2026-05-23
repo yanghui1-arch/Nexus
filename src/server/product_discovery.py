@@ -95,7 +95,7 @@ class ProductDiscoveryPoller:
                         session,
                         instance.id,
                     )
-                    pending_count = await TaskRepository.count_active_product_discovery_tasks(
+                    pending_count = await TaskRepository.count_active_pm_tasks(
                         session,
                         agent_instance_id=instance.id,
                     )

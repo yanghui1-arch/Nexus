@@ -1008,12 +1008,12 @@ class TaskRepository:
         return list(result.scalars().all())
 
     @staticmethod
-    async def count_active_product_discovery_tasks(
+    async def count_active_pm_tasks(
         session: AsyncSession,
         *,
         agent_instance_id: uuid.UUID,
     ) -> int:
-        """Count queued or running product discovery tasks for cooldown decisions."""
+        """Count active product discovery tasks for an agent instance."""
         query = select(func.count(TaskRecord.id)).where(
             TaskRecord.agent_instance_id == agent_instance_id,
             TaskRecord.category == TaskCategory.pm,
