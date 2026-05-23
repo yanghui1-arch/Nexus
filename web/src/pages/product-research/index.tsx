@@ -99,10 +99,9 @@ export default function ProductResearchPage() {
   const activeProposalPage = Math.min(proposalPage, proposalPageCount);
   const visibleProposals = getVisiblePage(filteredProposals, activeProposalPage);
   const approvalInboxStats = [
-    { key: 'pending', value: proposalSummaryCounts.proposed },
+    { key: 'pending', value: proposalSummaryCounts.proposed, onClick: handleReviewPendingProposals },
     { key: 'accepted', value: proposalSummaryCounts.accepted },
     { key: 'rejected', value: proposalSummaryCounts.rejected },
-    { key: 'total', value: proposalSummaryCounts.total },
   ];
 
   const trackedFeatures = (() => {
@@ -282,28 +281,20 @@ export default function ProductResearchPage() {
     <section className="flex flex-col gap-6">
       {viewMode === 'proposals' ? (
         <div className="flex flex-col gap-4">
-          <section className="border-y border-primary/20 bg-primary/5 px-4 py-4">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div className="space-y-2">
-                <h2 className="font-semibold">{t('productResearch.approvalInboxTitle')}</h2>
-                <p className="text-muted-foreground text-sm">
-                  {t('productResearch.approvalInboxDescription', {
-                    count: proposalSummaryCounts.proposed,
-                  })}
-                </p>
-              </div>
-              <Button className="self-start md:self-center" onClick={handleReviewPendingProposals}>
-                {t('productResearch.reviewPendingProposals')}
-              </Button>
-            </div>
-            <dl className="mt-4 grid gap-3 sm:grid-cols-4">
-              {approvalInboxStats.map(({ key, value }) => (
-                <div key={key} className="border-l border-primary/30 pl-3">
-                  <dt className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+          <section className="border-y px-1 py-3">
+            <dl className="grid gap-6 sm:grid-cols-3">
+              {approvalInboxStats.map(({ key, value, onClick }) => (
+                <button
+                  key={key}
+                  type="button"
+                  className="border-l px-4 py-2 text-left transition-colors hover:border-primary hover:text-primary"
+                  onClick={onClick}
+                >
+                  <dt className="text-muted-foreground text-sm font-medium">
                     {t(`productResearch.approvalInbox.${key}`)}
                   </dt>
-                  <dd className="mt-1 text-2xl font-semibold">{value}</dd>
-                </div>
+                  <dd className="mt-2 text-3xl font-semibold">{value}</dd>
+                </button>
               ))}
             </dl>
           </section>
