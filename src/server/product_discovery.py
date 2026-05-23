@@ -1,48 +1,50 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 
 from src.logger import logger
 from src.server.config import Settings
 from src.server.postgres.database import Database
-from src.server.postgres.models import AgentName, ProductProposalStatus
+from src.server.postgres.models import AgentName, ProductProposalRecord, ProductProposalStatus
 from src.server.postgres.repositories import AgentInstanceRepository, ProductProposalRepository, WorkspaceRepository
 from src.server.runner import AgentTaskRunner
 from src.server.schemas import AgentKind, TaskCreateRequest
 
 
 PRODUCT_DISCOVERY_AGENT_NAMES = {AgentName.marc}
-RECENT_PROPOSAL_PROMPT_LIMIT = 5
 
 
-def build_product_discovery_prompt(
+def build_product_discovery_question(
+    proposals: list[ProductProposalRecord],
     *,
-    project: str,
-    repo: str | None,
-    pending_proposal_count: int,
-    recent_proposals: list[Any],
+    proposal_limit: int,
+    project: str | None = None,
+    repo: str | None = None,
+    pending_proposal_count: int | None = None,
 ) -> str:
-    """Build the product discovery task prompt."""
+    """Build a bounded product discovery prompt from workspace and proposal context."""
+    project_context = project or "未配置"
     repo_context = repo or "未配置"
-    recent_lines = []
-    for proposal in recent_proposals[:RECENT_PROPOSAL_PROMPT_LIMIT]:
+    pending_count = 0 if pending_proposal_count is None else pending_proposal_count
+    lines = [
+        "优化产品并提出一个proposal",
+        "",
+        "中文产品发现任务目标：结合当前项目上下文、代码库事实和用户价值，发现一个高价值产品改进机会，并创建清晰、可评审的 proposal。",
+        f"项目上下文：project={project_context}; repo={repo_context}",
+        f"待处理 proposal 数量：{pending_count}",
+        "避免重复：不要创建与近期 proposal 标题、目标或范围重复的 proposal；如主题相近，请明确差异化价值和边界。",
+        "",
+        "Recent proposals context (title, status, and summary only):",
+    ]
+    for proposal in proposals[:proposal_limit]:
+        title = (proposal.title or "").strip()
+        summary = (proposal.summary or "").strip()
         status = getattr(proposal, "status", "unknown")
         status_value = getattr(status, "value", str(status))
-        recent_lines.append(f"- {proposal.title} ({status_value})")
-    recent_summary = "\n".join(recent_lines) if recent_lines else "- 暂无近期 proposal"
-
-    return (
-        "优化产品并提出一个proposal\n\n"
-        "中文产品发现任务目标：结合当前项目上下文、代码库事实和用户价值，发现一个高价值产品改进机会，"
-        "并创建清晰、可评审的 proposal。\n"
-        f"项目上下文：project={project}; repo={repo_context}\n"
-        f"待处理 proposal 数量：{pending_proposal_count}\n"
-        "近期 proposal（标题/状态）：\n"
-        f"{recent_summary}\n"
-        "避免重复：不要创建与近期 proposal 标题、目标或范围重复的 proposal；"
-        "如主题相近，请明确差异化价值和边界。"
-    )
+        lines.extend([f"- Title: {title}", f"  Status: {status_value}", f"  Summary: {summary}"])
+    if len(lines) == 8:
+        lines.append("- None")
+    return "\n".join(lines)
 
 
 class ProductDiscoveryPoller:
@@ -58,7 +60,7 @@ class ProductDiscoveryPoller:
         self._database = database
         self._runner = runner
         self._stop_event = asyncio.Event()
-        self._task: asyncio.Task[Any] | None = None
+        self._task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
         """Start the product discovery poller.
@@ -115,13 +117,13 @@ class ProductDiscoveryPoller:
                         instance.id,
                     )
                     continue
-
+                recent_limit = self._settings.product_discovery_recent_proposal_limit
                 async with self._database.session() as session:
                     recent_proposals = await ProductProposalRepository.list(
                         session,
                         project=workspace.project,
                         repo=workspace.github_repo,
-                        limit=RECENT_PROPOSAL_PROMPT_LIMIT,
+                        limit=recent_limit,
                     )
                     pending_proposals = await ProductProposalRepository.list(
                         session,
@@ -135,11 +137,12 @@ class ProductDiscoveryPoller:
                     TaskCreateRequest(
                         agent_instance_id=instance.id,
                         agent=AgentKind(instance.agent.value),
-                        question=build_product_discovery_prompt(
+                        question=build_product_discovery_question(
+                            recent_proposals,
+                            proposal_limit=recent_limit,
                             project=workspace.project,
                             repo=workspace.github_repo,
                             pending_proposal_count=len(pending_proposals),
-                            recent_proposals=recent_proposals,
                         ),
                         external_issue_url=None,
                     )

@@ -296,8 +296,9 @@ class TaskRecord(Base):
         server_default=TaskCategory.coding.value,
     )
     question: Mapped[str] = mapped_column(Text, nullable=False)
-    # These fields are kept for backward compatibility with older rows and APIs.
-    # New execution should resolve repo/project from WorkspaceRecord instead.
+    # Snapshot the repo/project chosen at task submission time so later workspace
+    # edits do not rewrite historical task execution context. Legacy rows may still
+    # leave these fields empty and rely on workspace fallback paths.
     repo: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     project: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     external_issue_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)

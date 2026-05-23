@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from src.server.product_discovery import build_product_discovery_prompt, ProductDiscoveryPoller
+from src.server.product_discovery import ProductDiscoveryPoller, build_product_discovery_question
 from src.server.postgres.models import AgentName, ProductProposalStatus, TaskCategory, TaskRecord, TaskStatus
 from src.server.postgres.repositories import AgentInstanceRepository, ProductProposalRepository, UserRepository, WorkspaceRepository
 
@@ -14,21 +14,27 @@ from src.server.postgres.repositories import AgentInstanceRepository, ProductPro
 def test_product_discovery_prompt_includes_context_and_guardrails():
     """Verify product discovery prompt keeps critical context and guardrails."""
     recent_proposals = [
-        SimpleNamespace(title="Reduce duplicate product proposals", status=ProductProposalStatus.proposed),
-        SimpleNamespace(title="Improve onboarding funnel", status=ProductProposalStatus.approved),
+        SimpleNamespace(
+            title="Reduce duplicate product proposals",
+            summary="Avoid repeated discovery output",
+            status=ProductProposalStatus.proposed,
+        ),
+        SimpleNamespace(title="Improve onboarding funnel", summary="Shorten setup", status=ProductProposalStatus.approved),
     ]
 
-    prompt = build_product_discovery_prompt(
+    prompt = build_product_discovery_question(
+        recent_proposals,
+        proposal_limit=5,
         project="Nexus Growth",
         repo="yanghui1-arch/Nexus",
         pending_proposal_count=3,
-        recent_proposals=recent_proposals,
     )
 
     assert "project=Nexus Growth" in prompt, "prompt should include project context"
     assert "repo=yanghui1-arch/Nexus" in prompt, "prompt should include repo context"
     assert "待处理 proposal 数量：3" in prompt, "prompt should include pending proposal count"
-    assert "Reduce duplicate product proposals (proposed)" in prompt, "prompt should include recent proposal title/status"
+    assert "Title: Reduce duplicate product proposals" in prompt, "prompt should include recent proposal title"
+    assert "Status: proposed" in prompt, "prompt should include recent proposal status"
     assert "避免重复" in prompt, "prompt should tell Marc to avoid duplicate proposals"
     assert "中文产品发现任务目标" in prompt, "prompt should preserve the Chinese discovery goal"
     assert "优化产品并提出一个proposal" in prompt, "prompt should keep the original Chinese task objective"
@@ -58,6 +64,7 @@ def _settings(**overrides):
     values = {
         "product_discovery_poll_interval_seconds": 3600,
         "product_discovery_poll_task_limit": 20,
+        "product_discovery_recent_proposal_limit": 5,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -67,7 +74,7 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
     """Verify poll once dispatches only dispatchable instances."""
     candidate = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc)
     runner = FakeRunner()
-    captured = {}
+    captured = {"proposal_calls": []}
 
     async def fake_list(session, *, limit):
         """Provide a fake list."""
@@ -78,11 +85,12 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
         """Provide a fake workspace."""
         return SimpleNamespace(github_repo="owner/repo", project="nexus")
 
-    async def fake_proposals(session, **filters):
+    async def fake_proposals(session, **kwargs):
         """Provide fake proposals for prompt context."""
-        if filters.get("status") == ProductProposalStatus.proposed:
-            return [SimpleNamespace(title="Pending proposal", status=ProductProposalStatus.proposed)]
-        return [SimpleNamespace(title="Existing proposal", status=ProductProposalStatus.approved)]
+        captured["proposal_calls"].append(kwargs)
+        if kwargs.get("status") == ProductProposalStatus.proposed:
+            return [SimpleNamespace(title="Pending proposal", summary="Needs review", status=ProductProposalStatus.proposed)]
+        return [SimpleNamespace(title="Existing proposal", summary="Already known", status=ProductProposalStatus.approved)]
 
     monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
     monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
@@ -102,6 +110,38 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
     payload = runner.submit_task.await_args.args[0]
     assert payload.agent_instance_id == candidate.id
     assert payload.agent == AgentName.marc
+    assert captured["proposal_calls"] == [
+        {"project": "nexus", "repo": "owner/repo", "limit": 5},
+        {"status": ProductProposalStatus.proposed, "project": "nexus", "repo": "owner/repo", "limit": 200},
+    ]
+    assert "Existing proposal" in payload.question
+    assert "待处理 proposal 数量：1" in payload.question
+
+
+def test_product_discovery_prompt_limits_and_sanitizes_proposals() -> None:
+    """Verify product discovery prompt keeps recent proposal context bounded."""
+    proposals = [
+        SimpleNamespace(title="T" * 150, summary="S" * 550, answer="SECRET_ANSWER_ONE", status="proposed"),
+        SimpleNamespace(title="Keep me", summary="Short summary", answer="SECRET_ANSWER_TWO", status="approved"),
+        SimpleNamespace(title="Drop me", summary="Should not appear", answer="SECRET_ANSWER_THREE", status="rejected"),
+    ]
+
+    question = build_product_discovery_question(proposals, proposal_limit=2)
+
+    assert question.count("- Title:") == 2
+    assert "Drop me" not in question
+    assert "SECRET_ANSWER" not in question
+    assert "T" * 150 in question
+    assert "S" * 550 in question
+    assert len(question) == len(build_product_discovery_question(proposals[:2], proposal_limit=2))
+
+
+def test_product_discovery_prompt_handles_empty_proposals() -> None:
+    """Verify empty recent proposals render predictable context."""
+    question = build_product_discovery_question([], proposal_limit=5)
+
+    assert question.endswith("- None")
+    assert "Answer:" not in question
 
 
 def test_poll_once_skips_when_stop_requested(monkeypatch):
@@ -149,8 +189,8 @@ def test_poll_once_continues_after_submit_failure(monkeypatch):
         """Provide a fake workspace."""
         return SimpleNamespace(github_repo="owner/repo", project="nexus")
 
-    async def fake_proposals(session, **filters):
-        """Provide no proposals."""
+    async def fake_proposals(session, **kwargs):
+        """Provide fake recent proposals."""
         return []
 
     runner = FakeRunner()
