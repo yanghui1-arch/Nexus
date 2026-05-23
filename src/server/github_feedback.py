@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -33,7 +34,7 @@ _PULL_REQUEST_NUMBER_RE = re.compile(r"/pull/(?P<number>\d+)")
 @dataclass(frozen=True)
 class _GithubFeedbackItem:
     kind: GithubPullRequestFeedbackKind
-    external_id: int
+    external_id: str
     author: str | None
     body: str | None
     review_state: str | None
@@ -440,7 +441,7 @@ def _build_pr_comment_items(payloads: list[dict[str, Any]]) -> list[_GithubFeedb
         items.append(
             _GithubFeedbackItem(
                 kind=GithubPullRequestFeedbackKind.pr_comment,
-                external_id=int(payload["id"]),
+                external_id=str(payload["id"]),
                 author=_user_login(payload.get("user")),
                 body=_normalize_text(payload.get("body")),
                 review_state=None,
@@ -464,7 +465,7 @@ def _build_pr_review_items(payloads: list[dict[str, Any]]) -> list[_GithubFeedba
         items.append(
             _GithubFeedbackItem(
                 kind=GithubPullRequestFeedbackKind.pr_review,
-                external_id=int(payload["id"]),
+                external_id=str(payload["id"]),
                 author=_user_login(payload.get("user")),
                 body=_normalize_text(payload.get("body")),
                 review_state=_normalize_text(payload.get("state")),
@@ -488,7 +489,7 @@ def _build_pr_review_comment_items(payloads: list[dict[str, Any]]) -> list[_Gith
         items.append(
             _GithubFeedbackItem(
                 kind=GithubPullRequestFeedbackKind.pr_review_comment,
-                external_id=int(payload["id"]),
+                external_id=str(payload["id"]),
                 author=_user_login(payload.get("user")),
                 body=_normalize_text(payload.get("body")),
                 review_state=None,
@@ -520,9 +521,14 @@ def _build_pr_merge_conflict_item(
         f"(mergeable_state={mergeable_state}). Please sync with the base branch, "
         "resolve merge conflicts, commit the resolution, and push the existing PR branch again."
     )
+    # GitHub does not expose a stable merge-conflict event id. Deduplicate one
+    # conflict episode by the PR/base/head snapshot so a later conflict on the
+    # same PR can be surfaced as new feedback instead of being forever merged
+    # into the first processed conflict record.
+    external_id = _build_pr_merge_conflict_external_id(pull_request, pull_request_number)
     return _GithubFeedbackItem(
         kind=GithubPullRequestFeedbackKind.pr_merge_conflict,
-        external_id=pull_request_number,
+        external_id=external_id,
         author="github",
         body=body,
         review_state=mergeable_state,
@@ -535,6 +541,31 @@ def _build_pr_merge_conflict_item(
         updated_at=_parse_github_datetime(pull_request.get("updated_at")),
         payload=pull_request,
     )
+
+
+def _build_pr_merge_conflict_external_id(
+    pull_request: dict[str, Any],
+    pull_request_number: int,
+) -> str:
+    """Return a stable synthetic id for one merge-conflict episode."""
+    base_sha = _pull_request_branch_sha(pull_request, "base") or ""
+    head_sha = _pull_request_branch_sha(pull_request, "head") or ""
+    signature = f"{pull_request_number}:{base_sha}:{head_sha}"
+    # Store external feedback ids as text so GitHub numeric ids and synthetic
+    # merge-conflict episode ids share one durable type without int64 limits.
+    return hashlib.sha1(signature.encode("utf-8")).hexdigest()
+
+
+def _pull_request_branch_sha(
+    pull_request: dict[str, Any],
+    branch_key: str,
+) -> str | None:
+    """Return a normalized branch SHA from a pull request payload."""
+    branch = pull_request.get(branch_key)
+    if not isinstance(branch, dict):
+        return None
+    sha = branch.get("sha")
+    return _normalize_text(sha) if isinstance(sha, str) else None
 
 
 def _user_login(payload: Any) -> str | None:
