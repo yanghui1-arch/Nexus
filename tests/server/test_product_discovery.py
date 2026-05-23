@@ -6,9 +6,19 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from src.server.product_discovery import ProductDiscoveryPoller, build_product_discovery_question
-from src.server.postgres.models import AgentName, TaskCategory, TaskRecord, TaskStatus
-from src.server.postgres.repositories import AgentInstanceRepository, ProductProposalRepository, UserRepository, WorkspaceRepository
+from src.server.product_discovery import (
+    ProductDiscoveryPoller,
+    ProductDiscoveryProposalMetrics,
+    build_product_discovery_question,
+    decide_product_discovery_dispatch,
+)
+from src.server.postgres.models import AgentName, ProductProposalStatus, TaskCategory, TaskRecord, TaskStatus
+from src.server.postgres.repositories import (
+    AgentInstanceRepository,
+    ProductProposalRepository,
+    UserRepository,
+    WorkspaceRepository,
+)
 
 
 class FakeDatabase:
@@ -36,9 +46,57 @@ def _settings(**overrides):
         "product_discovery_poll_interval_seconds": 3600,
         "product_discovery_poll_task_limit": 20,
         "product_discovery_recent_proposal_limit": 5,
+        "product_discovery_pending_proposal_limit": 50,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
+
+
+def _metrics(**overrides):
+    values = {
+        "pending_proposal_count": 0,
+        "pending_proposal_limit": 50,
+    }
+    values.update(overrides)
+    return ProductDiscoveryProposalMetrics(**values)
+
+
+def test_decision_skips_when_pending_proposal_limit_reached():
+    candidate = SimpleNamespace(id=uuid.uuid4())
+    workspace = SimpleNamespace(github_repo="owner/repo", project="nexus")
+
+    decision = decide_product_discovery_dispatch(
+        candidate=candidate,
+        workspace=workspace,
+        metrics=_metrics(pending_proposal_count=50),
+    )
+
+    assert decision.action == "skip"
+    assert decision.reason.code == "pending_proposal_limit_reached"
+    assert decision.reason.details["pending_proposal_count"] == 50
+
+
+def test_decision_skips_when_context_is_missing():
+    candidate = SimpleNamespace(id=uuid.uuid4())
+
+    decision = decide_product_discovery_dispatch(
+        candidate=candidate,
+        workspace=SimpleNamespace(github_repo="owner/repo", project=None),
+        metrics=_metrics(),
+    )
+
+    assert decision.action == "skip"
+    assert decision.reason.code == "missing_workspace_context"
+
+
+def test_decision_allows_dispatch():
+    candidate = SimpleNamespace(id=uuid.uuid4())
+    workspace = SimpleNamespace(github_repo="owner/repo", project="nexus")
+
+    decision = decide_product_discovery_dispatch(candidate=candidate, workspace=workspace, metrics=_metrics())
+
+    assert decision.action == "dispatch"
+    assert decision.reason.code == "dispatch_allowed"
 
 
 def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
@@ -154,12 +212,13 @@ def test_poll_once_continues_after_submit_failure(monkeypatch):
         """Provide a fake workspace."""
         return SimpleNamespace(github_repo="owner/repo", project="nexus")
 
-    async def fake_proposals(session, **kwargs):
-        """Provide fake recent proposals."""
-        return []
-
     runner = FakeRunner()
     runner.submit_task = AsyncMock(side_effect=fake_submit)
+
+    async def fake_proposals(session, **filters):
+        """Provide no existing proposals."""
+        return []
+
     monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
     monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
     monkeypatch.setattr(ProductProposalRepository, "list", fake_proposals)
@@ -198,6 +257,36 @@ def test_product_discovery_poller_start_and_stop(monkeypatch):
         assert poller._task is None
 
     asyncio.run(run())
+
+
+async def test_product_discovery_metrics_count_only_proposed_proposals(monkeypatch):
+    """Verify approved and planned proposals do not count as pending discovery work."""
+    captured = {}
+
+    async def fake_proposals(session, **filters):
+        """Provide proposed proposals only for metrics."""
+        captured["filters"] = filters
+        return [SimpleNamespace(status=ProductProposalStatus.proposed)]
+
+    monkeypatch.setattr(ProductProposalRepository, "list", fake_proposals)
+    poller = ProductDiscoveryPoller(
+        settings=_settings(product_discovery_pending_proposal_limit=50),
+        database=FakeDatabase(),
+        runner=FakeRunner(),
+    )
+
+    metrics = await poller._proposal_metrics(
+        object(),
+        SimpleNamespace(github_repo="owner/repo", project="nexus"),
+    )
+
+    assert metrics.pending_proposal_count == 1
+    assert metrics.pending_proposal_limit == 50
+    assert captured["filters"] == {
+        "project": "nexus",
+        "repo": "owner/repo",
+        "status": ProductProposalStatus.proposed,
+    }
 
 
 async def test_product_discovery_candidates_allow_waiting_for_review_pm_tasks(db_session):
