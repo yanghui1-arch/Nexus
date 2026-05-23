@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import re
 import shlex
 import uuid
 from dataclasses import dataclass
 from typing import Callable
 
+import httpx
 from mwin import track
 
 from src.logger import logger
@@ -12,6 +14,7 @@ from src.sandbox import Sandbox
 from src.server.postgres.database import Database
 from src.server.postgres.models import TaskWorkItemStatus
 from src.server.postgres.repositories import (
+    TaskRepository,
     TaskWorkItemRepository,
 )
 
@@ -140,12 +143,112 @@ class NexusReviewTools:
             "message": "Nexus marked the work item ready for review.",
         }
 
+    @track(step_type="tool")
+    async def bind_pr_to_task(
+        self,
+        token: str,
+        pull_request_url: str,
+    ) -> dict:
+        """Bind an existing GitHub pull request to the current Nexus task.
+
+        Args:
+            token: GitHub personal access token used to verify that the pull request
+                exists before Nexus persists the binding.
+            pull_request_url: Existing GitHub pull request URL that should be
+                attached to the current Nexus task.
+
+        Returns:
+            A result dictionary containing:
+                - success: Whether the binding succeeded.
+                - pr_url: The persisted pull request URL when binding succeeds.
+                - message: A human-readable status or error message.
+        """
+        if self._context is None:
+            return {"success": False, "pr_url": "", "message": "Nexus task context is not available."}
+        if not token:
+            return {"success": False, "pr_url": "", "message": "token is required."}
+        if not pull_request_url:
+            return {"success": False, "pr_url": "", "message": "pull_request_url is required."}
+
+        async with self._context.database.session() as session:
+            task = await TaskRepository.get(session, self._context.task_id)
+        if task is None:
+            return {"success": False, "pr_url": "", "message": "Current Nexus task was not found."}
+        if task.external_pull_request_url:
+            return {
+                "success": False,
+                "pr_url": task.external_pull_request_url,
+                "message": (
+                    f"Current Nexus task is already bound to pull request "
+                    f"{task.external_pull_request_url}. Do not call bind_pr_to_task again."
+                ),
+            }
+
+        match = re.match(
+            r"^https?://(?:www\.)?github\.com/(?P<repo>[^/\s]+/[^/\s]+)/pull/(?P<number>\d+)(?:[/?#].*)?$",
+            pull_request_url,
+            re.IGNORECASE,
+        )
+        if match is None:
+            return {
+                "success": False,
+                "pr_url": "",
+                "message": "pull_request_url must match https://github.com/<owner>/<repo>/pull/<number>.",
+            }
+
+        repo = match.group("repo")
+        if repo.casefold() != self._context.repo.casefold():
+            return {
+                "success": False,
+                "pr_url": "",
+                "message": f"pull request repo {repo} does not match current task repo {self._context.repo}.",
+            }
+
+        pull_number = int(match.group("number"))
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(
+                    f"https://api.github.com/repos/{repo}/pulls/{pull_number}",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Accept": "application/vnd.github+json",
+                        "X-GitHub-Api-Version": "2022-11-28",
+                    },
+                )
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                error_detail = e.response.json().get("message", e.response.text)
+                return {
+                    "success": False,
+                    "pr_url": "",
+                    "message": f"GitHub API error {e.response.status_code}: {error_detail}. Please retry it.",
+                }
+
+        data = response.json()
+        pr_url = data.get("html_url", f"https://github.com/{repo}/pull/{pull_number}")
+        async with self._context.database.session() as session:
+            task = await TaskRepository.set_external_pull_request_url(
+                session,
+                self._context.task_id,
+                external_pull_request_url=pr_url,
+            )
+        if task is None:
+            return {"success": False, "pr_url": "", "message": "Current Nexus task was not found."}
+
+        logger.info("Task %s bound to GitHub pull request %s.", self._context.task_id, pr_url)
+        return {
+            "success": True,
+            "pr_url": pr_url,
+            "message": f"Nexus bound the current task to pull request {pr_url}.",
+        }
+
     @property
     def all_tools(self) -> dict[str, Callable]:
         """Return all tools exposed by this toolkit."""
         return {
             "create_task_work_items": self.create_task_work_items,
             "finish_current_task_work_item": self.finish_current_task_work_item,
+            "bind_pr_to_task": self.bind_pr_to_task,
         }
 
 
