@@ -18,7 +18,7 @@ from src.sandbox import (
 from src.tools.sandbox import SandboxToolKit, SANDBOX_TOOL_DEFINITIONS
 from src.tools.code import GITHUB_TOOLS_SCHEMA, GithubTools
 from src.tools.nexus import (
-    NEXUS_WORK_ITEM_TOOL_DEFINITIONS,
+    NEXUS_TOOL_DEFINITIONS,
     NexusReviewTools,
     NexusTaskContext,
 )
@@ -29,7 +29,7 @@ from src.tools.web_search import web_search, TOOL_DEFINITION as WEB_SEARCH
 _ALL_TOOL_DEFINITIONS = [
     *SANDBOX_TOOL_DEFINITIONS,
     *GITHUB_TOOLS_SCHEMA,
-    *NEXUS_WORK_ITEM_TOOL_DEFINITIONS,
+    *NEXUS_TOOL_DEFINITIONS,
     WEB_FETCH,
     WEB_SEARCH,
 ]

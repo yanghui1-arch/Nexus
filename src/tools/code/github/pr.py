@@ -18,6 +18,7 @@ class PrToGithub(BaseModel):
     local_path: str | None = Field(default=None, description="Local repository path to push from. Uses current working directory when omitted.")
     draft: bool = Field(default=False, description="Open as a draft pull request (default: false)")
 
+
 class GetPRReviews(BaseModel):
     """Fetch all reviews on a specific pull request. Reviews include
     approval status (APPROVED, CHANGES_REQUESTED, COMMENTED) and review body."""

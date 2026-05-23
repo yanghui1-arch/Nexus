@@ -1,8 +1,9 @@
 """Tests for GitHub tools including review and comment interaction."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import httpx
+import pytest
 
 from src.tools.code import GITHUB_TOOLS_SCHEMA, GithubTools
 from src.tools.code.github.issue import (
@@ -12,6 +13,7 @@ from src.tools.code.github.issue import (
     GET_MY_ISSUES,
 )
 from src.tools.code.github.pr import (
+    PR_TO_GITHUB,
     GET_PR_REVIEWS,
     GET_PR_REVIEW_COMMENTS,
     REPLY_TO_PR_REVIEW_COMMENT,
@@ -397,6 +399,7 @@ class TestToolDefinitions:
             CREATE_GITHUB_ISSUE,
             GET_ISSUE_COMMENTS,
             REPLY_TO_ISSUE,
+            PR_TO_GITHUB,
             GET_PR_REVIEWS,
             GET_PR_REVIEW_COMMENTS,
             REPLY_TO_PR_REVIEW_COMMENT,
@@ -408,6 +411,11 @@ class TestToolDefinitions:
         ]
         for tool in expected_tools:
             assert tool in GITHUB_TOOLS_SCHEMA, f"{tool} not found in GITHUB_TOOLS_SCHEMA"
+
+    def test_github_toolkit_does_not_expose_bind_pr_to_task(self, mock_sandbox):
+        """Verify bind_pr_to_task is not part of the GitHub toolkit."""
+        tools = GithubTools(mock_sandbox).all_tools
+        assert "bind_pr_to_task" not in tools
 
     def test_tool_definitions_have_required_fields(self):
         """Verify tool definitions have required structure."""
