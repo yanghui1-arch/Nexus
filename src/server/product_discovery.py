@@ -1,17 +1,115 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass, field
+from typing import Literal
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.logger import logger
 from src.server.config import Settings
 from src.server.postgres.database import Database
-from src.server.postgres.models import AgentName, ProductProposalRecord
-from src.server.postgres.repositories import AgentInstanceRepository, ProductProposalRepository, WorkspaceRepository
+from src.server.postgres.models import (
+    AgentInstanceRecord,
+    AgentName,
+    ProductProposalRecord,
+    ProductProposalStatus,
+    WorkspaceRecord,
+)
+from src.server.postgres.repositories import (
+    AgentInstanceRepository,
+    ProductProposalRepository,
+    WorkspaceRepository,
+)
 from src.server.runner import AgentTaskRunner
 from src.server.schemas import AgentKind, TaskCreateRequest
 
 
 PRODUCT_DISCOVERY_AGENT_NAMES = {AgentName.marc}
+
+ProductDiscoveryAction = Literal["dispatch", "skip"]
+
+
+@dataclass(frozen=True)
+class ProductDiscoveryDecisionReason:
+    code: str
+    message: str
+    details: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ProductDiscoveryDecision:
+    action: ProductDiscoveryAction
+    reason: ProductDiscoveryDecisionReason
+
+
+@dataclass(frozen=True)
+class ProductDiscoveryProposalMetrics:
+    pending_proposal_count: int
+    pending_proposal_limit: int
+
+
+def _skip(
+    code: str,
+    message: str,
+    details: dict[str, object] | None = None,
+) -> ProductDiscoveryDecision:
+    return ProductDiscoveryDecision("skip", ProductDiscoveryDecisionReason(code, message, details or {}))
+
+
+def decide_product_discovery_dispatch(
+    *,
+    candidate: AgentInstanceRecord,
+    workspace: WorkspaceRecord | None,
+    metrics: ProductDiscoveryProposalMetrics,
+) -> ProductDiscoveryDecision:
+    """Decide whether a product discovery candidate should be dispatched.
+
+    Args:
+        candidate: Agent instance being considered for product discovery.
+        workspace: Workspace context associated with the agent instance.
+        metrics: Proposal metrics used to avoid over-producing pending proposals.
+
+    Returns:
+        Dispatch decision with a structured reason for logging and tests.
+    """
+    candidate_id = candidate.id
+    if workspace is None:
+        return _skip(
+            "missing_workspace",
+            "Workspace context is missing.",
+            {"candidate_id": candidate_id},
+        )
+
+    repo = workspace.github_repo
+    project = workspace.project
+    if not repo or not project:
+        return _skip(
+            "missing_workspace_context",
+            "Workspace repository or project context is missing.",
+            {"candidate_id": candidate_id, "repo": repo, "project": project},
+        )
+
+    if metrics.pending_proposal_count >= metrics.pending_proposal_limit:
+        return _skip(
+            "pending_proposal_limit_reached",
+            "Pending product proposal limit has been reached.",
+            {
+                "pending_proposal_count": metrics.pending_proposal_count,
+                "pending_proposal_limit": metrics.pending_proposal_limit,
+                "repo": repo,
+                "project": project,
+            },
+        )
+
+    return ProductDiscoveryDecision(
+        action="dispatch",
+        reason=ProductDiscoveryDecisionReason(
+            "dispatch_allowed",
+            "Product discovery dispatch is allowed.",
+            {"candidate_id": str(candidate_id), "repo": repo, "project": project},
+        ),
+    )
 
 
 def build_product_discovery_question(proposals: list[ProductProposalRecord], *, proposal_limit: int) -> str:
@@ -84,20 +182,19 @@ class ProductDiscoveryPoller:
 
             try:
                 async with self._database.session() as session:
-                    workspace = await WorkspaceRepository.get_by_agent_instance_id(
-                        session,
+                    workspace = await WorkspaceRepository.get_by_agent_instance_id(session, instance.id)
+                    metrics = await self._proposal_metrics(session, workspace)
+
+                decision = decide_product_discovery_dispatch(
+                    candidate=instance,
+                    workspace=workspace,
+                    metrics=metrics,
+                )
+                if decision.action == "skip":
+                    logger.info(
+                        "Skip product discovery for agent instance %s: %s",
                         instance.id,
-                    )
-                if workspace is None:
-                    logger.warning(
-                        "Skip product discovery for agent instance %s because workspace is missing.",
-                        instance.id,
-                    )
-                    continue
-                if not workspace.project:
-                    logger.warning(
-                        "Skip product discovery for agent instance %s because workspace project is missing.",
-                        instance.id,
+                        decision.reason,
                     )
                     continue
                 recent_limit = self._settings.product_discovery_recent_proposal_limit
@@ -136,6 +233,29 @@ class ProductDiscoveryPoller:
             )
 
         return dispatched_count
+
+    async def _proposal_metrics(
+        self,
+        session: AsyncSession,
+        workspace: WorkspaceRecord | None,
+    ) -> ProductDiscoveryProposalMetrics:
+        """Build proposal metrics for a workspace."""
+        if workspace is None or not workspace.github_repo or not workspace.project:
+            return ProductDiscoveryProposalMetrics(
+                0,
+                self._settings.product_discovery_pending_proposal_limit,
+            )
+
+        proposals = await ProductProposalRepository.list(
+            session,
+            repo=workspace.github_repo,
+            project=workspace.project,
+            status=ProductProposalStatus.proposed,
+        )
+        return ProductDiscoveryProposalMetrics(
+            len(proposals),
+            self._settings.product_discovery_pending_proposal_limit,
+        )
 
     async def _run_loop(self) -> None:
         """Run the background polling loop."""
