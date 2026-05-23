@@ -95,21 +95,16 @@ class ProductDiscoveryPoller:
                         session,
                         instance.id,
                     )
-                    pending_count = await TaskRepository.count_active_pm_tasks(
+                    pending_count = await TaskRepository.count_active_product_discovery_tasks(
                         session,
                         agent_instance_id=instance.id,
                     )
                 if workspace is None:
                     logger.warning(
-                        "Skipped product discovery candidate: agent_instance_id=%s workspace_id=%s repo=%s project=%s reason=%s pending_count=%s cooldown_last_used_at=%s cooldown_updated_at=%s cooldown_interval_seconds=%s.",
+                        "Skipped product discovery candidate: agent_instance_id=%s reason=%s pending_count=%s cooldown_interval_seconds=%s.",
                         instance.id,
-                        None,
-                        None,
-                        None,
                         "missing_workspace",
                         pending_count,
-                        None,
-                        None,
                         self._settings.product_discovery_poll_interval_seconds,
                     )
                     continue

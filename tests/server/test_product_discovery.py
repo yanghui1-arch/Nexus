@@ -73,7 +73,7 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
 
     monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
     monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
-    monkeypatch.setattr(TaskRepository, "count_active_pm_tasks", fake_pending_count)
+    monkeypatch.setattr(TaskRepository, "count_active_product_discovery_tasks", fake_pending_count)
     monkeypatch.setattr(ProductProposalRepository, "list", fake_proposals)
 
     poller = ProductDiscoveryPoller(
@@ -183,7 +183,7 @@ def test_poll_once_continues_after_submit_failure(monkeypatch):
     runner.submit_task = AsyncMock(side_effect=fake_submit)
     monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
     monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
-    monkeypatch.setattr(TaskRepository, "count_active_pm_tasks", fake_pending_count)
+    monkeypatch.setattr(TaskRepository, "count_active_product_discovery_tasks", fake_pending_count)
     monkeypatch.setattr(ProductProposalRepository, "list", fake_proposals)
 
     poller = ProductDiscoveryPoller(
@@ -317,7 +317,7 @@ def test_poll_once_logs_skip_and_dispatch_reasons(monkeypatch, caplog):
 
     monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
     monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
-    monkeypatch.setattr(TaskRepository, "count_active_pm_tasks", fake_pending_count)
+    monkeypatch.setattr(TaskRepository, "count_active_product_discovery_tasks", fake_pending_count)
     monkeypatch.setattr(ProductProposalRepository, "list", fake_proposals)
 
     poller = ProductDiscoveryPoller(
@@ -349,7 +349,7 @@ def test_poll_once_logs_skip_and_dispatch_reasons(monkeypatch, caplog):
     assert "token" not in logs.lower()
 
 
-def test_product_discovery_count_active_pm_tasks(db_session):
+def test_product_discovery_count_active_product_discovery_tasks(db_session):
     """Verify active PM tasks are counted for cooldown logging."""
     async def run():
         user = await UserRepository.upsert_github_user(
@@ -373,7 +373,7 @@ def test_product_discovery_count_active_pm_tasks(db_session):
         )
         await db_session.commit()
 
-        count = await TaskRepository.count_active_pm_tasks(db_session, agent_instance_id=instance.id)
+        count = await TaskRepository.count_active_product_discovery_tasks(db_session, agent_instance_id=instance.id)
 
         assert count == 1
 
