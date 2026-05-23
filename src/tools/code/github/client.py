@@ -4,9 +4,7 @@ import httpx
 
 from mwin import track
 
-from src.logger import logger
 from src.sandbox import Sandbox
-from src.server.postgres.repositories import TaskRepository
 from src.tools.nexus import NexusTaskContext
 
 
@@ -215,10 +213,6 @@ class GithubTools:
                 )
                 response.raise_for_status()
                 data = response.json()
-                try:
-                    await self._update_task_pull_request_url(data["html_url"])
-                except Exception:
-                    logger.exception("Failed to persist GitHub pull request URL for Nexus task.")
                 return {
                     "success": True,
                     "pr_url": data["html_url"],
@@ -233,18 +227,6 @@ class GithubTools:
                     "pr_number": None,
                     "message": f"GitHub API error {e.response.status_code}: {error_detail}",
                 }
-
-    async def _update_task_pull_request_url(self, pull_request_url: str) -> None:
-        """Persist a task pull request URL when context is available."""
-        if self._nexus_task_context is None:
-            return
-
-        async with self._nexus_task_context.database.session() as session:
-            await TaskRepository.set_external_pull_request_url(
-                session,
-                self._nexus_task_context.task_id,
-                external_pull_request_url=pull_request_url,
-            )
 
     # ==========================================================================
     # Issue and PR Comment/Review Interaction Methods

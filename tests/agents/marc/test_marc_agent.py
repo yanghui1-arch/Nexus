@@ -28,6 +28,7 @@ FORBIDDEN_MUTATING_TOOLS = {
     "AppendFile",
     "EditFile",
     "pr_to_github",
+    "bind_pr_to_task",
     "reply_to_issue",
     "reply_to_pr",
     "reply_to_pr_review_comment",
