@@ -9,7 +9,10 @@ from unittest.mock import AsyncMock
 
 import httpx
 
-from src.server.github_feedback import GithubFeedbackPoller
+from src.server.github_feedback import (
+    GithubFeedbackPoller,
+    _build_pr_merge_conflict_external_id,
+)
 from src.server.postgres.models import (
     FeatureItemStatus,
     GithubPullRequestFeedbackStatus,
@@ -91,6 +94,29 @@ def _make_settings():
         github_feedback_poll_task_limit=20,
         github_feedback_http_timeout_seconds=10.0,
     )
+
+
+def test_build_pr_merge_conflict_external_id_returns_stable_hex_string():
+    """Verify merge-conflict ids are stable text hashes."""
+    payload = {
+        "base": {"sha": "base-1"},
+        "head": {"sha": "head-1"},
+    }
+
+    first = _build_pr_merge_conflict_external_id(payload, 12)
+    second = _build_pr_merge_conflict_external_id(payload, 12)
+    changed = _build_pr_merge_conflict_external_id(
+        {
+            "base": {"sha": "base-2"},
+            "head": {"sha": "head-1"},
+        },
+        12,
+    )
+
+    assert first == second
+    assert changed != first
+    assert len(first) == 40
+    assert all(ch in "0123456789abcdef" for ch in first)
 
 
 def test_poll_once_discovers_feedback_and_reuses_existing_task(monkeypatch):
@@ -525,6 +551,7 @@ def test_poll_once_dispatches_merge_conflict_feedback(monkeypatch):
             "mergeable_state": "dirty",
             "html_url": "https://github.com/owner/repo/pull/12",
             "updated_at": "2024-01-11T00:00:00Z",
+            "base": {"sha": "base-1"},
             "head": {"sha": "abc123"},
         }
 
@@ -567,5 +594,110 @@ def test_poll_once_dispatches_merge_conflict_feedback(monkeypatch):
     runner.dispatch_github_feedback.assert_awaited_once_with(task.id)
     assert captured[0]["kind"].value == "pr_merge_conflict"
     assert captured[0]["status"] == GithubPullRequestFeedbackStatus.pending
-    assert captured[0]["external_id"] == 12
     assert "resolve merge conflicts" in captured[0]["body"]
+
+
+def test_poll_once_redispatches_later_merge_conflict_episode(monkeypatch):
+    """Verify a later conflict on the same PR is redispatched as new feedback."""
+    task = SimpleNamespace(
+        id=uuid.uuid4(),
+        repo="owner/repo",
+        external_pull_request_url="https://github.com/owner/repo/pull/12",
+        agent=SimpleNamespace(value="sophie"),
+        status=TaskStatus.waiting_for_review,
+        result="review finished",
+        updated_at=datetime.fromisoformat("2024-01-10T00:00:00+00:00"),
+    )
+    seen_feedback_keys = set()
+    captured_external_ids = []
+    runner = SimpleNamespace(dispatch_github_feedback=AsyncMock(return_value=True))
+    poll_payloads = iter(
+        [
+            {
+                "state": "open",
+                "merged_at": None,
+                "mergeable": False,
+                "mergeable_state": "dirty",
+                "html_url": "https://github.com/owner/repo/pull/12",
+                "updated_at": "2024-01-11T00:00:00Z",
+                "base": {"sha": "base-1"},
+                "head": {"sha": "head-1"},
+            },
+            {
+                "state": "open",
+                "merged_at": None,
+                "mergeable": False,
+                "mergeable_state": "dirty",
+                "html_url": "https://github.com/owner/repo/pull/12",
+                "updated_at": "2024-01-12T00:00:00Z",
+                "base": {"sha": "base-1"},
+                "head": {"sha": "head-1"},
+            },
+            {
+                "state": "open",
+                "merged_at": None,
+                "mergeable": False,
+                "mergeable_state": "dirty",
+                "html_url": "https://github.com/owner/repo/pull/12",
+                "updated_at": "2024-01-13T00:00:00Z",
+                "base": {"sha": "base-2"},
+                "head": {"sha": "head-1"},
+            },
+        ]
+    )
+
+    async def fake_list_candidates(session, *, limit):
+        """Provide a fake list candidates."""
+        return [task]
+
+    async def fake_fetch_pull_request(self, client, token, repo, pull_request_number):
+        """Provide a fake fetch pull request."""
+        return next(poll_payloads)
+
+    async def fake_resolve_viewer_login(self, client, token):
+        """Provide a fake resolve viewer login."""
+        return "nexus-bot"
+
+    async def fake_fetch_feedback_items(self, client, token, repo, pull_request_number):
+        """Provide a fake fetch feedback items."""
+        return []
+
+    async def fake_upsert(session, **kwargs):
+        """Deduplicate by the persisted conflict key like the repository does."""
+        key = (kwargs["kind"], kwargs["external_id"])
+        created = key not in seen_feedback_keys
+        seen_feedback_keys.add(key)
+        captured_external_ids.append(kwargs["external_id"])
+        return SimpleNamespace(id=uuid.uuid4()), created
+
+    async def fake_has_pending_newer_than(session, task_id, *, cutoff):
+        """Provide a fake has pending newer than."""
+        return False
+
+    monkeypatch.setattr(TaskRepository, "list_external_pull_request_candidates", fake_list_candidates)
+    monkeypatch.setattr(GithubFeedbackPoller, "_fetch_pull_request", fake_fetch_pull_request)
+    monkeypatch.setattr(GithubFeedbackPoller, "_resolve_viewer_login", fake_resolve_viewer_login)
+    monkeypatch.setattr(GithubFeedbackPoller, "_fetch_feedback_items", fake_fetch_feedback_items)
+    monkeypatch.setattr(GithubPullRequestFeedbackRepository, "upsert_discovered", fake_upsert)
+    monkeypatch.setattr(
+        GithubPullRequestFeedbackRepository,
+        "has_pending_newer_than",
+        fake_has_pending_newer_than,
+    )
+
+    poller = GithubFeedbackPoller(
+        settings=_make_settings(),
+        database=FakeDatabase(),
+        runner=runner,
+    )
+
+    first = asyncio.run(poller.poll_once())
+    second = asyncio.run(poller.poll_once())
+    third = asyncio.run(poller.poll_once())
+
+    assert [first, second, third] == [1, 0, 1]
+    assert runner.dispatch_github_feedback.await_count == 2
+    assert runner.dispatch_github_feedback.await_args_list[0].args == (task.id,)
+    assert runner.dispatch_github_feedback.await_args_list[1].args == (task.id,)
+    assert captured_external_ids[0] == captured_external_ids[1]
+    assert captured_external_ids[2] != captured_external_ids[0]
