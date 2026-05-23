@@ -330,6 +330,14 @@
           "in_progress": "进行中",
           "completed": "已完成",
           "closed": "已关闭"
+        },
+        "proposalSectionTabs": {
+          "evidence": "Evidence",
+          "scope": "Scope",
+          "risks": "Risks",
+          "breakdown": "Breakdown",
+          "openQuestions": "Open Questions",
+          "fullText": "Full Text"
         }
       },
       "taskDetail": {
@@ -689,6 +697,14 @@
           "in_progress": "In Progress",
           "completed": "Completed",
           "closed": "Closed"
+        },
+        "proposalSectionTabs": {
+          "evidence": "Evidence",
+          "scope": "Scope",
+          "risks": "Risks",
+          "breakdown": "Breakdown",
+          "openQuestions": "Open Questions",
+          "fullText": "Full Text"
         }
       },
       "taskDetail": {
