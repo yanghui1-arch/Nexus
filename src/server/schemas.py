@@ -12,6 +12,8 @@ from src.server.postgres.models import (
     AgentInstanceRecord,
     ProductProposalRecord,
     ProductProposalStatus,
+    ProposalPlanningRunRecord,
+    ProposalPlanningRunStatus,
     FeatureItemRecord,
     FeatureItemStatus,
     FeatureRecord,
@@ -72,6 +74,36 @@ class ProductProposalStatusUpdateRequest(BaseModel):
         return value
 
 
+class ProposalPlanningRunResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    proposal_id: uuid.UUID
+    task_id: uuid.UUID
+    attempt: int
+    status: ProposalPlanningRunStatus
+    error: str | None
+    created_at: datetime
+    updated_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+    @classmethod
+    def from_record(cls, run: ProposalPlanningRunRecord) -> "ProposalPlanningRunResponse":
+        return cls(
+            id=run.id,
+            proposal_id=run.proposal_id,
+            task_id=run.task_id,
+            attempt=run.attempt,
+            status=run.status,
+            error=run.error,
+            created_at=run.created_at,
+            updated_at=run.updated_at,
+            started_at=run.started_at,
+            finished_at=run.finished_at,
+        )
+
+
 class ProductProposalResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -84,11 +116,19 @@ class ProductProposalResponse(BaseModel):
     repo: str | None
     status: ProductProposalStatus
     source_task_id: uuid.UUID | None
+    latest_planning_run: ProposalPlanningRunResponse | None = None
+    latest_planning_task_exists: bool | None = None
     created_at: datetime
     updated_at: datetime
 
     @classmethod
-    def from_record(cls, proposal: ProductProposalRecord) -> "ProductProposalResponse":
+    def from_record(
+        cls,
+        proposal: ProductProposalRecord,
+        *,
+        latest_planning_run: ProposalPlanningRunRecord | None = None,
+        latest_planning_task_exists: bool | None = None,
+    ) -> "ProductProposalResponse":
         return cls(
             id=proposal.id,
             title=proposal.title,
@@ -99,6 +139,10 @@ class ProductProposalResponse(BaseModel):
             repo=proposal.repo,
             status=proposal.status,
             source_task_id=proposal.source_task_id,
+            latest_planning_run=ProposalPlanningRunResponse.from_record(latest_planning_run)
+            if latest_planning_run is not None
+            else None,
+            latest_planning_task_exists=latest_planning_task_exists,
             created_at=proposal.created_at,
             updated_at=proposal.updated_at,
         )
@@ -172,8 +216,6 @@ class TaskCreateRequest(BaseModel):
     agent_instance_id: uuid.UUID
     agent: AgentKind
     question: str = Field(min_length=1)
-    repo: str | None = None
-    project: str | None = None
     external_issue_url: str | None = Field(default=None, max_length=1024)
 
     @field_validator("question")
@@ -184,9 +226,22 @@ class TaskCreateRequest(BaseModel):
             raise ValueError("question cannot be empty")
         return stripped
 
-    @field_validator("repo")
+    @field_validator("external_issue_url")
     @classmethod
-    def validate_repo(cls, value: str | None) -> str | None:
+    def validate_external_issue_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+
+class WorkspaceUpdateRequest(BaseModel):
+    github_repo: str | None = None
+    project: str | None = None
+
+    @field_validator("github_repo")
+    @classmethod
+    def validate_github_repo(cls, value: str | None) -> str | None:
         if value is None:
             return None
         stripped = value.strip()
@@ -195,14 +250,6 @@ class TaskCreateRequest(BaseModel):
     @field_validator("project")
     @classmethod
     def validate_project(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        stripped = value.strip()
-        return stripped or None
-
-    @field_validator("external_issue_url")
-    @classmethod
-    def validate_external_issue_url(cls, value: str | None) -> str | None:
         if value is None:
             return None
         stripped = value.strip()
@@ -267,15 +314,26 @@ class TaskResponse(BaseModel):
     finished_at: datetime | None
 
     @classmethod
-    def from_record(cls, task: TaskRecord) -> "TaskResponse":
+    def from_record(
+        cls,
+        task: TaskRecord,
+        *,
+        repo: str | None | object = ...,
+        project: str | None | object = ...,
+    ) -> "TaskResponse":
+        # Routes may override repo/project so one API payload can represent both:
+        # - current tasks that snapshot repo/project on the task row
+        # - legacy tasks that still need workspace fallback at read time
+        resolved_repo = task.repo if repo is ... else repo
+        resolved_project = task.project if project is ... else project
         return cls(
             id=task.id,
             agent=task.agent.value,
             agent_instance_id=task.agent_instance_id,
             category=task.category,
             question=task.question,
-            repo=task.repo,
-            project=task.project,
+            repo=resolved_repo,
+            project=resolved_project,
             external_issue_url=getattr(task, "external_issue_url", None),
             external_pull_request_url=getattr(task, "external_pull_request_url", None),
             status=task.status,

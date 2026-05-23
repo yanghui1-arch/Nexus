@@ -40,8 +40,6 @@ export interface ApiTaskCreateRequest {
   agent_instance_id: string;
   agent: ApiAgentKind;
   question: string;
-  repo?: string | null;
-  project?: string | null;
   external_issue_url?: string | null;
 }
 
@@ -90,6 +88,8 @@ export interface ApiTaskMessage {
   meta: Record<string, unknown> | null;
 }
 
+// Business-level proposal status. `approved` only means human approval happened;
+// the actual planning attempt is tracked separately by `latest_planning_run`.
 export type ApiProductProposalStatus =
   | 'proposed'
   | 'approved'
@@ -123,8 +123,30 @@ export interface ApiProductProposal {
   repo: string | null;
   status: ApiProductProposalStatus;
   source_task_id: string | null;
+  latest_planning_run: ApiProposalPlanningRun | null;
+  latest_planning_task_exists: boolean | null;
   created_at: string;
   updated_at: string;
+}
+
+export type ApiProposalPlanningRunStatus =
+  | 'queued'
+  | 'running'
+  | 'failed'
+  | 'completed';
+
+export interface ApiProposalPlanningRun {
+  id: string;
+  proposal_id: string;
+  task_id: string;
+  attempt: number;
+  // Operational status of one planning attempt for the approved proposal.
+  status: ApiProposalPlanningRunStatus;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  finished_at: string | null;
 }
 
 export interface ApiFeatureItem {
@@ -176,6 +198,11 @@ export interface ApiAgentInstanceCreateRequest {
 
 export interface ApiAgentInstanceStatusUpdateRequest {
   is_active: boolean;
+}
+
+export interface ApiWorkspaceUpdateRequest {
+  github_repo?: string | null;
+  project?: string | null;
 }
 
 export interface ApiAgentInstance {

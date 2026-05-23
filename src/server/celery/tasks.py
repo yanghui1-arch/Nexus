@@ -14,6 +14,7 @@ def run_agent_task(
     recovered: bool = False,
     dispatch_token: str | None = None,
 ) -> None:
+    """Run an agent task from Celery."""
     try:
         asyncio.run(
             execute_agent_task(

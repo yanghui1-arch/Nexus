@@ -2,6 +2,7 @@ import { startTransition, useEffect, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { getErrorDetail } from '@/api/client';
+import { updateAgentWorkspace } from '@/api/agentInstances';
 import { createTask } from '@/api/tasks';
 import type { WorkspaceRecordsData } from '@/lib/useWorkspaceRecords';
 import type { WorkspaceComposerValues } from '../types';
@@ -73,12 +74,15 @@ export function usePublishTask({
     });
 
     try {
+      await updateAgentWorkspace(selectedAgent.id, {
+        github_repo: repo,
+        project: project || null,
+      });
+
       await createTask({
         agent_instance_id: selectedAgent.id,
         agent: selectedAgent.agent,
         question,
-        repo,
-        project: project || null,
         external_issue_url: externalIssueUrl || null,
       });
 

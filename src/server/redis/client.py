@@ -10,11 +10,13 @@ from src.logger import logger
 
 class RedisClient:
     def __init__(self, redis_url: str, ttl_seconds: int = 86400) -> None:
+        """Initialize the object."""
         self._redis_url = redis_url
         self._ttl_seconds = ttl_seconds
         self._client: Redis | None = None
 
     async def connect(self) -> None:
+        """Open the backing client connection."""
         if self._client is not None:
             return
         self._client = Redis.from_url(self._redis_url, decode_responses=True)
@@ -22,12 +24,14 @@ class RedisClient:
         logger.info("Redis is connected.")
 
     async def close(self) -> None:
+        """Close backing client resources."""
         if self._client is not None:
             await self._client.aclose()
             self._client = None
             logger.info("Redis is closed.")
 
     async def ping(self) -> bool:
+        """Check whether the backing service is healthy."""
         if self._client is None:
             return False
         try:
@@ -59,6 +63,7 @@ class RedisClient:
         return key
 
     async def set(self, key: str, value: Any, expiration_seconds: int | None = None) -> str | None:
+        """Store a JSON value by key."""
         encoded = self._encode(value)
         if encoded is None:
             return None
@@ -72,6 +77,7 @@ class RedisClient:
         return key
 
     async def delete(self, key: str) -> Any | None:
+        """Delete a value by key."""
         client = self._require_client()
 
         key_type = await client.type(key)
@@ -90,6 +96,7 @@ class RedisClient:
         return deleted_value
 
     def _encode(self, value: Any) -> str | None:
+        """Encode a value for storage."""
         try:
             return json.dumps(value, ensure_ascii=False)
         except (TypeError, ValueError):
@@ -97,6 +104,7 @@ class RedisClient:
             return None
 
     def _decode(self, value: str | None) -> Any:
+        """Decode a stored value."""
         if value is None:
             return None
         try:
@@ -105,6 +113,7 @@ class RedisClient:
             return value
 
     async def _apply_expiration(self, key: str, expiration_seconds: int | None) -> bool:
+        """Apply the configured expiration to a key."""
         ttl = expiration_seconds if expiration_seconds is not None else self._ttl_seconds
         if ttl is None:
             return False
@@ -113,6 +122,7 @@ class RedisClient:
         return True
 
     async def _read_deleted_value(self, key: str, key_type: str) -> str | list | None:
+        """Read a value before deleting it."""
         client = self._require_client()
         if key_type == "string":
             raw = await client.get(key)
@@ -124,6 +134,7 @@ class RedisClient:
         return None
 
     def _require_client(self) -> Redis:
+        """Return the initialized Redis client."""
         if self._client is None:
             raise RuntimeError("Redis client is not connected. Call connect() first.")
         return self._client

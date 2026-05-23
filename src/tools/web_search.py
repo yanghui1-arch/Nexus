@@ -21,6 +21,7 @@ TOOL_DEFINITION = pydantic_function_tool(WebSearch, name="web_search_agent")
 
 @track(step_type="tool")
 async def web_search(query: str, max_results: int = 5) -> dict[str, Any]:
+    """Run a web search query."""
     settings = get_settings()
     if not settings.api_key:
         raise RuntimeError("NEXUS_API_KEY is required for WebSearch.")

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import uuid
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.logger import logger
 from src.server.celery.app import celery_app
 from src.server.config import Settings
@@ -14,6 +16,7 @@ from src.server.postgres.database import Database
 from src.server.postgres.models import AgentName, TaskCategory, TaskStatus
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
+    ProposalPlanningRunRepository,
     TaskRepository,
     WorkspaceRepository,
 )
@@ -21,6 +24,7 @@ from src.server.schemas import TaskCreateRequest
 
 
 def _task_category_for_agent(agent: AgentName) -> TaskCategory:
+    """Return the task category used for an agent."""
     if agent == AgentName.marc:
         return TaskCategory.pm
     return TaskCategory.coding
@@ -35,49 +39,47 @@ class AgentTaskRunner:
         settings: Settings,
         database: Database,
     ) -> None:
+        """Initialize the service component."""
         self._settings = settings
         self._database = database
 
+    async def create_task_record(
+        self,
+        request: TaskCreateRequest,
+        *,
+        session: AsyncSession | None = None,
+    ):
+        # Some callers, such as proposal approval, need the task row to exist inside
+        # a larger transaction before dispatch happens so they can attach extra state
+        # like proposal-planning tracking rows atomically.
+        """Create a task record without dispatching it."""
+        if session is not None:
+            return await self._create_task_record(session, request)
+
+        async with self._database.session() as own_session:
+            task = await self._create_task_record(own_session, request)
+            await own_session.commit()
+            await own_session.refresh(task)
+            return task
+
     async def submit_task(self, request: TaskCreateRequest) -> uuid.UUID:
+        """Persist and dispatch a new task."""
         async with self._database.session() as session:
-            instance = await AgentInstanceRepository.get(session, request.agent_instance_id)
-            if instance is None:
-                raise ValueError(f"agent_instance_id={request.agent_instance_id} does not exist")
-            if not instance.is_active:
-                raise ValueError(f"agent_instance_id={request.agent_instance_id} is inactive")
-            if instance.agent.value != request.agent.value:
-                raise ValueError(
-                    f"agent type mismatch: task asks for {request.agent.value} but instance is {instance.agent.value}"
-                )
-
-            category = _task_category_for_agent(AgentName(request.agent.value))
-            if category == TaskCategory.coding and not request.repo:
-                raise ValueError("repo is required for coding agents")
-
-            task = await TaskRepository.create(
-                session,
-                agent=AgentName(request.agent.value),
-                agent_instance_id=request.agent_instance_id,
-                category=category,
-                question=request.question,
-                repo=request.repo,
-                project=request.project,
-                external_issue_url=request.external_issue_url,
-            )
-
-            workspace = await WorkspaceRepository.ensure_for_agent_instance(session, instance)
-            logger.info(f"Agent `{instance.agent.name}` has workspace `{workspace.workspace_key}`")
+            task = await self._create_task_record(session, request)
+            await session.commit()
+            await session.refresh(task)
         logger.info(f"Task `{task.id}` is queued.")
 
         try:
-            dispatched = await self._dispatch(task.id, recovered=False)
+            dispatched = await self.dispatch_existing_task(
+                task.id,
+                recovered=False,
+                fail_task_on_dispatch_error=True,
+            )
             if not dispatched:
                 raise RuntimeError(f"Task `{task.id}` is no longer dispatchable (status/lease changed).")
             logger.info(f"Task `{task.id}` has been dispatched for worker.")
-        except Exception as exc:
-            async with self._database.session() as session:
-                await TaskRepository.set_failed(session, task.id, error=f"Dispatch failed: {exc}")
-            logger.error(f"Fail to dispatch task `{task.id}`: {str(exc)}")
+        except Exception:
             raise
 
         return task.id
@@ -102,6 +104,7 @@ class AgentTaskRunner:
         for task in recoverable_tasks:
             async with self._database.session() as session:
                 instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
+                workspace = await WorkspaceRepository.get_by_agent_instance_id(session, task.agent_instance_id)
 
             if instance is None or not instance.is_active:
                 logger.warning(
@@ -125,14 +128,17 @@ class AgentTaskRunner:
                 if reset is None:
                     continue
 
-            if task.category == TaskCategory.coding and not task.repo:
+            # Recovery must preserve the repo snapshot captured when the task was created.
+            # Legacy rows may still have repo only on the workspace, so keep that fallback.
+            resolved_repo = task.repo or (workspace.github_repo if workspace is not None else None)
+            if task.category == TaskCategory.coding and not resolved_repo:
                 async with self._database.session() as session:
                     await TaskRepository.set_failed(
                         session,
                         task.id,
-                        error="Recovery failed: task repo is missing.",
+                        error="Recovery failed: task repo snapshot is missing.",
                     )
-                logger.warning("Failed to recover task %s because repo is missing.", task.id)
+                logger.warning("Failed to recover task %s because repo context is missing.", task.id)
                 continue
 
             try:
@@ -173,12 +179,50 @@ class AgentTaskRunner:
         return recovered_count
 
     async def shutdown(self) -> None:
+        """Shut down runner resources."""
         return None
 
-    async def dispatch_existing_task(self, task_id: uuid.UUID, *, recovered: bool = False) -> bool:
-        return await self._dispatch(task_id, recovered=recovered)
+    async def dispatch_existing_task(
+        self,
+        task_id: uuid.UUID,
+        *,
+        recovered: bool = False,
+        fail_task_on_dispatch_error: bool = False,
+    ) -> bool:
+        """Dispatch an already persisted task."""
+        try:
+            dispatched = await self._dispatch(task_id, recovered=recovered)
+        except Exception as exc:
+            if fail_task_on_dispatch_error:
+                # New planning flows can opt in here so a dispatch failure is visible
+                # on both the task row and the linked planning run instead of leaving
+                # the approved proposal in an ambiguous in-between state.
+                async with self._database.session() as session:
+                    task = await TaskRepository.set_failed(session, task_id, error=f"Dispatch failed: {exc}")
+                    if task is not None and task.category == TaskCategory.pm:
+                        planning_run = await ProposalPlanningRunRepository.get_by_task_id(session, task_id)
+                        if planning_run is not None:
+                            await ProposalPlanningRunRepository.set_failed(
+                                session,
+                                planning_run.id,
+                                error=f"Dispatch failed: {exc}",
+                            )
+                logger.error(f"Fail to dispatch task `{task_id}`: {str(exc)}")
+            raise
+
+        if not dispatched and fail_task_on_dispatch_error:
+            error = f"Dispatch failed: Task `{task_id}` is no longer dispatchable (status/lease changed)."
+            async with self._database.session() as session:
+                task = await TaskRepository.set_failed(session, task_id, error=error)
+                if task is not None and task.category == TaskCategory.pm:
+                    planning_run = await ProposalPlanningRunRepository.get_by_task_id(session, task_id)
+                    if planning_run is not None:
+                        await ProposalPlanningRunRepository.set_failed(session, planning_run.id, error=error)
+            logger.error(error)
+        return dispatched
 
     async def dispatch_github_feedback(self, task_id: uuid.UUID) -> bool:
+        """Dispatch a task created from GitHub feedback."""
         async with self._database.session() as session:
             queued = await TaskRepository.queue_github_feedback(session, task_id)
         if queued is None:
@@ -203,6 +247,42 @@ class AgentTaskRunner:
                     error="GitHub feedback dispatch skipped because the task is no longer dispatchable.",
                 )
         return dispatched
+
+    async def _create_task_record(
+        self,
+        session: AsyncSession,
+        request: TaskCreateRequest,
+    ):
+        """Persist a task record and related initial state."""
+        instance = await AgentInstanceRepository.get(session, request.agent_instance_id)
+        if instance is None:
+            raise ValueError(f"agent_instance_id={request.agent_instance_id} does not exist")
+        if not instance.is_active:
+            raise ValueError(f"agent_instance_id={request.agent_instance_id} is inactive")
+        if instance.agent.value != request.agent.value:
+            raise ValueError(
+                f"agent type mismatch: task asks for {request.agent.value} but instance is {instance.agent.value}"
+            )
+
+        category = _task_category_for_agent(AgentName(request.agent.value))
+        workspace = await WorkspaceRepository.ensure_for_agent_instance(session, instance)
+        if category == TaskCategory.coding and not workspace.github_repo:
+            raise ValueError("workspace repo is required for coding agents")
+
+        # Snapshot the workspace repo/project onto the task so later workspace edits do
+        # not rewrite the historical execution context for already-submitted work.
+        task = await TaskRepository.create_pending(
+            session,
+            agent=AgentName(request.agent.value),
+            agent_instance_id=request.agent_instance_id,
+            category=category,
+            question=request.question,
+            repo=workspace.github_repo,
+            project=workspace.project,
+            external_issue_url=request.external_issue_url,
+        )
+        logger.info(f"Agent `{instance.agent.name}` has workspace `{workspace.workspace_key}`")
+        return task
 
     async def _dispatch(self, task_id: uuid.UUID, *, recovered: bool) -> bool:
         """Acquire a dispatch lease then emit a Celery message.

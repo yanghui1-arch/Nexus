@@ -1,18 +1,33 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 
 from src.logger import logger
 from src.server.config import Settings
 from src.server.postgres.database import Database
-from src.server.postgres.models import AgentName
-from src.server.postgres.repositories import AgentInstanceRepository, WorkspaceRepository
+from src.server.postgres.models import AgentName, ProductProposalRecord
+from src.server.postgres.repositories import AgentInstanceRepository, ProductProposalRepository, WorkspaceRepository
 from src.server.runner import AgentTaskRunner
 from src.server.schemas import AgentKind, TaskCreateRequest
 
 
 PRODUCT_DISCOVERY_AGENT_NAMES = {AgentName.marc}
+
+
+def build_product_discovery_question(proposals: list[ProductProposalRecord], *, proposal_limit: int) -> str:
+    """Build a bounded product discovery prompt from recent proposals."""
+    lines = [
+        "优化产品并提出一个proposal",
+        "",
+        "Recent proposals context (title and summary only):",
+    ]
+    for proposal in proposals[:proposal_limit]:
+        title = (proposal.title or "").strip()
+        summary = (proposal.summary or "").strip()
+        lines.extend([f"- Title: {title}", f"  Summary: {summary}"])
+    if len(lines) == 3:
+        lines.append("- None")
+    return "\n".join(lines)
 
 
 class ProductDiscoveryPoller:
@@ -23,13 +38,19 @@ class ProductDiscoveryPoller:
         database: Database,
         runner: AgentTaskRunner,
     ) -> None:
+        """Initialize the service component."""
         self._settings = settings
         self._database = database
         self._runner = runner
         self._stop_event = asyncio.Event()
-        self._task: asyncio.Task[Any] | None = None
+        self._task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
+        """Start the product discovery poller.
+
+        The default cadence is intentionally sparse so discovery agents can
+        periodically propose product improvements without overloading the team.
+        """
         if self._settings.product_discovery_poll_interval_seconds <= 0:
             logger.info("Product discovery poller is disabled.")
             return
@@ -39,6 +60,7 @@ class ProductDiscoveryPoller:
         logger.info("Product discovery poller starts.")
 
     async def stop(self) -> None:
+        """Stop the background poller."""
         self._stop_event.set()
         if self._task is None:
             return
@@ -46,6 +68,7 @@ class ProductDiscoveryPoller:
         self._task = None
 
     async def poll_once(self) -> int:
+        """Run one polling cycle."""
         async with self._database.session() as session:
             candidates = await AgentInstanceRepository.list_product_discovery_candidates(
                 session,
@@ -77,14 +100,23 @@ class ProductDiscoveryPoller:
                         instance.id,
                     )
                     continue
+                recent_limit = self._settings.product_discovery_recent_proposal_limit
+                async with self._database.session() as session:
+                    recent_proposals = await ProductProposalRepository.list(
+                        session,
+                        project=workspace.project,
+                        repo=workspace.github_repo,
+                        limit=recent_limit,
+                    )
 
                 task_id = await self._runner.submit_task(
                     TaskCreateRequest(
                         agent_instance_id=instance.id,
                         agent=AgentKind(instance.agent.value),
-                        question="优化产品并提出一个proposal",
-                        repo=workspace.github_repo,
-                        project=workspace.project,
+                        question=build_product_discovery_question(
+                            recent_proposals,
+                            proposal_limit=recent_limit,
+                        ),
                         external_issue_url=None,
                     )
                 )
@@ -106,6 +138,7 @@ class ProductDiscoveryPoller:
         return dispatched_count
 
     async def _run_loop(self) -> None:
+        """Run the background polling loop."""
         while not self._stop_event.is_set():
             try:
                 await self.poll_once()

@@ -9,26 +9,39 @@ from src.sandbox.pool_management import SandboxPoolManager, _sandbox_config_fing
 
 
 class DummySandbox:
+    start_calls = []
+
     def __init__(self, config) -> None:
+        """Initialize the test helper."""
         self.config = config
         self.enter_calls = 0
         self.exit_calls = 0
 
-    async def __aenter__(self):
+    async def start(self, *, labels=None):
+        """Start a fake service."""
         self.enter_calls += 1
+        self.start_calls.append(labels)
         return self
 
+    async def __aenter__(self):
+        """Enter the async test context."""
+        return await self.start()
+
     async def __aexit__(self, *_):
+        """Exit the async test context."""
         self.exit_calls += 1
 
 
 @pytest.fixture
 def sandbox_stub(monkeypatch):
+    """Create a sandbox stub."""
+    DummySandbox.start_calls = []
     monkeypatch.setattr(pool_management, "Sandbox", DummySandbox)
 
 
 @pytest.mark.asyncio
 async def test_pool_reuses_released_sandbox_for_same_repo_and_config(sandbox_stub):
+    """Verify pool reuses released sandbox for same repo and config."""
     manager = SandboxPoolManager()
 
     first = await manager.acquire(PYTHON_312, repo_url="https://github.com/owner/repo")
@@ -40,7 +53,21 @@ async def test_pool_reuses_released_sandbox_for_same_repo_and_config(sandbox_stu
 
 
 @pytest.mark.asyncio
+async def test_pool_labels_new_sandboxes_for_cross_process_reuse(sandbox_stub):
+    """Verify pool labels new sandboxes for cross process reuse."""
+    manager = SandboxPoolManager()
+
+    await manager.acquire(PYTHON_312, repo_url="https://github.com/owner/repo")
+
+    labels = DummySandbox.start_calls[-1]
+    assert labels[pool_management._POOL_MANAGED_LABEL] == "true"
+    assert labels[pool_management._POOL_KEY_LABEL].startswith("https://github.com/owner/repo::")
+    await manager.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_pool_uses_distinct_keys_for_distinct_repo_urls(sandbox_stub):
+    """Verify pool uses distinct keys for distinct repo urls."""
     manager = SandboxPoolManager()
 
     first = await manager.acquire(PYTHON_312, repo_url="https://github.com/Owner/Repo.git")
@@ -53,6 +80,7 @@ async def test_pool_uses_distinct_keys_for_distinct_repo_urls(sandbox_stub):
 
 @pytest.mark.asyncio
 async def test_pool_creates_new_sandbox_when_existing_entry_is_in_use(sandbox_stub):
+    """Verify pool creates new sandbox when existing entry is in use."""
     manager = SandboxPoolManager()
 
     first = await manager.acquire(PYTHON_312, repo_url="https://github.com/owner/repo")
@@ -66,6 +94,7 @@ async def test_pool_creates_new_sandbox_when_existing_entry_is_in_use(sandbox_st
 
 @pytest.mark.asyncio
 async def test_pool_separates_sandboxes_for_different_repos(sandbox_stub):
+    """Verify pool separates sandboxes for different repos."""
     manager = SandboxPoolManager()
 
     first = await manager.acquire(PYTHON_312, repo_url="https://github.com/owner/repo-a")
@@ -78,6 +107,7 @@ async def test_pool_separates_sandboxes_for_different_repos(sandbox_stub):
 
 @pytest.mark.asyncio
 async def test_invalidate_removes_sandbox_and_forces_recreate_on_next_acquire(sandbox_stub):
+    """Verify invalidate removes sandbox and forces recreate on next acquire."""
     manager = SandboxPoolManager()
 
     first = await manager.acquire(PYTHON_312, repo_url="https://github.com/owner/repo")
@@ -91,6 +121,7 @@ async def test_invalidate_removes_sandbox_and_forces_recreate_on_next_acquire(sa
 
 @pytest.mark.asyncio
 async def test_is_managed_tracks_membership_without_reverse_index(sandbox_stub):
+    """Verify is managed tracks membership without reverse index."""
     manager = SandboxPoolManager()
 
     sandbox = await manager.acquire(PYTHON_312, repo_url="https://github.com/owner/repo")
@@ -105,6 +136,7 @@ async def test_is_managed_tracks_membership_without_reverse_index(sandbox_stub):
 
 
 def test_sandbox_config_fingerprint_uses_sha256_of_canonical_payload():
+    """Verify sandbox config fingerprint uses sha256 of canonical payload."""
     payload = {
         "image": PYTHON_312.image,
         "code_runner": PYTHON_312.code_runner,
@@ -123,3 +155,4 @@ def test_sandbox_config_fingerprint_uses_sha256_of_canonical_payload():
     expected = hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
 
     assert _sandbox_config_fingerprint(PYTHON_312) == expected
+

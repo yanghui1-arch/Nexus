@@ -18,10 +18,12 @@ class GithubTools:
         sandbox: Sandbox,
         nexus_task_context: NexusTaskContext | None = None,
     ) -> None:
+        """Initialize the object."""
         self._sandbox = sandbox
         self._nexus_task_context = nexus_task_context
 
     async def _sync_main_branch(self, local_path: str) -> dict:
+        """Synchronize local main branches with remotes."""
         return await self._sandbox.run_shell(
             f"git -C '{local_path}' fetch upstream main && "
             f"git -C '{local_path}' checkout main && "
@@ -128,6 +130,7 @@ class GithubTools:
         body: str,
         labels: list[str] | None = None,
     ) -> dict:
+        """Create a GitHub issue."""
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(
@@ -171,6 +174,7 @@ class GithubTools:
         local_path: str | None = None,
         draft: bool = False,
     ) -> dict:
+        """Push a branch and open a GitHub pull request."""
         if closes_issues:
             body = body + "\n\n" + "\n".join(f"Closes #{n}" for n in closes_issues)
 
@@ -231,6 +235,7 @@ class GithubTools:
                 }
 
     async def _update_task_pull_request_url(self, pull_request_url: str) -> None:
+        """Persist a task pull request URL when context is available."""
         if self._nexus_task_context is None:
             return
 
@@ -692,7 +697,9 @@ class GithubTools:
 
     @property
     def issues(self):
+        """Return issue-related GitHub tools."""
         return {
+            "create_github_issue": self.create_github_issue,
             "get_issue_comments": self.get_issue_comments,
             "reply_to_issue": self.reply_to_issue,
             "get_my_issues": self.get_my_issues,
@@ -700,6 +707,7 @@ class GithubTools:
     
     @property
     def prs(self):
+        """Return pull request-related GitHub tools."""
         return {
             "pr_to_github": self.pr_to_github,
             "get_pr_reviews": self.get_pr_reviews,
@@ -713,6 +721,7 @@ class GithubTools:
 
     @property
     def notifications(self):
+        """Return notification-related GitHub tools."""
         return {
             "get_notifications": self.get_notifications,
         }
@@ -720,6 +729,7 @@ class GithubTools:
     
     @property
     def all_tools(self):
+        """Return all tools exposed by this toolkit."""
         issues = self.issues
         prs = self.prs
         notifications = self.notifications

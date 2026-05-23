@@ -19,10 +19,12 @@ from src.tools.nexus.client import NexusReviewTools, NexusTaskContext
 class FakeDatabase:
     @asynccontextmanager
     async def session(self):
+        """Return a fake database session."""
         yield object()
 
 
 def make_context(*, current_work_item_id: uuid.UUID | None = None) -> NexusTaskContext:
+    """Create a Nexus task context."""
     return NexusTaskContext(
         task_id=uuid.uuid4(),
         database=FakeDatabase(),
@@ -32,10 +34,12 @@ def make_context(*, current_work_item_id: uuid.UUID | None = None) -> NexusTaskC
 
 
 def test_create_task_work_items_uses_hidden_task_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify create task work items uses hidden task context."""
     context = make_context()
     captured: dict[str, Any] = {}
 
     async def fake_create_many(session, *, task_id, items):
+        """Provide a fake create many."""
         captured["task_id"] = task_id
         captured["items"] = items
         return [
@@ -63,11 +67,13 @@ def test_create_task_work_items_uses_hidden_task_context(monkeypatch: pytest.Mon
 
 
 def test_finish_current_task_work_item_infers_base_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify finish current task work item infers base commit."""
     work_item_id = uuid.uuid4()
     context = make_context(current_work_item_id=work_item_id)
     sandbox = AsyncMock()
 
     async def fake_run_shell(cmd: str) -> dict[str, Any]:
+        """Provide a fake run shell."""
         if "status --porcelain" in cmd:
             return {"success": True, "stdout": "", "stderr": ""}
         if "rev-parse HEAD" in cmd:
@@ -82,6 +88,7 @@ def test_finish_current_task_work_item_infers_base_commit(monkeypatch: pytest.Mo
     captured: dict[str, Any] = {}
 
     async def fake_get(session, requested_id):
+        """Provide a fake get."""
         assert requested_id == work_item_id
         return SimpleNamespace(
             id=work_item_id,
@@ -93,6 +100,7 @@ def test_finish_current_task_work_item_infers_base_commit(monkeypatch: pytest.Mo
         )
 
     async def fake_mark_ready(session, requested_id, *, summary, base_commit, head_commit, local_path):
+        """Provide a fake mark ready."""
         captured["ready"] = {
             "work_item_id": requested_id,
             "summary": summary,
@@ -116,11 +124,13 @@ def test_finish_current_task_work_item_infers_base_commit(monkeypatch: pytest.Mo
     assert captured["ready"]["head_commit"] == "head123"
 
 def test_finish_current_task_work_item_marks_ready_for_review(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify finish current task work item marks ready for review."""
     work_item_id = uuid.uuid4()
     context = make_context(current_work_item_id=work_item_id)
     sandbox = AsyncMock()
 
     async def fake_run_shell(cmd: str) -> dict[str, Any]:
+        """Provide a fake run shell."""
         if "status --porcelain" in cmd:
             return {"success": True, "stdout": "", "stderr": ""}
         if "rev-parse" in cmd:
@@ -131,6 +141,7 @@ def test_finish_current_task_work_item_marks_ready_for_review(monkeypatch: pytes
     captured: dict[str, Any] = {}
 
     async def fake_get(session, requested_id):
+        """Provide a fake get."""
         assert requested_id == work_item_id
         return SimpleNamespace(
             id=work_item_id,
@@ -142,6 +153,7 @@ def test_finish_current_task_work_item_marks_ready_for_review(monkeypatch: pytes
         )
 
     async def fake_mark_ready(session, requested_id, *, summary, base_commit, head_commit, local_path):
+        """Provide a fake mark ready."""
         captured["ready"] = {
             "work_item_id": requested_id,
             "summary": summary,

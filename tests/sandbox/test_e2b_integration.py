@@ -7,12 +7,14 @@ from src.sandbox import Sandbox, SandboxConfig, PYTHON_312, NODE_20, JAVA_21
 
 @pytest.fixture
 async def py_sandbox():
+    """Create a Python sandbox fixture."""
     async with Sandbox(PYTHON_312) as sbx:
         yield sbx
 
 
 @pytest.mark.integration
 async def test_python_run_code(py_sandbox):
+    """Verify python run code."""
     result = await py_sandbox.run_code("print('hello from python')")
 
     assert result["success"] is True
@@ -21,6 +23,7 @@ async def test_python_run_code(py_sandbox):
 
 @pytest.mark.integration
 async def test_python_run_code_multiline(py_sandbox):
+    """Verify python run code multiline."""
     result = await py_sandbox.run_code("x = 6\ny = 7\nprint(x * y)")
 
     assert result["success"] is True
@@ -29,6 +32,7 @@ async def test_python_run_code_multiline(py_sandbox):
 
 @pytest.mark.integration
 async def test_python_run_code_error(py_sandbox):
+    """Verify python run code error."""
     result = await py_sandbox.run_code("raise ValueError('boom')")
 
     assert result["success"] is False
@@ -39,12 +43,14 @@ async def test_python_run_code_error(py_sandbox):
 
 @pytest.fixture
 async def node_sandbox():
+    """Create a Node sandbox fixture."""
     async with Sandbox(NODE_20) as sbx:
         yield sbx
 
 
 @pytest.mark.integration
 async def test_node_run_code(node_sandbox):
+    """Verify node run code."""
     result = await node_sandbox.run_code("console.log('hello from node')")
 
     assert result["success"] is True
@@ -53,6 +59,7 @@ async def test_node_run_code(node_sandbox):
 
 @pytest.mark.integration
 async def test_node_run_code_error(node_sandbox):
+    """Verify node run code error."""
     result = await node_sandbox.run_code("throw new Error('boom')")
 
     assert result["success"] is False
@@ -63,12 +70,14 @@ async def test_node_run_code_error(node_sandbox):
 
 @pytest.fixture
 async def java_sandbox():
+    """Create a Java sandbox fixture."""
     async with Sandbox(JAVA_21) as sbx:
         yield sbx
 
 
 @pytest.mark.integration
 async def test_java_run_code(java_sandbox):
+    """Verify java run code."""
     code = 'class _nexus_exec { public static void main(String[] a) { System.out.println("hello from java"); } }'
     result = await java_sandbox.run_code(code)
 
@@ -80,6 +89,7 @@ async def test_java_run_code(java_sandbox):
 
 @pytest.mark.integration
 async def test_custom_config():
+    """Verify custom config."""
     cfg = SandboxConfig(image="python:3.11-slim", code_runner="python", code_ext=".py")
     async with Sandbox(cfg) as sandbox:
         result = await sandbox.run_code("import sys; print(sys.version)")
@@ -92,12 +102,14 @@ async def test_custom_config():
 
 @pytest.fixture
 async def sandbox():
+    """Create a sandbox fixture."""
     async with Sandbox(PYTHON_312) as sbx:
         yield sbx
 
 
 @pytest.mark.integration
 async def test_run_shell(sandbox):
+    """Verify run shell."""
     result = await sandbox.run_shell("echo 'nexus sandbox'")
 
     assert result["success"] is True
@@ -107,6 +119,7 @@ async def test_run_shell(sandbox):
 
 @pytest.mark.integration
 async def test_run_shell_failure(sandbox):
+    """Verify run shell failure."""
     result = await sandbox.run_shell("exit 1")
 
     assert result["success"] is False
@@ -115,6 +128,7 @@ async def test_run_shell_failure(sandbox):
 
 @pytest.mark.integration
 async def test_append_file(sandbox):
+    """Verify append file."""
     await sandbox.write_file("/workspace/log.txt", "line1\n")
     await sandbox.append_file("/workspace/log.txt", "line2\n")
     await sandbox.append_file("/workspace/log.txt", "line3\n")
@@ -126,6 +140,7 @@ async def test_append_file(sandbox):
 
 @pytest.mark.integration
 async def test_append_creates_file_if_missing(sandbox):
+    """Verify append creates file if missing."""
     result = await sandbox.append_file("/workspace/new.txt", "hello\n")
 
     assert result["success"] is True
@@ -135,6 +150,7 @@ async def test_append_creates_file_if_missing(sandbox):
 
 @pytest.mark.integration
 async def test_edit_file_change_line(sandbox):
+    """Verify edit file change line."""
     await sandbox.write_file("/workspace/cfg.py", "x = 1\ny = 2\n")
     result = await sandbox.edit_file("/workspace/cfg.py", "x = 1", "x = 99")
 
@@ -147,6 +163,7 @@ async def test_edit_file_change_line(sandbox):
 
 @pytest.mark.integration
 async def test_edit_file_remove_line(sandbox):
+    """Verify edit file remove line."""
     await sandbox.write_file("/workspace/cfg.py", "x = 1\ny = 2\n")
     await sandbox.edit_file("/workspace/cfg.py", "x = 1\n", "")
     read = await sandbox.read_file("/workspace/cfg.py")
@@ -157,6 +174,7 @@ async def test_edit_file_remove_line(sandbox):
 
 @pytest.mark.integration
 async def test_edit_file_insert_after(sandbox):
+    """Verify edit file insert after."""
     await sandbox.write_file("/workspace/cfg.py", "def foo():\n    pass\n")
     await sandbox.edit_file("/workspace/cfg.py", "def foo():\n", "def foo():\n    # inserted\n")
     read = await sandbox.read_file("/workspace/cfg.py")
@@ -166,6 +184,7 @@ async def test_edit_file_insert_after(sandbox):
 
 @pytest.mark.integration
 async def test_edit_file_old_str_not_found(sandbox):
+    """Verify edit file old str not found."""
     await sandbox.write_file("/workspace/cfg.py", "x = 1\n")
     result = await sandbox.edit_file("/workspace/cfg.py", "z = 99", "z = 0")
 
@@ -176,6 +195,7 @@ async def test_edit_file_old_str_not_found(sandbox):
 
 @pytest.mark.integration
 async def test_write_and_read_file(sandbox):
+    """Verify write and read file."""
     content = "print('written by nexus agent')"
     await sandbox.write_file("/workspace/agent.py", content)
     result = await sandbox.read_file("/workspace/agent.py")
@@ -186,6 +206,7 @@ async def test_write_and_read_file(sandbox):
 
 @pytest.mark.integration
 async def test_write_then_execute(sandbox):
+    """Verify write then execute."""
     await sandbox.write_file("/workspace/add.py", "print(1 + 2)")
     result = await sandbox.run_shell("python /workspace/add.py")
 
@@ -195,6 +216,7 @@ async def test_write_then_execute(sandbox):
 
 @pytest.mark.integration
 async def test_list_files(sandbox):
+    """Verify list files."""
     await sandbox.write_file("/workspace/foo.py", "x = 1")
     await sandbox.write_file("/workspace/bar.py", "x = 2")
     result = await sandbox.list_files("/workspace")
@@ -207,6 +229,7 @@ async def test_list_files(sandbox):
 
 @pytest.mark.integration
 async def test_state_persists_across_calls(sandbox):
+    """Verify state persists across calls."""
     await sandbox.write_file("/workspace/state.py", "VALUE = 99")
     result = await sandbox.run_code(
         "import sys\nsys.path.insert(0, '/workspace')\nimport state\nprint(state.VALUE)"

@@ -22,6 +22,8 @@ from src.server.postgres.models import (
     FeatureStatus,
     ProductProposalRecord,
     ProductProposalStatus,
+    ProposalPlanningRunRecord,
+    ProposalPlanningRunStatus,
     TaskCategory,
     GithubPullRequestFeedbackKind,
     GithubPullRequestFeedbackRecord,
@@ -37,6 +39,7 @@ from src.server.postgres.models import (
 
 
 def utc_now() -> datetime:
+    """Return the current UTC timestamp."""
     return datetime.now(timezone.utc)
 
 
@@ -46,8 +49,12 @@ class AgentInstanceRepository:
         session: AsyncSession,
         *,
         agent: AgentName,
+        user_id: uuid.UUID | None = None,
+        github_repo: str | None = None,
+        project: str | None = None,
         limit: int = 100,
     ) -> list[AgentInstanceRecord]:
+        """List agent instances ordered by active task load."""
         active_statuses = [
             TaskStatus.queued,
             TaskStatus.running,
@@ -72,9 +79,18 @@ class AgentInstanceRepository:
                 AgentInstanceRecord.agent == agent,
                 AgentInstanceRecord.is_active.is_(True),
             )
-            .order_by(func.coalesce(load_query.c.active_task_count, 0).asc(), AgentInstanceRecord.created_at.asc())
-            .limit(limit)
         )
+        if user_id is not None:
+            query = query.where(AgentInstanceRecord.user_id == user_id)
+        if github_repo is not None or project is not None:
+            query = query.join(WorkspaceRecord, WorkspaceRecord.agent_instance_id == AgentInstanceRecord.id).where(
+                WorkspaceRecord.github_repo == github_repo,
+                WorkspaceRecord.project == project,
+            )
+        query = query.order_by(
+            func.coalesce(load_query.c.active_task_count, 0).asc(),
+            AgentInstanceRecord.created_at.asc(),
+        ).limit(limit)
         result = await session.execute(query)
         return list(result.scalars().all())
 
@@ -85,9 +101,12 @@ class AgentInstanceRepository:
         agent: AgentName,
         client_id: str,
         display_name: str | None,
+        user_id: uuid.UUID,
         is_active: bool = True,
     ) -> AgentInstanceRecord:
+        """Create a new database record."""
         instance = AgentInstanceRecord(
+            user_id=user_id,
             agent=agent,
             client_id=client_id,
             display_name=display_name,
@@ -104,6 +123,7 @@ class AgentInstanceRepository:
         *,
         limit: int = 200,
     ) -> list[AgentInstanceRecord]:
+        """List agent instances eligible for product discovery."""
         query = (
             select(AgentInstanceRecord)
             .where(
@@ -129,7 +149,6 @@ class AgentInstanceRepository:
                     [
                         TaskStatus.queued,
                         TaskStatus.running,
-                        TaskStatus.waiting_for_review,
                     ]
                 ),
             )
@@ -140,6 +159,7 @@ class AgentInstanceRepository:
 
     @staticmethod
     async def get(session: AsyncSession, instance_id: uuid.UUID) -> AgentInstanceRecord | None:
+        """Return a record by identifier."""
         return await session.get(AgentInstanceRecord, instance_id)
 
     @staticmethod
@@ -149,9 +169,13 @@ class AgentInstanceRepository:
         agent: AgentName | None = None,
         client_id: str | None = None,
         is_active: bool | None = None,
+        user_id: uuid.UUID | None = None,
         limit: int = 500,
     ) -> list[AgentInstanceRecord]:
+        """List records matching filters."""
         query = select(AgentInstanceRecord)
+        if user_id is not None:
+            query = query.where(AgentInstanceRecord.user_id == user_id)
         if agent is not None:
             query = query.where(AgentInstanceRecord.agent == agent)
         if client_id is not None:
@@ -169,7 +193,8 @@ class AgentInstanceRepository:
         *,
         is_active: bool,
     ) -> AgentInstanceRecord | None:
-        instance = await session.get(AgentInstanceRecord, instance_id)
+        """Set whether an agent instance is active."""
+        instance = await AgentInstanceRepository.get(session, instance_id)
         if instance is None:
             return None
         instance.is_active = is_active
@@ -185,16 +210,37 @@ class WorkspaceRepository:
         session: AsyncSession,
         agent_instance_id: uuid.UUID,
     ) -> WorkspaceRecord | None:
+        """Return a record for an agent instance."""
         query = select(WorkspaceRecord).where(WorkspaceRecord.agent_instance_id == agent_instance_id)
         result = await session.execute(query)
         return result.scalar_one_or_none()
+
+    @staticmethod
+    async def list_for_user(
+        session: AsyncSession,
+        *,
+        user_id: uuid.UUID,
+    ) -> list[WorkspaceRecord]:
+        """List records visible to a user."""
+        query = (
+            select(WorkspaceRecord)
+            .join(AgentInstanceRecord, AgentInstanceRecord.id == WorkspaceRecord.agent_instance_id)
+            .where(AgentInstanceRecord.user_id == user_id)
+        )
+        result = await session.execute(query)
+        return list(result.scalars().all())
 
     @staticmethod
     async def ensure_for_agent_instance(
         session: AsyncSession,
         agent_instance: AgentInstanceRecord,
     ) -> WorkspaceRecord:
-        """Ensure agent instance has a separate workspace."""
+        """Ensure an agent instance has a durable workspace record.
+
+        The workspace stores frontend-owned repo/project context plus worker-owned
+        runtime status. Task execution may flip status, but repo/project should be
+        updated explicitly by the frontend workflow instead of inferred from tasks.
+        """
         workspace = await WorkspaceRepository.get_by_agent_instance_id(session, agent_instance.id)
         if workspace is None:
             workspace = WorkspaceRecord(
@@ -214,16 +260,35 @@ class WorkspaceRepository:
         session: AsyncSession,
         *,
         agent_instance_id: uuid.UUID,
-        github_repo: str,
-        project: str | None,
     ) -> WorkspaceRecord | None:
-        return await WorkspaceRepository._set_state(
+        """Mark a record as running."""
+        return await WorkspaceRepository._set_status(
             session,
             agent_instance_id=agent_instance_id,
             status=WorkspaceStatus.running,
-            github_repo=github_repo,
-            project=project,
         )
+
+    @staticmethod
+    async def set_context(
+        session: AsyncSession,
+        *,
+        agent_instance_id: uuid.UUID,
+        github_repo: str | None,
+        project: str | None,
+    ) -> WorkspaceRecord | None:
+        """Update workspace repository and project context."""
+        workspace = await WorkspaceRepository.get_by_agent_instance_id(session, agent_instance_id)
+        if workspace is None:
+            return None
+
+        now = utc_now()
+        workspace.github_repo = github_repo
+        workspace.project = project
+        workspace.last_used_at = now
+        workspace.updated_at = now
+        await session.commit()
+        await session.refresh(workspace)
+        return workspace
 
     @staticmethod
     async def set_idle(
@@ -231,6 +296,7 @@ class WorkspaceRepository:
         *,
         agent_instance_id: uuid.UUID,
     ) -> WorkspaceRecord | None:
+        """Mark a workspace as idle."""
         return await WorkspaceRepository._set_status(
             session,
             agent_instance_id=agent_instance_id,
@@ -243,6 +309,7 @@ class WorkspaceRepository:
         *,
         agent_instance_id: uuid.UUID,
     ) -> WorkspaceRecord | None:
+        """Mark a workspace as inactive."""
         return await WorkspaceRepository._set_status(
             session,
             agent_instance_id=agent_instance_id,
@@ -256,6 +323,7 @@ class WorkspaceRepository:
         agent_instance_id: uuid.UUID,
         status: WorkspaceStatus,
     ) -> WorkspaceRecord | None:
+        """Set a record status."""
         workspace = await WorkspaceRepository.get_by_agent_instance_id(session, agent_instance_id)
         if workspace is None:
             return None
@@ -267,30 +335,6 @@ class WorkspaceRepository:
         await session.commit()
         await session.refresh(workspace)
         return workspace
-
-    @staticmethod
-    async def _set_state(
-        session: AsyncSession,
-        *,
-        agent_instance_id: uuid.UUID,
-        status: WorkspaceStatus,
-        github_repo: str | None,
-        project: str | None,
-    ) -> WorkspaceRecord | None:
-        workspace = await WorkspaceRepository.get_by_agent_instance_id(session, agent_instance_id)
-        if workspace is None:
-            return None
-
-        now = utc_now()
-        workspace.status = status
-        workspace.github_repo = github_repo
-        workspace.project = project
-        workspace.last_used_at = now
-        workspace.updated_at = now
-        await session.commit()
-        await session.refresh(workspace)
-        return workspace
-
 
 class ProductProposalRepository:
     @staticmethod
@@ -305,6 +349,7 @@ class ProductProposalRepository:
         repo: str | None,
         source_task_id: uuid.UUID | None = None,
     ) -> ProductProposalRecord:
+        """Create a new database record."""
         proposal = ProductProposalRecord(
             title=title,
             plan_type=plan_type,
@@ -322,6 +367,7 @@ class ProductProposalRepository:
 
     @staticmethod
     async def get(session: AsyncSession, proposal_id: uuid.UUID) -> ProductProposalRecord | None:
+        """Return a record by identifier."""
         return await session.get(ProductProposalRecord, proposal_id)
 
     @staticmethod
@@ -331,9 +377,22 @@ class ProductProposalRepository:
         status: ProductProposalStatus | None = None,
         project: str | None = None,
         repo: str | None = None,
+        workspaces: list[WorkspaceRecord] | None = None,
         limit: int = 200,
     ) -> list[ProductProposalRecord]:
+        """List records matching filters."""
         query = select(ProductProposalRecord)
+        if workspaces is not None:
+            if not workspaces:
+                return []
+            query = query.where(
+                or_(
+                    *(
+                        and_(ProductProposalRecord.repo == workspace.github_repo, ProductProposalRecord.project == workspace.project)
+                        for workspace in workspaces
+                    )
+                )
+            )
         if status is not None:
             query = query.where(ProductProposalRecord.status == status)
         if project is not None:
@@ -350,6 +409,7 @@ class ProductProposalRepository:
         proposal_id: uuid.UUID,
         status: ProductProposalStatus,
     ) -> ProductProposalRecord | None:
+        """Handle set status."""
         proposal = await session.get(ProductProposalRecord, proposal_id)
         if proposal is None:
             return None
@@ -365,6 +425,7 @@ class ProductProposalRepository:
         proposal_id: uuid.UUID,
     ) -> ProductProposalRecord | None:
         # Proposal completion is derived from its linked features rather than set directly.
+        """Synchronize proposal status from feature state."""
         proposal = await session.get(ProductProposalRecord, proposal_id)
         if proposal is None:
             return None
@@ -372,21 +433,210 @@ class ProductProposalRepository:
             return proposal
 
         result = await session.execute(
-            select(FeatureRecord.status).where(FeatureRecord.proposal_id == proposal_id)
+            select(FeatureRecord.id, FeatureRecord.status).where(FeatureRecord.proposal_id == proposal_id)
         )
-        feature_statuses = list(result.scalars().all())
-        if not feature_statuses:
+        feature_rows = list(result.all())
+        if not feature_rows:
             return proposal
 
+        feature_ids = [row[0] for row in feature_rows]
+        item_result = await session.execute(
+            select(func.count(FeatureItemRecord.id)).where(FeatureItemRecord.feature_id.in_(feature_ids))
+        )
+        item_count = int(item_result.scalar_one())
+        feature_statuses = [row[1] for row in feature_rows]
+        # `planned` means the proposal has a usable implementation plan, not merely
+        # feature shells. Until at least one feature item exists, keep the proposal
+        # at `approved` and let the planning run status explain the in-flight state.
         next_status = (
             ProductProposalStatus.completed
-            if all(status in {FeatureStatus.completed, FeatureStatus.closed} for status in feature_statuses)
+            if item_count > 0 and all(status in {FeatureStatus.completed, FeatureStatus.closed} for status in feature_statuses)
             else ProductProposalStatus.planned
+            if item_count > 0
+            else ProductProposalStatus.approved
         )
         if proposal.status != next_status:
             proposal.status = next_status
             proposal.updated_at = utc_now()
         return proposal
+
+
+class ProposalPlanningRunRepository:
+    @staticmethod
+    async def create_pending(
+        session: AsyncSession,
+        *,
+        proposal_id: uuid.UUID,
+        task_id: uuid.UUID,
+    ) -> ProposalPlanningRunRecord:
+        """Create a pending tracking record."""
+        result = await session.execute(
+            select(func.coalesce(func.max(ProposalPlanningRunRecord.attempt), 0)).where(
+                ProposalPlanningRunRecord.proposal_id == proposal_id
+            )
+        )
+        next_attempt = int(result.scalar_one()) + 1
+        run = ProposalPlanningRunRecord(
+            proposal_id=proposal_id,
+            task_id=task_id,
+            attempt=next_attempt,
+            status=ProposalPlanningRunStatus.queued,
+        )
+        session.add(run)
+        await session.flush()
+        return run
+
+    @staticmethod
+    async def get_by_task_id(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+    ) -> ProposalPlanningRunRecord | None:
+        """Return a record for a task."""
+        query = select(ProposalPlanningRunRecord).where(ProposalPlanningRunRecord.task_id == task_id)
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_latest_by_proposal(
+        session: AsyncSession,
+        proposal_id: uuid.UUID,
+    ) -> ProposalPlanningRunRecord | None:
+        """Return the latest planning run for a proposal."""
+        query = (
+            select(ProposalPlanningRunRecord)
+            .where(ProposalPlanningRunRecord.proposal_id == proposal_id)
+            .order_by(ProposalPlanningRunRecord.attempt.desc(), ProposalPlanningRunRecord.created_at.desc())
+            .limit(1)
+        )
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_latest_by_proposal_ids(
+        session: AsyncSession,
+        proposal_ids: list[uuid.UUID],
+    ) -> dict[uuid.UUID, ProposalPlanningRunRecord]:
+        """Return latest planning runs for proposal ids."""
+        if not proposal_ids:
+            return {}
+        query = (
+            select(ProposalPlanningRunRecord)
+            .where(ProposalPlanningRunRecord.proposal_id.in_(proposal_ids))
+            .order_by(
+                ProposalPlanningRunRecord.proposal_id.asc(),
+                ProposalPlanningRunRecord.attempt.desc(),
+                ProposalPlanningRunRecord.created_at.desc(),
+            )
+        )
+        result = await session.execute(query)
+        latest_by_proposal_id: dict[uuid.UUID, ProposalPlanningRunRecord] = {}
+        for run in result.scalars().all():
+            latest_by_proposal_id.setdefault(run.proposal_id, run)
+        return latest_by_proposal_id
+
+    @staticmethod
+    async def validate_plan(
+        session: AsyncSession,
+        proposal_id: uuid.UUID,
+    ) -> str | None:
+        """Validate whether a proposal has a usable generated plan.
+
+        A planning run is only considered successful when it creates at least one
+        feature and every created feature has at least one feature item. This is
+        the minimum structure required for downstream product workflow to publish
+        executable coding tasks.
+
+        Args:
+            session: Active database session used to inspect generated features and
+                feature items.
+            proposal_id: Identifier of the approved proposal whose generated plan
+                should be checked.
+
+        Returns:
+            None if the generated plan is structurally valid. Otherwise returns a
+            human-readable validation error describing why the plan is incomplete.
+        """
+        feature_result = await session.execute(
+            select(FeatureRecord.id).where(FeatureRecord.proposal_id == proposal_id).order_by(FeatureRecord.created_at.asc())
+        )
+        feature_ids = list(feature_result.scalars().all())
+        if not feature_ids:
+            return "Planning task completed without creating any features."
+
+        # Planning is considered successful only when every created feature has
+        # at least one executable feature item. Otherwise the proposal would still
+        # be reviewable in UI but unusable for downstream coding task publishing.
+        rows = await session.execute(
+            select(FeatureRecord.id, func.count(FeatureItemRecord.id))
+            .outerjoin(FeatureItemRecord, FeatureItemRecord.feature_id == FeatureRecord.id)
+            .where(FeatureRecord.proposal_id == proposal_id)
+            .group_by(FeatureRecord.id)
+        )
+        empty_feature_count = sum(1 for _, item_count in rows.all() if int(item_count) == 0)
+        if empty_feature_count > 0:
+            return f"Planning task completed with {empty_feature_count} feature(s) missing feature items."
+        return None
+
+    @staticmethod
+    async def set_running(
+        session: AsyncSession,
+        run_id: uuid.UUID,
+    ) -> ProposalPlanningRunRecord | None:
+        """Mark a record as running."""
+        run = await session.get(ProposalPlanningRunRecord, run_id)
+        if run is None:
+            return None
+
+        now = utc_now()
+        run.status = ProposalPlanningRunStatus.running
+        run.error = None
+        run.started_at = run.started_at or now
+        run.finished_at = None
+        run.updated_at = now
+        await session.commit()
+        await session.refresh(run)
+        return run
+
+    @staticmethod
+    async def set_failed(
+        session: AsyncSession,
+        run_id: uuid.UUID,
+        *,
+        error: str,
+    ) -> ProposalPlanningRunRecord | None:
+        """Mark a record as failed."""
+        run = await session.get(ProposalPlanningRunRecord, run_id)
+        if run is None:
+            return None
+
+        now = utc_now()
+        run.status = ProposalPlanningRunStatus.failed
+        run.error = error
+        run.finished_at = now
+        run.updated_at = now
+        await session.commit()
+        await session.refresh(run)
+        return run
+
+    @staticmethod
+    async def set_completed(
+        session: AsyncSession,
+        run_id: uuid.UUID,
+    ) -> ProposalPlanningRunRecord | None:
+        """Mark a record as completed."""
+        run = await session.get(ProposalPlanningRunRecord, run_id)
+        if run is None:
+            return None
+
+        now = utc_now()
+        run.status = ProposalPlanningRunStatus.completed
+        run.error = None
+        run.started_at = run.started_at or now
+        run.finished_at = now
+        run.updated_at = now
+        await session.commit()
+        await session.refresh(run)
+        return run
 
 
 class FeatureRepository:
@@ -399,6 +649,7 @@ class FeatureRepository:
         description: str,
         project: str | None,
     ) -> FeatureRecord:
+        """Create a new database record."""
         feature = FeatureRecord(
             proposal_id=proposal_id,
             title=title,
@@ -408,16 +659,12 @@ class FeatureRepository:
         )
         session.add(feature)
         await session.flush()
-        if proposal_id is not None:
-            proposal = await session.get(ProductProposalRecord, proposal_id)
-            if proposal is not None:
-                proposal.status = ProductProposalStatus.planned
-                proposal.updated_at = utc_now()
         await session.commit()
         await session.refresh(feature)
         return feature
 
     async def get(session: AsyncSession, feature_id: uuid.UUID) -> FeatureRecord | None:
+        """Return a record by identifier."""
         return await session.get(FeatureRecord, feature_id)
 
     @staticmethod
@@ -426,9 +673,22 @@ class FeatureRepository:
         *,
         status: FeatureStatus | None = None,
         project: str | None = None,
+        workspaces: list[WorkspaceRecord] | None = None,
         limit: int = 200,
     ) -> list[FeatureRecord]:
+        """List records matching filters."""
         query = select(FeatureRecord)
+        if workspaces is not None:
+            if not workspaces:
+                return []
+            query = query.join(ProductProposalRecord, ProductProposalRecord.id == FeatureRecord.proposal_id).where(
+                or_(
+                    *(
+                        and_(ProductProposalRecord.repo == workspace.github_repo, ProductProposalRecord.project == workspace.project)
+                        for workspace in workspaces
+                    )
+                )
+            )
         if status is not None:
             query = query.where(FeatureRecord.status == status)
         if project is not None:
@@ -442,6 +702,7 @@ class FeatureRepository:
         session: AsyncSession,
         feature_id: uuid.UUID,
     ) -> FeatureRecord | None:
+        """Synchronize feature status from item state."""
         feature = await session.get(FeatureRecord, feature_id)
         if feature is None:
             return None
@@ -472,6 +733,7 @@ class FeatureRepository:
 class FeatureItemRepository:
     @staticmethod
     async def get_next_unassigned(session: AsyncSession) -> FeatureItemRecord | None:
+        """Return the next unassigned feature item."""
         query = (
             select(FeatureItemRecord)
             .where(
@@ -486,6 +748,7 @@ class FeatureItemRepository:
 
     @staticmethod
     async def get_feature(session: AsyncSession, item_id: uuid.UUID) -> FeatureRecord | None:
+        """Return the related feature record."""
         query = (
             select(FeatureRecord)
             .join(FeatureItemRecord, FeatureItemRecord.feature_id == FeatureRecord.id)
@@ -496,8 +759,21 @@ class FeatureItemRepository:
 
     @staticmethod
     async def get_repo(session: AsyncSession, item_id: uuid.UUID) -> str | None:
+        """Return the repository for a record."""
         query = (
             select(ProductProposalRecord.repo)
+            .join(FeatureRecord, FeatureRecord.proposal_id == ProductProposalRecord.id)
+            .join(FeatureItemRecord, FeatureItemRecord.feature_id == FeatureRecord.id)
+            .where(FeatureItemRecord.id == item_id)
+        )
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_proposal(session: AsyncSession, item_id: uuid.UUID) -> ProductProposalRecord | None:
+        """Return the related proposal record."""
+        query = (
+            select(ProductProposalRecord)
             .join(FeatureRecord, FeatureRecord.proposal_id == ProductProposalRecord.id)
             .join(FeatureItemRecord, FeatureItemRecord.feature_id == FeatureRecord.id)
             .where(FeatureItemRecord.id == item_id)
@@ -510,6 +786,7 @@ class FeatureItemRepository:
         session: AsyncSession,
         proposal_id: uuid.UUID,
     ) -> list[FeatureItemRecord]:
+        """List unassigned feature items for a proposal."""
         query = (
             select(FeatureItemRecord)
             .join(FeatureRecord, FeatureItemRecord.feature_id == FeatureRecord.id)
@@ -530,6 +807,7 @@ class FeatureItemRepository:
         *,
         task_id: uuid.UUID,
     ) -> FeatureItemRecord | None:
+        """Assign a task to a feature item."""
         now = utc_now()
         stmt = (
             update(FeatureItemRecord)
@@ -562,6 +840,7 @@ class FeatureItemRepository:
         title: str,
         description: str,
     ) -> FeatureItemRecord:
+        """Create a new database record."""
         query = select(func.coalesce(func.max(FeatureItemRecord.order_index), 0)).where(
             FeatureItemRecord.feature_id == feature_id
         )
@@ -584,6 +863,7 @@ class FeatureItemRepository:
 
     @staticmethod
     async def list_by_feature(session: AsyncSession, feature_id: uuid.UUID) -> list[FeatureItemRecord]:
+        """List feature items for a feature."""
         query = (
             select(FeatureItemRecord)
             .where(FeatureItemRecord.feature_id == feature_id)
@@ -599,6 +879,7 @@ class FeatureItemRepository:
         status: FeatureItemStatus,
         updated_at: datetime,
     ) -> list[FeatureItemRecord]:
+        """Set feature item status using its task id."""
         result = await session.execute(
             select(FeatureItemRecord).where(FeatureItemRecord.task_id == task_id)
         )
@@ -620,7 +901,7 @@ class FeatureItemRepository:
 
 class TaskRepository:
     @staticmethod
-    async def create(
+    async def create_pending(
         session: AsyncSession,
         *,
         agent: AgentName,
@@ -631,6 +912,7 @@ class TaskRepository:
         project: str | None,
         external_issue_url: str | None,
     ) -> TaskRecord:
+        """Create a pending tracking record."""
         task = TaskRecord(
             agent=agent,
             agent_instance_id=agent_instance_id,
@@ -642,13 +924,52 @@ class TaskRepository:
             status=TaskStatus.queued,
         )
         session.add(task)
+        await session.flush()
+        return task
+
+    @staticmethod
+    async def create(
+        session: AsyncSession,
+        *,
+        agent: AgentName,
+        agent_instance_id: uuid.UUID,
+        category: TaskCategory,
+        question: str,
+        repo: str | None,
+        project: str | None,
+        external_issue_url: str | None,
+    ) -> TaskRecord:
+        """Create a new database record."""
+        task = await TaskRepository.create_pending(
+            session,
+            agent=agent,
+            agent_instance_id=agent_instance_id,
+            category=category,
+            question=question,
+            repo=repo,
+            project=project,
+            external_issue_url=external_issue_url,
+        )
         await session.commit()
         await session.refresh(task)
         return task
 
     @staticmethod
     async def get(session: AsyncSession, task_id: uuid.UUID) -> TaskRecord | None:
+        """Return a record by identifier."""
         return await session.get(TaskRecord, task_id)
+
+    @staticmethod
+    async def list_existing_ids(
+        session: AsyncSession,
+        task_ids: list[uuid.UUID],
+    ) -> set[uuid.UUID]:
+        if not task_ids:
+            return set()
+        result = await session.execute(
+            select(TaskRecord.id).where(TaskRecord.id.in_(task_ids))
+        )
+        return set(result.scalars().all())
 
     @staticmethod
     async def list(
@@ -659,9 +980,15 @@ class TaskRepository:
         category: TaskCategory | None = None,
         repo: str | None = None,
         project: str | None = None,
+        user_id: uuid.UUID | None = None,
         limit: int = 200,
     ) -> list[TaskRecord]:
+        """List records matching filters."""
         query = select(TaskRecord)
+        if user_id is not None:
+            query = query.join(AgentInstanceRecord, AgentInstanceRecord.id == TaskRecord.agent_instance_id).where(
+                AgentInstanceRecord.user_id == user_id
+            )
 
         if agent_instance_id is not None:
             query = query.where(TaskRecord.agent_instance_id == agent_instance_id)
@@ -669,10 +996,12 @@ class TaskRepository:
             query = query.where(TaskRecord.status == status)
         if category is not None:
             query = query.where(TaskRecord.category == category)
-        if repo is not None:
-            query = query.where(TaskRecord.repo == repo)
-        if project is not None:
-            query = query.where(TaskRecord.project == project)
+        if repo is not None or project is not None:
+            query = query.join(WorkspaceRecord, WorkspaceRecord.agent_instance_id == TaskRecord.agent_instance_id)
+            if repo is not None:
+                query = query.where(WorkspaceRecord.github_repo == repo)
+            if project is not None:
+                query = query.where(WorkspaceRecord.project == project)
 
         query = query.order_by(TaskRecord.created_at.desc()).limit(limit)
         result = await session.execute(query)
@@ -684,6 +1013,7 @@ class TaskRepository:
         *,
         limit: int = 200,
     ) -> list[TaskRecord]:
+        """List tasks needing external pull request discovery."""
         query = (
             select(TaskRecord)
             .where(
@@ -704,6 +1034,7 @@ class TaskRepository:
         *,
         limit: int = 200,
     ) -> list[TaskRecord]:
+        """List tasks waiting in review queue."""
         reviewable_running_task = and_(
             TaskRecord.status == TaskStatus.running,
             select(TaskWorkItemRecord.id)
@@ -903,6 +1234,7 @@ class TaskRepository:
         *,
         checkpoint: list[ChatCompletionMessageParam] | None,
     ) -> TaskRecord | None:
+        """Persist the latest task checkpoint."""
         task = await session.get(TaskRecord, task_id)
         if task is None:
             return None
@@ -944,6 +1276,7 @@ class TaskRepository:
         session: AsyncSession,
         task_id: uuid.UUID,
     ) -> TaskRecord | None:
+        """Queue GitHub feedback for task execution."""
         task = await session.get(TaskRecord, task_id)
         if task is None:
             return None
@@ -968,6 +1301,7 @@ class TaskRepository:
         *,
         error: str | None = None,
     ) -> TaskRecord | None:
+        """Restore a task after feedback dispatch failure."""
         task = await session.get(TaskRecord, task_id)
         if task is None:
             return None
@@ -990,6 +1324,7 @@ class TaskRepository:
         *,
         result: str | None,
     ) -> TaskRecord | None:
+        """Mark a task as waiting for review."""
         task = await session.get(TaskRecord, task_id)
         if task is None:
             return None
@@ -1012,6 +1347,7 @@ class TaskRepository:
         session: AsyncSession,
         task_id: uuid.UUID,
     ) -> TaskRecord | None:
+        """Mark a task as merged."""
         task = await session.get(TaskRecord, task_id)
         if task is None:
             return None
@@ -1033,6 +1369,7 @@ class TaskRepository:
         session: AsyncSession,
         task_id: uuid.UUID,
     ) -> TaskRecord | None:
+        """Mark a task as closed."""
         task = await session.get(TaskRecord, task_id)
         if task is None:
             return None
@@ -1056,6 +1393,7 @@ class TaskRepository:
         *,
         error: str,
     ) -> TaskRecord | None:
+        """Mark a record as failed."""
         task = await session.get(TaskRecord, task_id)
         if task is None:
             return None
@@ -1079,6 +1417,7 @@ class TaskRepository:
         *,
         external_pull_request_url: str | None,
     ) -> TaskRecord | None:
+        """Store the task pull request URL."""
         task = await session.get(TaskRecord, task_id)
         if task is None:
             return None
@@ -1098,6 +1437,7 @@ class TaskWorkItemRepository:
         task_id: uuid.UUID,
         items: list[dict[str, str]],
     ) -> list[TaskWorkItemRecord]:
+        """Create multiple task work items."""
         existing = await TaskWorkItemRepository.list_by_task(session, task_id)
         if existing:
             return existing
@@ -1123,6 +1463,7 @@ class TaskWorkItemRepository:
         session: AsyncSession,
         task_id: uuid.UUID,
     ) -> list[TaskWorkItemRecord]:
+        """List work items for a task."""
         query = (
             select(TaskWorkItemRecord)
             .where(TaskWorkItemRecord.task_id == task_id)
@@ -1133,6 +1474,7 @@ class TaskWorkItemRepository:
 
     @staticmethod
     async def count_by_task(session: AsyncSession, task_id: uuid.UUID) -> int:
+        """Count work items for a task."""
         return len(await TaskWorkItemRepository.list_by_task(session, task_id))
 
     @staticmethod
@@ -1140,6 +1482,7 @@ class TaskWorkItemRepository:
         session: AsyncSession,
         work_item_id: uuid.UUID,
     ) -> TaskWorkItemRecord | None:
+        """Return a record by identifier."""
         return await session.get(TaskWorkItemRecord, work_item_id)
 
     @staticmethod
@@ -1147,6 +1490,7 @@ class TaskWorkItemRepository:
         session: AsyncSession,
         task_id: uuid.UUID,
     ) -> TaskWorkItemRecord | None:
+        """Return the currently running work item."""
         query = select(TaskWorkItemRecord).where(
             TaskWorkItemRecord.task_id == task_id,
             TaskWorkItemRecord.status == TaskWorkItemStatus.running,
@@ -1159,6 +1503,7 @@ class TaskWorkItemRepository:
         session: AsyncSession,
         task_id: uuid.UUID,
     ) -> TaskWorkItemRecord | None:
+        """Return the next work item ready to execute."""
         query = (
             select(TaskWorkItemRecord)
             .where(
@@ -1176,6 +1521,7 @@ class TaskWorkItemRepository:
         session: AsyncSession,
         work_item_id: uuid.UUID,
     ) -> TaskWorkItemRecord | None:
+        """Mark a record as running."""
         work_item = await session.get(TaskWorkItemRecord, work_item_id)
         if work_item is None:
             return None
@@ -1200,6 +1546,7 @@ class TaskWorkItemRepository:
         session: AsyncSession,
         work_item: TaskWorkItemRecord,
     ) -> TaskWorkItemRecord | None:
+        """Return the previous work item."""
         if work_item.order_index <= 1:
             return None
         query = select(TaskWorkItemRecord).where(
@@ -1219,6 +1566,7 @@ class TaskWorkItemRepository:
         head_commit: str,
         local_path: str,
     ) -> TaskWorkItemRecord | None:
+        """Mark a work item ready for review."""
         work_item = await session.get(TaskWorkItemRecord, work_item_id)
         if work_item is None:
             return None
@@ -1240,6 +1588,7 @@ class TaskWorkItemRepository:
         session: AsyncSession,
         work_item_id: uuid.UUID,
     ) -> TaskWorkItemRecord | None:
+        """Mark a work item approved."""
         return await TaskWorkItemRepository._set_status(
             session,
             work_item_id,
@@ -1251,6 +1600,7 @@ class TaskWorkItemRepository:
         session: AsyncSession,
         work_item_id: uuid.UUID,
     ) -> TaskWorkItemRecord | None:
+        """Mark a work item closed."""
         return await TaskWorkItemRepository._set_status(
             session,
             work_item_id,
@@ -1262,6 +1612,7 @@ class TaskWorkItemRepository:
         session: AsyncSession,
         work_item_id: uuid.UUID,
     ) -> TaskWorkItemRecord | None:
+        """Reopen a work item for review."""
         return await TaskWorkItemRepository._set_status(
             session,
             work_item_id,
@@ -1274,6 +1625,7 @@ class TaskWorkItemRepository:
         *,
         status: TaskWorkItemStatus,
     ) -> TaskWorkItemRecord | None:
+        """Set a record status."""
         work_item = await session.get(TaskWorkItemRecord, work_item_id)
         if work_item is None:
             return None
@@ -1308,6 +1660,7 @@ class GithubPullRequestFeedbackRepository:
         ignored_reason: str | None = None,
         payload: dict[str, Any] | None = None,
     ) -> tuple[GithubPullRequestFeedbackRecord, bool]:
+        """Create or update discovered GitHub feedback."""
         query = select(GithubPullRequestFeedbackRecord).where(
             GithubPullRequestFeedbackRecord.task_id == task_id,
             GithubPullRequestFeedbackRecord.kind == kind,
@@ -1373,6 +1726,7 @@ class GithubPullRequestFeedbackRepository:
         session: AsyncSession,
         task_id: uuid.UUID,
     ) -> bool:
+        """Return whether pending feedback exists for a task."""
         query = (
             select(GithubPullRequestFeedbackRecord.id)
             .where(
@@ -1391,6 +1745,7 @@ class GithubPullRequestFeedbackRepository:
         *,
         cutoff: datetime,
     ) -> bool:
+        """Return whether newer pending feedback exists."""
         query = (
             select(GithubPullRequestFeedbackRecord.id)
             .where(
@@ -1410,6 +1765,7 @@ class GithubPullRequestFeedbackRepository:
         *,
         limit: int = 20,
     ) -> list[GithubPullRequestFeedbackRecord]:
+        """Claim pending feedback for a task."""
         query = (
             select(GithubPullRequestFeedbackRecord)
             .where(
@@ -1441,6 +1797,7 @@ class GithubPullRequestFeedbackRepository:
         session: AsyncSession,
         feedback_ids: list[uuid.UUID],
     ) -> None:
+        """Mark feedback as processed."""
         if not feedback_ids:
             return
 
@@ -1462,6 +1819,7 @@ class GithubPullRequestFeedbackRepository:
         session: AsyncSession,
         feedback_ids: list[uuid.UUID],
     ) -> None:
+        """Requeue stuck processing feedback."""
         if not feedback_ids:
             return
 
@@ -1481,10 +1839,12 @@ class GithubPullRequestFeedbackRepository:
 class UserRepository:
     @staticmethod
     async def get(session: AsyncSession, user_id: uuid.UUID) -> UserRecord | None:
+        """Return a record by identifier."""
         return await session.get(UserRecord, user_id)
 
     @staticmethod
     async def get_by_github_id(session: AsyncSession, github_id: str) -> UserRecord | None:
+        """Return a user by GitHub id."""
         result = await session.execute(select(UserRecord).where(UserRecord.github_id == github_id))
         return result.scalar_one_or_none()
 
@@ -1496,6 +1856,7 @@ class UserRepository:
         github_login: str,
         email: str | None,
     ) -> UserRecord:
+        """Create or update a GitHub user."""
         user = await UserRepository.get_by_github_id(session, github_id)
         if user is None:
             user = UserRecord(github_id=github_id, github_login=github_login, email=email)
@@ -1510,6 +1871,7 @@ class UserRepository:
 
     @staticmethod
     async def add_balance(session: AsyncSession, user_id: uuid.UUID, amount: Decimal) -> UserRecord | None:
+        """Add balance to a user account."""
         user = await session.get(UserRecord, user_id)
         if user is None:
             return None
@@ -1529,6 +1891,7 @@ class AuthSessionRepository:
         user_id: uuid.UUID,
         expires_at: datetime,
     ) -> AuthSessionRecord:
+        """Create a new database record."""
         auth_session = AuthSessionRecord(token_hash=token_hash, user_id=user_id, expires_at=expires_at)
         session.add(auth_session)
         await session.commit()
@@ -1537,6 +1900,7 @@ class AuthSessionRepository:
 
     @staticmethod
     async def get_user_by_token_hash(session: AsyncSession, token_hash: str) -> UserRecord | None:
+        """Return a session user by token hash."""
         result = await session.execute(
             select(UserRecord)
             .join(AuthSessionRecord, AuthSessionRecord.user_id == UserRecord.id)
@@ -1546,6 +1910,7 @@ class AuthSessionRepository:
 
     @staticmethod
     async def delete(session: AsyncSession, token_hash: str) -> None:
+        """Delete a database record."""
         auth_session = await session.get(AuthSessionRecord, token_hash)
         if auth_session is not None:
             await session.delete(auth_session)
@@ -1564,6 +1929,7 @@ class AgentPurchaseRepository:
     ) -> AgentPurchaseRecord:
         # Purchasing touches user balance, agent instance, workspace, and purchase records;
         # keep every related write in this method so one commit/rollback covers the flow.
+        """Create an agent purchase record."""
         try:
             user = await session.get(UserRecord, user_id, with_for_update=True)
             if user is None:
@@ -1574,6 +1940,7 @@ class AgentPurchaseRepository:
             user.balance -= price
             user.updated_at = utc_now()
             agent_instance = AgentInstanceRecord(
+                user_id=user_id,
                 agent=agent,
                 client_id=f"purchase-{user_id.hex[:8]}-{uuid.uuid4().hex[:8]}",
                 display_name=f"{agent.value.title()} subscription",

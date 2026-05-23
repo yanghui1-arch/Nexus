@@ -10,7 +10,8 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from src.server.api.routes.auth import get_current_user, router as auth_router
+from src.server.api.dependencies import get_current_user
+from src.server.api.routes.auth import router as auth_router
 from sqlalchemy import select
 
 from src.server.postgres.models import AgentInstanceRecord, AgentName, AgentPurchaseRecord, WorkspaceRecord, WorkspaceStatus
@@ -25,11 +26,13 @@ AGENT_PRICES = {"tela": Decimal("5500.00"), "sophie": Decimal("6000.00")}
 
 
 def _hash_token(token: str) -> str:
+    """Hash a test session token."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 @pytest.mark.asyncio
 async def test_session_lookup_recharge_and_purchase(db_session):
+    """Verify session lookup recharge and purchase."""
     user = await UserRepository.upsert_github_user(
         db_session,
         github_id="123",
@@ -78,6 +81,7 @@ async def test_session_lookup_recharge_and_purchase(db_session):
 
 @pytest.mark.asyncio
 async def test_purchase_rejects_insufficient_balance(db_session):
+    """Verify purchase rejects insufficient balance."""
     user = await UserRepository.upsert_github_user(
         db_session,
         github_id="456",
@@ -108,19 +112,23 @@ async def test_purchase_rejects_insufficient_balance(db_session):
 
 class _AsyncSessionContext:
     async def __aenter__(self):
+        """Enter the async test context."""
         return SimpleNamespace()
 
     async def __aexit__(self, exc_type, exc, tb):
+        """Exit the async test context."""
         return None
 
 
 class _FakeDatabase:
     def session(self):
+        """Return a fake database session."""
         return _AsyncSessionContext()
 
 
 @pytest.mark.asyncio
 async def test_purchase_route_hides_repository_error(monkeypatch):
+    """Verify purchase route hides repository error."""
     app = FastAPI()
     app.include_router(auth_router)
     app.state.database = _FakeDatabase()
@@ -129,6 +137,7 @@ async def test_purchase_route_hides_repository_error(monkeypatch):
     app.dependency_overrides[get_current_user] = lambda: user
 
     async def fake_create_purchase(*args, **kwargs):
+        """Provide a fake create purchase."""
         raise ValueError("Insufficient balance")
 
     monkeypatch.setattr(AgentPurchaseRepository, "create_purchase", fake_create_purchase)

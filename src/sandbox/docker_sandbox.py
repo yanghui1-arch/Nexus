@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import base64
 from typing import Literal
 from dataclasses import dataclass
@@ -91,13 +91,37 @@ class Sandbox:
     """
 
     def __init__(self, config: SandboxConfig) -> None:
+        """Initialize the object."""
         self._config = config
         self._client: docker.DockerClient | None = None
         self._container = None
 
 
     async def __aenter__(self) -> "Sandbox":
+        """Enter the async context manager."""
+        return await self.start()
+
+
+    async def start(self, *, labels: dict[str, str] | None = None) -> "Sandbox":
+        """Start a container, reusing an existing labeled one when possible."""
         self._client = await asyncio.to_thread(docker.from_env)
+        if labels:
+            # Labels are the durable resume key: after a Celery worker restart,
+            # the in-memory pool is gone but Docker can still find this container.
+            containers = await asyncio.to_thread(
+                self._client.containers.list,
+                all=True,
+                filters={"label": [f"{key}={value}" for key, value in labels.items()]},
+            )
+            if containers:
+                self._container = containers[0]
+                if getattr(self._container, "status", None) != "running":
+                    await asyncio.to_thread(self._container.start)
+                    if hasattr(self._container, "reload"):
+                        await asyncio.to_thread(self._container.reload)
+                logger.info("Reusing existing Docker sandbox container after worker restart")
+                return self
+
         self._container = await asyncio.to_thread(
             self._client.containers.run,
             self._config.image,
@@ -107,6 +131,7 @@ class Sandbox:
             mem_limit=self._config.mem_limit,
             security_opt=["no-new-privileges"],
             working_dir="/workspace",
+            labels=labels,
         )
         for cmd in self._config.init_commands:
             if cmd.type == "install":
@@ -118,6 +143,7 @@ class Sandbox:
 
 
     async def __aexit__(self, *_) -> None:
+        """Exit the async context manager."""
         if self._container:
             await asyncio.to_thread(self._container.kill)
             self._container = None
@@ -257,6 +283,7 @@ class Sandbox:
 
 
     async def _exec(self, cmd: list[str]) -> dict:
+        """Execute a command in the sandbox."""
         exit_code, output = await asyncio.to_thread(
             self._container.exec_run, cmd, demux=True
         )
