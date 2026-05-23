@@ -266,6 +266,26 @@
           "in_progress": "进行中",
           "completed": "已完成",
           "closed": "已关闭"
+        },
+        "proposalSectionTabs": {
+          "decision-brief": "决策摘要",
+          "evidence": "证据",
+          "scope": "范围",
+          "risks": "风险",
+          "breakdown": "拆解",
+          "open-questions": "待确认问题",
+          "full-text": "全文"
+        },
+        "proposalSections": {
+          "problemOpportunity": "问题 / 机会",
+          "userBusinessImpact": "用户 / 业务影响",
+          "repositoryEvidence": "仓库证据",
+          "externalEvidence": "外部证据",
+          "proposedScope": "建议范围",
+          "nonGoals": "非目标",
+          "risksMitigations": "风险与缓解",
+          "suggestedSmallFeatureBreakdown": "建议小功能拆解",
+          "openQuestions": "待确认问题"
         }
       },
       "taskDetail": {
@@ -561,6 +581,26 @@
           "in_progress": "In Progress",
           "completed": "Completed",
           "closed": "Closed"
+        },
+        "proposalSectionTabs": {
+          "decision-brief": "Decision Brief",
+          "evidence": "Evidence",
+          "scope": "Scope",
+          "risks": "Risks",
+          "breakdown": "Breakdown",
+          "open-questions": "Open Questions",
+          "full-text": "Full Text"
+        },
+        "proposalSections": {
+          "problemOpportunity": "Problem / Opportunity",
+          "userBusinessImpact": "User / Business Impact",
+          "repositoryEvidence": "Repository Evidence",
+          "externalEvidence": "External Evidence",
+          "proposedScope": "Proposed Scope",
+          "nonGoals": "Non-Goals",
+          "risksMitigations": "Risks & Mitigations",
+          "suggestedSmallFeatureBreakdown": "Suggested Small Feature Breakdown",
+          "openQuestions": "Open Questions"
         }
       },
       "taskDetail": {
