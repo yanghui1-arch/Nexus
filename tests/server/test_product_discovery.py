@@ -12,7 +12,7 @@ from src.server.product_discovery import (
     build_product_discovery_question,
     decide_product_discovery_dispatch,
 )
-from src.server.postgres.models import AgentName, TaskCategory, TaskRecord, TaskStatus
+from src.server.postgres.models import AgentName, ProductProposalStatus, TaskCategory, TaskRecord, TaskStatus
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
     ProductProposalRepository,
@@ -257,6 +257,36 @@ def test_product_discovery_poller_start_and_stop(monkeypatch):
         assert poller._task is None
 
     asyncio.run(run())
+
+
+async def test_product_discovery_metrics_count_only_proposed_proposals(monkeypatch):
+    """Verify approved and planned proposals do not count as pending discovery work."""
+    captured = {}
+
+    async def fake_proposals(session, **filters):
+        """Provide proposed proposals only for metrics."""
+        captured["filters"] = filters
+        return [SimpleNamespace(status=ProductProposalStatus.proposed)]
+
+    monkeypatch.setattr(ProductProposalRepository, "list", fake_proposals)
+    poller = ProductDiscoveryPoller(
+        settings=_settings(product_discovery_pending_proposal_limit=50),
+        database=FakeDatabase(),
+        runner=FakeRunner(),
+    )
+
+    metrics = await poller._proposal_metrics(
+        object(),
+        SimpleNamespace(github_repo="owner/repo", project="nexus"),
+    )
+
+    assert metrics.pending_proposal_count == 1
+    assert metrics.pending_proposal_limit == 50
+    assert captured["filters"] == {
+        "project": "nexus",
+        "repo": "owner/repo",
+        "status": ProductProposalStatus.proposed,
+    }
 
 
 async def test_product_discovery_candidates_allow_waiting_for_review_pm_tasks(db_session):

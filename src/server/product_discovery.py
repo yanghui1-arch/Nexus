@@ -237,13 +237,14 @@ class ProductDiscoveryPoller:
                 self._settings.product_discovery_pending_proposal_limit,
             )
 
-        proposals = await ProductProposalRepository.list(session, repo=workspace.github_repo, project=workspace.project)
-        pending_count = sum(
-            proposal.status in {ProductProposalStatus.proposed, ProductProposalStatus.approved, ProductProposalStatus.planned}
-            for proposal in proposals
+        proposals = await ProductProposalRepository.list(
+            session,
+            repo=workspace.github_repo,
+            project=workspace.project,
+            status=ProductProposalStatus.proposed,
         )
         return ProductDiscoveryProposalMetrics(
-            pending_count,
+            len(proposals),
             self._settings.product_discovery_pending_proposal_limit,
         )
 
