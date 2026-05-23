@@ -128,17 +128,17 @@ class AgentTaskRunner:
                 if reset is None:
                     continue
 
-            # Recovery still needs to survive mixed historical data. New tasks read repo
-            # from workspace, but older persisted rows may only have task.repo.
-            resolved_repo = (workspace.github_repo if workspace is not None else None) or task.repo
+            # Recovery must preserve the repo snapshot captured when the task was created.
+            # Legacy rows may still have repo only on the workspace, so keep that fallback.
+            resolved_repo = task.repo or (workspace.github_repo if workspace is not None else None)
             if task.category == TaskCategory.coding and not resolved_repo:
                 async with self._database.session() as session:
                     await TaskRepository.set_failed(
                         session,
                         task.id,
-                        error="Recovery failed: workspace repo is missing.",
+                        error="Recovery failed: task repo snapshot is missing.",
                     )
-                logger.warning("Failed to recover task %s because workspace repo is missing.", task.id)
+                logger.warning("Failed to recover task %s because repo context is missing.", task.id)
                 continue
 
             try:
@@ -266,20 +266,19 @@ class AgentTaskRunner:
 
         category = _task_category_for_agent(AgentName(request.agent.value))
         workspace = await WorkspaceRepository.ensure_for_agent_instance(session, instance)
-        # Workspace is now the canonical repo/project binding for an agent instance.
         if category == TaskCategory.coding and not workspace.github_repo:
             raise ValueError("workspace repo is required for coding agents")
 
+        # Snapshot the workspace repo/project onto the task so later workspace edits do
+        # not rewrite the historical execution context for already-submitted work.
         task = await TaskRepository.create_pending(
             session,
             agent=AgentName(request.agent.value),
             agent_instance_id=request.agent_instance_id,
             category=category,
             question=request.question,
-            # New tasks no longer duplicate repo/project. Execution resolves them
-            # from the agent instance workspace at run time.
-            repo=None,
-            project=None,
+            repo=workspace.github_repo,
+            project=workspace.project,
             external_issue_url=request.external_issue_url,
         )
         logger.info(f"Agent `{instance.agent.name}` has workspace `{workspace.workspace_key}`")
