@@ -35,6 +35,11 @@ def _build_app(user_id: uuid.UUID, session_obj: object | None = None) -> FastAPI
     return app
 
 
+def _json_datetime(value: datetime) -> str:
+    """Match FastAPI JSON serialization for UTC datetimes."""
+    return value.isoformat().replace("+00:00", "Z")
+
+
 def test_update_workspace_persists_frontend_repo_project(monkeypatch) -> None:
     """Verify update workspace persists frontend repo project."""
     user_id = uuid.uuid4()
@@ -105,7 +110,7 @@ def test_update_workspace_persists_frontend_repo_project(monkeypatch) -> None:
     }
     payload = response.json()
     assert payload["id"] == str(instance_id)
-    assert payload["expires_at"] == instance.expires_at.isoformat()
+    assert payload["expires_at"] == _json_datetime(instance.expires_at)
     assert payload["workspace"]["github_repo"] == "owner/repo"
     assert payload["workspace"]["project"] == "nexus"
 
@@ -178,4 +183,4 @@ def test_update_agent_instance_display_name(monkeypatch) -> None:
         "display_name": "Primary Sophie",
     }
     assert response.json()["display_name"] == "Primary Sophie"
-    assert response.json()["expires_at"] == instance.expires_at.isoformat()
+    assert response.json()["expires_at"] == _json_datetime(instance.expires_at)
