@@ -876,6 +876,32 @@ class FeatureItemRepository:
         result = await session.execute(query)
         return list(result.scalars().all())
 
+    @staticmethod
+    async def reassign_task(
+        session: AsyncSession,
+        *,
+        source_task_id: uuid.UUID,
+        retry_task_id: uuid.UUID,
+    ) -> list[FeatureItemRecord]:
+        """Move feature-item ownership from a failed task to its retry task."""
+        now = utc_now()
+        result = await session.execute(
+            select(FeatureItemRecord).where(FeatureItemRecord.task_id == source_task_id)
+        )
+        items = list(result.scalars().all())
+        affected_feature_ids: set[uuid.UUID] = set()
+        for item in items:
+            item.task_id = retry_task_id
+            item.status = FeatureItemStatus.in_progress
+            item.finished_at = None
+            item.updated_at = now
+            if item.started_at is None:
+                item.started_at = now
+            affected_feature_ids.add(item.feature_id)
+        for feature_id in affected_feature_ids:
+            await FeatureRepository.sync_status_from_items(session, feature_id)
+        return items
+
     async def set_status_by_task_id(
         session: AsyncSession,
         task_id: uuid.UUID,
