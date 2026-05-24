@@ -10,6 +10,10 @@ export const WORKSPACE_NAV_ITEMS = [
     to: '/task-board',
   },
   {
+    labelKey: 'nav.workspaceSettings',
+    to: '/workspace-settings',
+  },
+  {
     labelKey: 'nav.publishTask',
     to: '/publish-task',
   },
