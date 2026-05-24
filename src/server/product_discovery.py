@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,7 +28,6 @@ from src.server.schemas import AgentKind, TaskCreateRequest
 
 
 PRODUCT_DISCOVERY_AGENT_NAMES = {AgentName.marc}
-
 ProductDiscoveryAction = Literal["dispatch", "skip"]
 
 
@@ -48,6 +48,8 @@ class ProductDiscoveryDecision:
 class ProductDiscoveryProposalMetrics:
     pending_proposal_count: int
     pending_proposal_limit: int
+    cooldown_seconds: int = 0
+    latest_discovery_or_proposal_at: datetime | None = None
 
 
 def _skip(
@@ -63,6 +65,7 @@ def decide_product_discovery_dispatch(
     candidate: AgentInstanceRecord,
     workspace: WorkspaceRecord | None,
     metrics: ProductDiscoveryProposalMetrics,
+    now: datetime | None = None,
 ) -> ProductDiscoveryDecision:
     """Decide whether a product discovery candidate should be dispatched.
 
@@ -70,6 +73,7 @@ def decide_product_discovery_dispatch(
         candidate: Agent instance being considered for product discovery.
         workspace: Workspace context associated with the agent instance.
         metrics: Proposal metrics used to avoid over-producing pending proposals.
+        now: Optional current time override for deterministic cooldown tests.
 
     Returns:
         Dispatch decision with a structured reason for logging and tests.
@@ -77,7 +81,7 @@ def decide_product_discovery_dispatch(
     candidate_id = candidate.id
     if workspace is None:
         return _skip(
-            "missing_workspace",
+            "missing-context",
             "Workspace context is missing.",
             {"candidate_id": candidate_id},
         )
@@ -86,7 +90,7 @@ def decide_product_discovery_dispatch(
     project = workspace.project
     if not repo or not project:
         return _skip(
-            "missing_workspace_context",
+            "missing-context",
             "Workspace repository or project context is missing.",
             {"candidate_id": candidate_id, "repo": repo, "project": project},
         )
@@ -103,6 +107,21 @@ def decide_product_discovery_dispatch(
             },
         )
 
+    if metrics.latest_discovery_or_proposal_at is not None and metrics.cooldown_seconds > 0:
+        current_time = now or datetime.now(UTC)
+        cooldown_until = metrics.latest_discovery_or_proposal_at + timedelta(seconds=metrics.cooldown_seconds)
+        if current_time < cooldown_until:
+            return _skip(
+                "cooldown_active",
+                "Recent product discovery or proposal is still within cooldown.",
+                {
+                    "latest_discovery_or_proposal_at": metrics.latest_discovery_or_proposal_at.isoformat(),
+                    "cooldown_until": cooldown_until.isoformat(),
+                    "repo": repo,
+                    "project": project,
+                },
+            )
+
     return ProductDiscoveryDecision(
         action="dispatch",
         reason=ProductDiscoveryDecisionReason(
@@ -113,10 +132,19 @@ def decide_product_discovery_dispatch(
     )
 
 
-def build_product_discovery_question(proposals: list[ProductProposalRecord], *, proposal_limit: int) -> str:
-    """Build a bounded product discovery prompt from recent proposals."""
+def build_product_discovery_question(
+    proposals: list[ProductProposalRecord],
+    *,
+    proposal_limit: int,
+    repo: str,
+    project: str,
+) -> str:
+    """Build a bounded product discovery prompt from workspace and recent proposals."""
     lines = [
         "优化产品并提出一个proposal",
+        "",
+        f"Repo: {repo}",
+        f"Project: {project}",
         "",
         "Recent proposals context (title and summary only):",
     ]
@@ -124,7 +152,7 @@ def build_product_discovery_question(proposals: list[ProductProposalRecord], *, 
         title = (proposal.title or "").strip()
         summary = (proposal.summary or "").strip()
         lines.extend([f"- Title: {title}", f"  Summary: {summary}"])
-    if len(lines) == 3:
+    if len(lines) == 6:
         lines.append("- None")
     return "\n".join(lines)
 
@@ -215,6 +243,8 @@ class ProductDiscoveryPoller:
                         question=build_product_discovery_question(
                             recent_proposals,
                             proposal_limit=recent_limit,
+                            repo=workspace.github_repo,
+                            project=workspace.project,
                         ),
                         external_issue_url=None,
                     )
@@ -244,11 +274,10 @@ class ProductDiscoveryPoller:
         user_id: uuid.UUID,
     ) -> ProductDiscoveryProposalMetrics:
         """Build proposal metrics for a workspace."""
+        pending_limit = self._settings.product_discovery_pending_proposal_limit
+        cooldown_seconds = self._settings.product_discovery_poll_interval_seconds
         if workspace is None or not workspace.github_repo or not workspace.project:
-            return ProductDiscoveryProposalMetrics(
-                0,
-                self._settings.product_discovery_pending_proposal_limit,
-            )
+            return ProductDiscoveryProposalMetrics(0, pending_limit, cooldown_seconds)
 
         proposals = await ProductProposalRepository.list(
             session,
@@ -257,9 +286,12 @@ class ProductDiscoveryPoller:
             project=workspace.project,
             status=ProductProposalStatus.proposed,
         )
+        latest_at = max((proposal.created_at for proposal in proposals), default=None)
         return ProductDiscoveryProposalMetrics(
             len(proposals),
-            self._settings.product_discovery_pending_proposal_limit,
+            pending_limit,
+            cooldown_seconds,
+            latest_at,
         )
 
     async def _run_loop(self) -> None:
