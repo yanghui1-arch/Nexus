@@ -399,6 +399,18 @@ class AgentInstanceCreateRequest(BaseModel):
     is_active: bool = True
 
 
+class AgentInstanceDisplayNameUpdateRequest(BaseModel):
+    display_name: str | None = None
+
+    @field_validator("display_name")
+    @classmethod
+    def validate_display_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+
 class AgentInstanceStatusUpdateRequest(BaseModel):
     is_active: bool
 
@@ -438,6 +450,7 @@ class AgentInstanceResponse(BaseModel):
     agent: str
     client_id: str
     display_name: str | None
+    expires_at: datetime | None
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -454,6 +467,7 @@ class AgentInstanceResponse(BaseModel):
             agent=instance.agent.value,
             client_id=instance.client_id,
             display_name=instance.display_name,
+            expires_at=instance.expires_at,
             is_active=instance.is_active,
             created_at=instance.created_at,
             updated_at=instance.updated_at,
