@@ -1,40 +1,23 @@
-const BRIEF_SECTIONS = {
-  problem: 'Problem / Opportunity',
-  impact: 'User & Business Impact',
-  evidence: 'Repository Evidence',
-  scope: 'Proposed Scope',
-  risks: 'Risks & Mitigations',
-  nextSteps: 'Suggested Small-feature Breakdown',
-} as const;
+import { parseProposalAnswerSections } from './proposalAnswerParser';
 
-export type BriefSectionKey = keyof typeof BRIEF_SECTIONS;
+export type BriefSectionKey =
+  | 'problem'
+  | 'impact'
+  | 'evidence'
+  | 'scope'
+  | 'risks'
+  | 'nextSteps';
 
 export function getProposalBriefSections(answer: string): Record<BriefSectionKey, string> {
-  const sections: Partial<Record<BriefSectionKey, string[]>> = {};
-  let current: BriefSectionKey | null = null;
-
-  answer.split(/\r?\n/).forEach(line => {
-    const heading = line.match(/^##\s+(.+)$/);
-    if (heading) {
-      current = (Object.entries(BRIEF_SECTIONS).find(
-        ([, title]) => title === heading[1].trim(),
-      )?.[0] as BriefSectionKey | undefined) ?? null;
-      if (current) {
-        sections[current] = [];
-      }
-      return;
-    }
-    if (current) {
-      sections[current]?.push(line);
-    }
-  });
-
-  return Object.fromEntries(
-    Object.keys(BRIEF_SECTIONS).map(key => [
-      key,
-      sections[key as BriefSectionKey]?.join('\n').trim() ?? '',
-    ]),
-  ) as Record<BriefSectionKey, string>;
+  const { sections } = parseProposalAnswerSections(answer);
+  return {
+    problem: sections.problemOpportunity ?? '',
+    impact: sections.userBusinessImpact ?? '',
+    evidence: sections.repositoryEvidence ?? '',
+    scope: sections.proposedScope ?? '',
+    risks: sections.risksMitigations ?? '',
+    nextSteps: sections.suggestedSmallFeatureBreakdown ?? '',
+  };
 }
 
 export function getFirstMeaningfulLine(content: string | undefined): string | null {
