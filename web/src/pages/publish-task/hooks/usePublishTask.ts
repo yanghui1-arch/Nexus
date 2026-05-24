@@ -2,15 +2,13 @@ import { startTransition, useEffect, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { getErrorDetail } from '@/api/client';
-import { updateAgentWorkspace } from '@/api/agentInstances';
 import { createTask } from '@/api/tasks';
 import type { WorkspaceRecordsData } from '@/lib/useWorkspaceRecords';
+import type { WorkspaceAgentOption } from '@/lib/workspace-task-view';
 import type { WorkspaceComposerValues } from '../types';
 
 const EMPTY_COMPOSER_VALUES: WorkspaceComposerValues = {
   question: '',
-  repo: '',
-  project: '',
   externalIssueUrl: '',
   agentInstanceId: '',
 };
@@ -23,6 +21,8 @@ type UsePublishTaskInput = Pick<
 export type PublishTask = {
   composerValues: WorkspaceComposerValues;
   setComposerValues: (next: WorkspaceComposerValues) => void;
+  selectedAgent: WorkspaceAgentOption | null;
+  hasWorkspaceContext: boolean;
   isSubmitting: boolean;
   publishTask: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 };
@@ -54,18 +54,24 @@ export function usePublishTask({
     }
   }, [agentOptions, composerValues.agentInstanceId]);
 
+  const selectedAgent = agentOptions.find(
+    agent => agent.id === composerValues.agentInstanceId,
+  ) ?? null;
+  const selectedAgentInstance = agentInstances.find(
+    agent => agent.id === composerValues.agentInstanceId,
+  );
+  const hasWorkspaceContext = Boolean(
+    selectedAgentInstance?.workspace?.github_repo &&
+      selectedAgentInstance?.workspace?.project,
+  );
+
   const publishTask = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const question = composerValues.question.trim();
-    const repo = composerValues.repo.trim();
-    const project = composerValues.project.trim();
     const externalIssueUrl = composerValues.externalIssueUrl.trim();
-    const selectedAgent = agentInstances.find(
-      agent => agent.id === composerValues.agentInstanceId,
-    );
 
-    if (!question || !repo || !selectedAgent) {
+    if (!question || !selectedAgentInstance || !hasWorkspaceContext) {
       return;
     }
 
@@ -74,14 +80,9 @@ export function usePublishTask({
     });
 
     try {
-      await updateAgentWorkspace(selectedAgent.id, {
-        github_repo: repo,
-        project: project || null,
-      });
-
       await createTask({
-        agent_instance_id: selectedAgent.id,
-        agent: selectedAgent.agent,
+        agent_instance_id: selectedAgentInstance.id,
+        agent: selectedAgentInstance.agent,
         question,
         external_issue_url: externalIssueUrl || null,
       });
@@ -89,7 +90,7 @@ export function usePublishTask({
       startTransition(() => {
         setComposerValues({
           ...EMPTY_COMPOSER_VALUES,
-          agentInstanceId: selectedAgent.id,
+          agentInstanceId: selectedAgentInstance.id,
         });
       });
 
@@ -112,6 +113,8 @@ export function usePublishTask({
   return {
     composerValues,
     setComposerValues,
+    selectedAgent,
+    hasWorkspaceContext,
     isSubmitting,
     publishTask,
   };

@@ -21,6 +21,8 @@ export default function PublishTaskPage() {
       <PublishTaskComposerCard
         value={publisher.composerValues}
         agents={data.agentOptions}
+        selectedAgent={publisher.selectedAgent}
+        hasWorkspaceContext={publisher.hasWorkspaceContext}
         isSubmitting={publisher.isSubmitting}
         onValueChange={publisher.setComposerValues}
         onSubmit={publisher.publishTask}

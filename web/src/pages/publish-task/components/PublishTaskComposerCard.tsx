@@ -1,4 +1,5 @@
 import type { FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { WorkspaceAgentOption } from '@/lib/workspace-task-view';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,8 @@ import type { WorkspaceComposerValues } from '../types';
 type PublishTaskComposerCardProps = {
   value: WorkspaceComposerValues;
   agents: WorkspaceAgentOption[];
+  selectedAgent: WorkspaceAgentOption | null;
+  hasWorkspaceContext: boolean;
   isSubmitting: boolean;
   onValueChange: (next: WorkspaceComposerValues) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -19,6 +22,8 @@ type PublishTaskComposerCardProps = {
 export function PublishTaskComposerCard({
   value,
   agents,
+  selectedAgent,
+  hasWorkspaceContext,
   isSubmitting,
   onValueChange,
   onSubmit,
@@ -38,8 +43,8 @@ export function PublishTaskComposerCard({
   const canSubmit =
     hasAgents &&
     value.question.trim().length > 0 &&
-    value.repo.trim().length > 0 &&
     value.agentInstanceId.length > 0 &&
+    hasWorkspaceContext &&
     !isSubmitting;
 
   return (
@@ -75,32 +80,6 @@ export function PublishTaskComposerCard({
             </div>
 
             <div className="grid gap-4 xl:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="publish-repo" className="text-sm font-medium">
-                  {t('common.repository')}
-                </label>
-                <Input
-                  id="publish-repo"
-                  value={value.repo}
-                  onChange={event => updateField('repo', event.target.value)}
-                  placeholder="owner/repo"
-                  className="bg-background"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="publish-project" className="text-sm font-medium">
-                  {t('publishTask.projectOptional')}
-                </label>
-                <Input
-                  id="publish-project"
-                  value={value.project}
-                  onChange={event => updateField('project', event.target.value)}
-                  placeholder="web"
-                  className="bg-background"
-                />
-              </div>
-
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="publish-issue-url" className="text-sm font-medium">
                   {t('publishTask.outerIssueUrlOptional')}
@@ -140,6 +119,44 @@ export function PublishTaskComposerCard({
                     {t('publishTask.activateAgentHint')}
                   </p>
                 ) : null}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-lg border bg-background p-4">
+              <div className="flex flex-col gap-1">
+                <p className="text-sm font-medium">{t('publishTask.selectedWorkspace')}</p>
+                {selectedAgent && hasWorkspaceContext ? (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      {t('publishTask.selectedWorkspaceDescription')}
+                    </p>
+                    <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-md bg-muted/40 p-3">
+                        <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                          {t('common.repository')}
+                        </div>
+                        <div className="mt-1 font-mono text-sm">
+                          {selectedAgent.workspaceRepo}
+                        </div>
+                      </div>
+                      <div className="rounded-md bg-muted/40 p-3">
+                        <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                          {t('common.project')}
+                        </div>
+                        <div className="mt-1 text-sm">
+                          {selectedAgent.workspaceProject}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {t('publishTask.workspaceRequiredDescription')}{' '}
+                    <Link to="/workspace-settings" className="font-medium text-foreground underline underline-offset-4">
+                      {t('publishTask.workspaceRequiredAction')}
+                    </Link>
+                  </p>
+                )}
               </div>
             </div>
           </div>
