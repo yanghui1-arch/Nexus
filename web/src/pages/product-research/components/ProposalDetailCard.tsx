@@ -37,8 +37,8 @@ function combineSections(sections: ProposalAnswerSectionMap, keys: (keyof Propos
     .join('\n\n');
 }
 
-function buildDetailTabs(sections: ProposalAnswerSectionMap, fullText: string): DetailTab[] {
-  const tabs = [
+function buildDetailTabs(sections: ProposalAnswerSectionMap): DetailTab[] {
+  return [
     {
       content: combineSections(sections, ['repositoryEvidence', 'externalEvidence']),
       labelKey: 'productResearch.proposalSectionTabs.evidence',
@@ -65,16 +65,6 @@ function buildDetailTabs(sections: ProposalAnswerSectionMap, fullText: string): 
       value: 'open-questions',
     },
   ].filter(tab => tab.content.trim());
-
-  if (fullText.trim()) {
-    tabs.push({
-      content: fullText,
-      labelKey: 'productResearch.proposalSectionTabs.fullText',
-      value: 'full-text',
-    });
-  }
-
-  return tabs;
 }
 
 type ProposalDetailCardProps = {
@@ -107,7 +97,7 @@ export function ProposalDetailCard({
   const canOpenPlanList =
     hasValidatedProposalPlan(proposal) && relatedFeatures.length > 0;
   const proposalAnswer = parseProposalAnswerSections(proposal.answer);
-  const detailTabs = buildDetailTabs(proposalAnswer.sections, proposalAnswer.fullText);
+  const detailTabs = buildDetailTabs(proposalAnswer.sections);
   const hasSectionTabs = Object.keys(proposalAnswer.sections).length > 0;
   const [activeTab, setActiveTab] = useState<'description' | 'plan-list'>('description');
   const visibleTab = activeTab === 'plan-list' && !canOpenPlanList

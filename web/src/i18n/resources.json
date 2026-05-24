@@ -336,8 +336,7 @@
           "scope": "Scope",
           "risks": "Risks",
           "breakdown": "Breakdown",
-          "openQuestions": "Open Questions",
-          "fullText": "Full Text"
+          "openQuestions": "Open Questions"
         }
       },
       "taskDetail": {
@@ -703,8 +702,7 @@
           "scope": "Scope",
           "risks": "Risks",
           "breakdown": "Breakdown",
-          "openQuestions": "Open Questions",
-          "fullText": "Full Text"
+          "openQuestions": "Open Questions"
         }
       },
       "taskDetail": {
