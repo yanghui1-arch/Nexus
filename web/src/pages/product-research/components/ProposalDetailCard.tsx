@@ -32,7 +32,7 @@ type ProposalDetailCardProps = {
   recoveringPlanning: boolean;
 };
 
-function BriefSection({
+function BriefLine({
   content,
   fallback,
   title,
@@ -42,16 +42,12 @@ function BriefSection({
   title: string;
 }) {
   return (
-    <section className="flex min-w-0 flex-col gap-3 rounded-lg border p-4">
-      <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        {title}
-      </h3>
-      {content?.trim() ? (
-        <MarkdownContent content={content} />
-      ) : (
-        <p className="text-sm text-muted-foreground">{fallback}</p>
-      )}
-    </section>
+    <div className="grid gap-1 border-t py-3 md:grid-cols-[13rem_1fr] md:gap-4">
+      <dt className="text-sm font-medium text-muted-foreground">{title}</dt>
+      <dd className="text-sm leading-6">
+        {getFirstMeaningfulLine(content) ?? fallback}
+      </dd>
+    </div>
   );
 }
 
@@ -192,46 +188,46 @@ export function ProposalDetailCard({
         </TabsList>
 
 
-        <TabsContent value="decision-brief" className="flex flex-col gap-5">
-          <section className="rounded-lg border bg-muted/30 p-4">
+        <TabsContent value="decision-brief" className="flex flex-col gap-4">
+          <section className="border-l-2 pl-4">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               {t('productResearch.decisionBriefApprovalAsk')}
             </p>
             <p className="mt-2 text-base font-medium">{recommendation}</p>
           </section>
 
-          <BriefSection
-            title={t('productResearch.summary')}
-            content={proposal.summary}
-            fallback={t('productResearch.decisionBriefUnavailable')}
-          />
-          <div className="grid gap-4 lg:grid-cols-2">
-            <BriefSection
+          <dl>
+            <BriefLine
+              title={t('productResearch.summary')}
+              content={proposal.summary}
+              fallback={t('productResearch.decisionBriefUnavailable')}
+            />
+            <BriefLine
               title={t('productResearch.decisionBriefProblem')}
               content={answerSections.problem}
               fallback={t('productResearch.decisionBriefUnavailable')}
             />
-            <BriefSection
+            <BriefLine
               title={t('productResearch.decisionBriefImpact')}
               content={answerSections.impact}
               fallback={t('productResearch.decisionBriefUnavailable')}
             />
-            <BriefSection
+            <BriefLine
               title={t('productResearch.decisionBriefEvidence')}
               content={answerSections.evidence}
               fallback={t('productResearch.decisionBriefEvidenceFallback')}
             />
-            <BriefSection
+            <BriefLine
               title={t('productResearch.decisionBriefRisks')}
               content={answerSections.risks}
               fallback={t('productResearch.decisionBriefUnavailable')}
             />
-          </div>
-          <BriefSection
-            title={t('productResearch.decisionBriefNextSteps')}
-            content={answerSections.nextSteps}
-            fallback={t('productResearch.decisionBriefNextStepsFallback')}
-          />
+            <BriefLine
+              title={t('productResearch.decisionBriefNextSteps')}
+              content={answerSections.nextSteps}
+              fallback={t('productResearch.decisionBriefNextStepsFallback')}
+            />
+          </dl>
           <p className="text-sm text-muted-foreground">
             {t('productResearch.decisionBriefFullTextHint')}
           </p>
