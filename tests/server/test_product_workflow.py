@@ -37,7 +37,7 @@ def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
     """Verify poll once publishes one feature item to tela."""
     item = SimpleNamespace(id="feature-item-id", title="Knowledge base", description="Add search.")
     feature = SimpleNamespace(project="nexus")
-    proposal = SimpleNamespace(repo="owner/repo", project="nexus")
+    proposal = SimpleNamespace(repo="owner/repo", project="nexus", user_id=uuid.uuid4())
     tela_instance_id = uuid.uuid4()
     tela = SimpleNamespace(id=tela_instance_id)
     runner = FakeRunner()
@@ -49,9 +49,10 @@ def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
         calls["item"] += 1
         return item if calls["item"] == 1 else None
 
-    async def fake_list_agents(session, *, agent, github_repo, project, limit):
+    async def fake_list_agents(session, *, agent, user_id, github_repo, project, limit):
         """Provide a fake list agents."""
         captured["agent"] = agent
+        captured["user_id"] = user_id
         captured["github_repo"] = github_repo
         captured["project"] = project
         captured["limit"] = limit
@@ -88,6 +89,7 @@ def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
 
     assert result == 1
     assert captured["agent"] == AgentName.tela
+    assert captured["user_id"] == proposal.user_id
     assert captured["github_repo"] == "owner/repo"
     assert captured["project"] == "nexus"
     assert captured["limit"] == 1

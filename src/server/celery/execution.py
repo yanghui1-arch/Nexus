@@ -51,6 +51,7 @@ _WORK_ITEM_REVIEW_READY_STATUSES = {
 
 @dataclass(frozen=True)
 class _ExecutionBinding:
+    user_id: uuid.UUID
     github_repo: str | None
     project: str | None
     workspace_key: str
@@ -181,6 +182,7 @@ async def execute_agent_task(
             task=task,
             on_progress=on_progress,
             settings=cfg,
+            user_id=binding.user_id,
             workspace_key=binding.workspace_key,
             github_repo=binding.github_repo,
             recovered=recovered,
@@ -218,6 +220,7 @@ async def _run_agent_workflow(
     task: TaskRecord,
     on_progress,
     settings: Settings,
+    user_id: uuid.UUID,
     workspace_key: str,
     github_repo: str | None,
     recovered: bool,
@@ -229,6 +232,7 @@ async def _run_agent_workflow(
             task=task,
             on_progress=on_progress,
             settings=settings,
+            user_id=user_id,
             workspace_key=workspace_key,
             github_repo=github_repo,
             recovered=recovered,
@@ -240,6 +244,7 @@ async def _run_agent_workflow(
             task=task,
             on_progress=on_progress,
             settings=settings,
+            user_id=user_id,
             workspace_key=workspace_key,
             github_repo=github_repo,
         )
@@ -253,6 +258,7 @@ async def _run_code_agent_workflow(
     task: TaskRecord,
     on_progress,
     settings: Settings,
+    user_id: uuid.UUID,
     workspace_key: str,
     github_repo: str | None,
     recovered: bool,
@@ -261,6 +267,7 @@ async def _run_code_agent_workflow(
     nexus_context = NexusTaskContext(
         task_id=task.id,
         database=database,
+        user_id=user_id,
         repo=task.repo or github_repo or "",
     )
     agent = _build_agent(
@@ -389,6 +396,7 @@ async def _run_pm_agent_workflow(
     task: TaskRecord,
     on_progress,
     settings: Settings,
+    user_id: uuid.UUID,
     workspace_key: str,
     github_repo: str | None,
 ):
@@ -396,6 +404,7 @@ async def _run_pm_agent_workflow(
     nexus_context = NexusTaskContext(
         task_id=task.id,
         database=database,
+        user_id=user_id,
         repo=task.repo or github_repo or "",
     )
     agent = _build_agent(
@@ -580,6 +589,7 @@ async def _load_binding(database: Database, task: TaskRecord) -> _ExecutionBindi
             raise RuntimeError("Missing repo/project context.")
 
     return _ExecutionBinding(
+        user_id=instance.user_id,
         github_repo=github_repo,
         project=project,
         workspace_key=workspace.workspace_key,

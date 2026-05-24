@@ -31,6 +31,7 @@ def make_context(*, current_work_item_id: uuid.UUID | None = None) -> NexusTaskC
     return NexusTaskContext(
         task_id=uuid.uuid4(),
         database=FakeDatabase(),
+        user_id=uuid.uuid4(),
         repo="owner/repo",
         current_work_item_id=current_work_item_id,
     )

@@ -8,7 +8,7 @@ from openai import pydantic_function_tool
 from pydantic import BaseModel, Field
 
 from src.server.postgres.database import Database
-from src.server.postgres.models import ProductProposalStatus
+from src.server.postgres.models import FeatureRecord, ProductProposalStatus
 from src.server.postgres.repositories import FeatureItemRepository, FeatureRepository, ProductProposalRepository
 from src.tools.nexus import NexusTaskContext
 
@@ -85,10 +85,13 @@ class ProductTools:
         repo: str | None = None,
     ) -> dict:
         """Create a product proposal."""
+        if self._context is None:
+            return {"success": False, "message": "Nexus task context is not available."}
+
         proposal_repo = repo
-        if not proposal_repo and self._context and self._context.repo:
+        if not proposal_repo and self._context.repo:
             proposal_repo = self._context.repo
-        proposal_source_task_id = self._context.task_id if self._context else None
+        proposal_source_task_id = self._context.task_id
 
         async with self._database.session() as session:
             proposal = await ProductProposalRepository.create(
@@ -97,6 +100,7 @@ class ProductTools:
                 plan_type=plan_type,
                 summary=summary,
                 answer=answer,
+                user_id=self._context.user_id,
                 project=project,
                 repo=proposal_repo,
                 source_task_id=proposal_source_task_id,
@@ -121,10 +125,15 @@ class ProductTools:
         description: str,
     ) -> dict:
         """Create a feature for a product proposal."""
+        if self._context is None:
+            return {"success": False, "message": "Nexus task context is not available."}
+
         async with self._database.session() as session:
             proposal = await ProductProposalRepository.get(session, proposal_id)
             if proposal is None:
                 return {"success": False, "message": "Proposal not found."}
+            if proposal.user_id != self._context.user_id:
+                return {"success": False, "message": "Proposal is not available in this task context."}
             if proposal.status not in {
                 ProductProposalStatus.approved,
                 ProductProposalStatus.planned,
@@ -161,10 +170,19 @@ class ProductTools:
         description: str,
     ) -> dict:
         """Create a feature item."""
+        if self._context is None:
+            return {"success": False, "message": "Nexus task context is not available."}
+
         async with self._database.session() as session:
-            feature = await FeatureRepository.get(session, feature_id)
+            feature: FeatureRecord | None = await FeatureRepository.get(session, feature_id)
             if feature is None:
                 return {"success": False, "message": "Feature not found."}
+            if feature.proposal_id is not None:
+                proposal = await ProductProposalRepository.get(session, feature.proposal_id)
+                if proposal is None:
+                    return {"success": False, "message": "Feature proposal not found."}
+                if proposal.user_id != self._context.user_id:
+                    return {"success": False, "message": "Feature is not available in this task context."}
 
             item = await FeatureItemRepository.create(
                 session,
