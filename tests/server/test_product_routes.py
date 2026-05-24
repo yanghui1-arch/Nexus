@@ -440,7 +440,11 @@ def test_retry_planning_dispatches_new_task_for_failed_run(monkeypatch) -> None:
 
     async def fake_get_latest_by_proposal(session, proposal_id):
         if captured.get("planning_run_task_id") is None:
-            return _planning_run(proposal_id=proposal_id, status="failed")
+            return _planning_run(
+                proposal_id=proposal_id,
+                task_id=planning_task_id,
+                status="failed",
+            )
         return latest_run
 
     monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
@@ -461,6 +465,7 @@ def test_retry_planning_dispatches_new_task_for_failed_run(monkeypatch) -> None:
     payload = runner.create_task_record.await_args.args[0]
     assert payload.agent_instance_id == marc_instance_id
     assert payload.agent.value == "marc"
+    assert f"Retry source failed task ID: {planning_task_id}" in payload.question
     runner.dispatch_existing_task.assert_awaited_once_with(
         planning_task_id,
         recovered=False,
