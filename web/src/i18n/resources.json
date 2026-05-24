@@ -18,7 +18,8 @@
         "processTracking": "进度追踪",
         "productResearch": "产品研究",
         "codeReview": "代码评审",
-        "pricing": "价格"
+        "pricing": "价格",
+        "failedTaskQueue": "失败任务队列"
       },
       "auth": {
         "logout": "退出登录",
@@ -366,6 +367,18 @@
         "finished": "结束时间",
         "result": "结果",
         "failedToLoad": "加载任务失败。"
+      },
+      "failedTaskQueue": {
+        "title": "失败任务队列",
+        "description": "查看失败的编码任务、错误摘要和 PR 关联状态。",
+        "loading": "正在加载失败任务…",
+        "empty": "暂无失败的编码任务。",
+        "loadFailed": "加载失败任务失败。",
+        "failedAt": "失败时间",
+        "errorSummary": "错误摘要",
+        "prStatus": "PR 链接状态",
+        "prLinked": "已关联 PR",
+        "noPr": "未关联 PR"
       }
     }
   },
@@ -388,7 +401,8 @@
         "processTracking": "Process Tracking",
         "productResearch": "Product Research",
         "codeReview": "Code Review",
-        "pricing": "Pricing"
+        "pricing": "Pricing",
+        "failedTaskQueue": "Failed Task Queue"
       },
       "auth": {
         "logout": "Logout",
@@ -736,6 +750,18 @@
         "finished": "Finished",
         "result": "Result",
         "failedToLoad": "Failed to load task."
+      },
+      "failedTaskQueue": {
+        "title": "Failed Task Queue",
+        "description": "Review failed coding tasks, error summaries, and PR link status.",
+        "loading": "Loading failed tasks...",
+        "empty": "No failed coding tasks.",
+        "loadFailed": "Failed to load failed tasks.",
+        "failedAt": "Failed At",
+        "errorSummary": "Error Summary",
+        "prStatus": "PR Link Status",
+        "prLinked": "PR linked",
+        "noPr": "No PR"
       }
     }
   }

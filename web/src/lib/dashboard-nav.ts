@@ -18,6 +18,10 @@ export const WORKSPACE_NAV_ITEMS = [
     to: '/process-tracking',
   },
   {
+    labelKey: 'nav.failedTaskQueue',
+    to: '/failed-task-queue',
+  },
+  {
     labelKey: 'nav.productResearch',
     to: '/product-research',
   },
