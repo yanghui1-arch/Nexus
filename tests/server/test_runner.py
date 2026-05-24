@@ -5,6 +5,7 @@ import sys
 import types
 import uuid
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -27,7 +28,7 @@ fake_celery_module = types.ModuleType("celery")
 fake_celery_module.Celery = _FakeCelery
 sys.modules.setdefault("celery", fake_celery_module)
 
-from src.server.postgres.models import AgentName, TaskCategory
+from src.server.postgres.models import AgentName, TaskCategory, TaskStatus
 from src.server.postgres.repositories import AgentInstanceRepository, TaskRepository, WorkspaceRepository
 from src.server.runner import AgentTaskRunner
 
@@ -141,3 +142,86 @@ def test_create_task_record_requires_workspace_repo_and_project(
 
     with pytest.raises(ValueError, match="workspace repo and project are required for task submission"):
         asyncio.run(runner._create_task_record(object(), request))
+
+
+def test_retry_failed_task_clones_required_fields(monkeypatch) -> None:
+    """Verify failed task retry creates a fresh queued task from the source."""
+    source_task_id = uuid.uuid4()
+    retry_task_id = uuid.uuid4()
+    agent_instance_id = uuid.uuid4()
+    source_task = SimpleNamespace(
+        id=source_task_id,
+        agent=AgentName.tela,
+        agent_instance_id=agent_instance_id,
+        category=TaskCategory.coding,
+        question="fix retry semantics",
+        repo="owner/repo",
+        project="nexus",
+        external_issue_url="https://github.com/owner/repo/issues/9",
+        status=TaskStatus.failed,
+    )
+    retry_task = SimpleNamespace(id=retry_task_id)
+    session = SimpleNamespace(
+        commit=AsyncMock(),
+        refresh=AsyncMock(),
+    )
+
+    class FakeDatabase:
+        def session(self):
+            class Context:
+                async def __aenter__(self_inner):
+                    return session
+
+                async def __aexit__(self_inner, exc_type, exc, tb):
+                    return None
+
+            return Context()
+
+    captured: dict[str, object] = {}
+
+    async def fake_get(session_arg, task_id):
+        """Provide the failed source task."""
+        assert session_arg is session
+        assert task_id == source_task_id
+        return source_task
+
+    async def fake_create_pending(session_arg, **kwargs):
+        """Capture cloned task fields."""
+        assert session_arg is session
+        captured.update(kwargs)
+        return retry_task
+
+    async def fake_dispatch_existing_task(task_id, **kwargs):
+        """Capture dispatch arguments."""
+        captured["dispatch_task_id"] = task_id
+        captured["dispatch_kwargs"] = kwargs
+        return True
+
+    monkeypatch.setattr(TaskRepository, "get", fake_get)
+    monkeypatch.setattr(TaskRepository, "create_pending", fake_create_pending)
+
+    runner = AgentTaskRunner(
+        settings=SimpleNamespace(),
+        database=FakeDatabase(),
+    )
+    monkeypatch.setattr(runner, "dispatch_existing_task", fake_dispatch_existing_task)
+
+    new_task_id = asyncio.run(runner.retry_failed_task(source_task_id))
+
+    assert new_task_id == retry_task_id
+    assert captured == {
+        "agent": AgentName.tela,
+        "agent_instance_id": agent_instance_id,
+        "category": TaskCategory.coding,
+        "question": "fix retry semantics",
+        "repo": "owner/repo",
+        "project": "nexus",
+        "external_issue_url": "https://github.com/owner/repo/issues/9",
+        "dispatch_task_id": retry_task_id,
+        "dispatch_kwargs": {
+            "recovered": False,
+            "fail_task_on_dispatch_error": True,
+        },
+    }
+    session.commit.assert_awaited_once()
+    session.refresh.assert_awaited_once_with(retry_task)
