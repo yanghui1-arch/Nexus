@@ -62,6 +62,7 @@ def _proposal(**overrides: Any) -> Any:
         "answer": "Build RAG in small slices.",
         "project": "nexus",
         "repo": "owner/repo",
+        "user_id": uuid.uuid4(),
         "status": ProductProposalStatus.proposed,
         "source_task_id": None,
         "latest_planning_task_exists": None,
@@ -94,6 +95,43 @@ def _planning_run(**overrides: Any) -> Any:
 async def _fake_user_workspaces(session, *, user_id):
     """Return fake workspaces for the current user."""
     return [SimpleNamespace(github_repo="owner/repo", project="nexus")]
+
+
+def test_create_proposal_persists_owner(monkeypatch) -> None:
+    """Verify proposal creation persists the authenticated owner id."""
+    user_id = uuid.uuid4()
+    captured = {}
+
+    async def fake_create(session, **kwargs):
+        """Provide a fake create."""
+        captured.update(kwargs)
+        return _proposal(id=uuid.UUID("00000000-0000-0000-0000-000000000010"), **kwargs)
+
+    monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
+    monkeypatch.setattr(ProductProposalRepository, "create", fake_create)
+    monkeypatch.setattr(ProposalPlanningRunRepository, "get_latest_by_proposal", AsyncMock(return_value=None))
+
+    async def run_request() -> httpx.Response:
+        """Run the request test body."""
+        transport = httpx.ASGITransport(app=_build_app(user_id=user_id))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(
+                "/v1/product/proposals",
+                json={
+                    "title": "Add RAG capability",
+                    "plan_type": "feature",
+                    "summary": "Improve answer quality with retrieval.",
+                    "answer": "Build RAG in small slices.",
+                    "project": "nexus",
+                    "repo": "owner/repo",
+                },
+            )
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 201
+    assert captured["user_id"] == user_id
+    assert response.json()["id"] == "00000000-0000-0000-0000-000000000010"
 
 
 def test_approve_proposal_dispatches_planning_task(monkeypatch) -> None:
@@ -328,7 +366,6 @@ def test_list_proposals_filters_current_user(monkeypatch) -> None:
 
     monkeypatch.setattr(ProductProposalRepository, "list", fake_list)
     monkeypatch.setattr(ProposalPlanningRunRepository, "get_latest_by_proposal_ids", AsyncMock(return_value={}))
-    monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
 
     async def run_request() -> httpx.Response:
         """Run the request test body."""
@@ -339,7 +376,7 @@ def test_list_proposals_filters_current_user(monkeypatch) -> None:
     response = asyncio.run(run_request())
 
     assert response.status_code == 200
-    assert captured["workspaces"] == [SimpleNamespace(github_repo="owner/repo", project="nexus")]
+    assert captured["user_id"] == user_id
 
 
 def test_get_proposal_hides_unscoped_record(monkeypatch) -> None:
@@ -348,11 +385,10 @@ def test_get_proposal_hides_unscoped_record(monkeypatch) -> None:
 
     async def fake_get(session, pid):
         """Provide a fake get."""
-        return _proposal(id=pid, repo="other/repo", project="other")
+        return _proposal(id=pid, user_id=uuid.uuid4(), repo="owner/repo", project="nexus")
 
     monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
     monkeypatch.setattr(ProposalPlanningRunRepository, "get_latest_by_proposal", AsyncMock(return_value=None))
-    monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
 
     async def run_request() -> httpx.Response:
         """Run the request test body."""
