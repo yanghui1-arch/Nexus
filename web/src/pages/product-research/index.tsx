@@ -188,6 +188,10 @@ export default function ProductResearchPage() {
       await reloadSnapshot('mutation');
       if (status === 'approved') {
         setProposalFilter('accepted');
+      } else {
+        setProposalFilter('proposed');
+        setProposalPage(1);
+        navigate('/product-research', { replace: true });
       }
     } catch (error) {
       toast.error(t('productResearch.updateProposalFailed'), {
