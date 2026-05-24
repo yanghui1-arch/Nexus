@@ -15,6 +15,7 @@ from src.server.postgres.repositories import (
 )
 from src.server.schemas import (
     AgentInstanceCreateRequest,
+    AgentInstanceDisplayNameUpdateRequest,
     AgentInstanceResponse,
     AgentInstanceStatusUpdateRequest,
     AgentKind,
@@ -84,6 +85,30 @@ async def get_agent_instance(
     async with database.session() as session:
         instance = await AgentInstanceRepository.get(session, agent_instance_id)
         if instance is None or instance.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Agent instance not found")
+        workspace = await WorkspaceRepository.get_by_agent_instance_id(session, instance.id)
+    return AgentInstanceResponse.from_record(instance, workspace=workspace)
+
+
+@router.patch("/{agent_instance_id}", response_model=AgentInstanceResponse)
+async def update_agent_instance(
+    request: Request,
+    agent_instance_id: uuid.UUID,
+    payload: AgentInstanceDisplayNameUpdateRequest,
+    user: UserRecord = Depends(get_current_user),
+) -> AgentInstanceResponse:
+    """Update editable metadata for an agent instance."""
+    database: Database = request.app.state.database
+    async with database.session() as session:
+        instance = await AgentInstanceRepository.get(session, agent_instance_id)
+        if instance is None or instance.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Agent instance not found")
+        instance = await AgentInstanceRepository.set_display_name(
+            session,
+            agent_instance_id,
+            display_name=payload.display_name,
+        )
+        if instance is None:
             raise HTTPException(status_code=404, detail="Agent instance not found")
         workspace = await WorkspaceRepository.get_by_agent_instance_id(session, instance.id)
     return AgentInstanceResponse.from_record(instance, workspace=workspace)

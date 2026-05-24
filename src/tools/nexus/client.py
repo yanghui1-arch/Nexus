@@ -23,6 +23,7 @@ from src.server.postgres.repositories import (
 class NexusTaskContext:
     task_id: uuid.UUID
     database: Database
+    user_id: uuid.UUID
     repo: str
     current_work_item_id: uuid.UUID | None = None
 
