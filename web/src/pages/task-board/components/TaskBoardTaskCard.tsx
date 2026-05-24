@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { classifyFailureReason } from '@/lib/failure-reason-classifier';
 import { timeAgo, type WorkspaceTaskView } from '@/lib/workspace-task-view';
 
 type TaskBoardTaskCardProps = {
@@ -13,6 +15,7 @@ export function TaskBoardTaskCard({
   onOpenReview,
 }: TaskBoardTaskCardProps) {
   const { t } = useTranslation();
+  const failureReason = task.error ? classifyFailureReason(task.error) : null;
   const canOpenReview =
     task.status === 'waiting_for_review' ||
     task.status === 'merged' ||
@@ -38,7 +41,10 @@ export function TaskBoardTaskCard({
       </div>
 
       {task.error ? (
-        <p className="mt-2 line-clamp-2 text-xs text-destructive">{task.error}</p>
+        <div className="mt-2 flex flex-col gap-1 text-xs text-destructive">
+          {failureReason ? <Badge variant="outline">{failureReason}</Badge> : null}
+          <p className="line-clamp-2">{task.error}</p>
+        </div>
       ) : null}
 
       <div className="mt-2 flex flex-col gap-0.5 text-xs text-muted-foreground">
