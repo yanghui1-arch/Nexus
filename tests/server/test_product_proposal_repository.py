@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from src.server.postgres.models import ProductProposalRecord, ProductProposalStatus, WorkspaceRecord
+from src.server.postgres.models import ProductProposalRecord, ProductProposalStatus, UserRecord, WorkspaceRecord
 from src.server.postgres.repositories import ProductProposalRepository
 
 
@@ -14,7 +16,7 @@ async def proposal_session():
     async with engine.begin() as conn:
         await conn.run_sync(
             ProductProposalRecord.metadata.create_all,
-            tables=[ProductProposalRecord.__table__],
+            tables=[UserRecord.__table__, ProductProposalRecord.__table__],
         )
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session:
@@ -22,25 +24,40 @@ async def proposal_session():
     await engine.dispose()
 
 
-async def _create_proposal(session, *, status=ProductProposalStatus.proposed, repo="owner/repo", project="nexus"):
+async def _create_proposal(
+    session,
+    *,
+    status=ProductProposalStatus.proposed,
+    repo="owner/repo",
+    project="nexus",
+    user_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
+):
     return await ProductProposalRepository.create(
         session,
         title="Improve product discovery",
         plan_type="feature",
         summary="Add a useful product improvement.",
         answer="Implement the change in small slices.",
+        user_id=user_id,
         project=project,
         repo=repo,
-    ) if status == ProductProposalStatus.proposed else await _create_non_proposed(session, status=status, repo=repo, project=project)
+    ) if status == ProductProposalStatus.proposed else await _create_non_proposed(
+        session,
+        status=status,
+        repo=repo,
+        project=project,
+        user_id=user_id,
+    )
 
 
-async def _create_non_proposed(session, *, status, repo, project):
+async def _create_non_proposed(session, *, status, repo, project, user_id):
     proposal = await ProductProposalRepository.create(
         session,
         title="Improve product discovery",
         plan_type="feature",
         summary="Add a useful product improvement.",
         answer="Implement the change in small slices.",
+        user_id=user_id,
         project=project,
         repo=repo,
     )
