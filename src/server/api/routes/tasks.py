@@ -164,6 +164,48 @@ async def list_task_work_items(
     return [TaskWorkItemResponse.from_record(work_item) for work_item in work_items]
 
 
+@router.post("/{task_id}/retry", response_model=TaskResponse, status_code=202)
+async def retry_task(
+    request: Request,
+    task_id: uuid.UUID,
+    user: UserRecord = Depends(get_current_user),
+) -> TaskResponse:
+    """Retry a failed coding task owned by the current user."""
+    runner: AgentTaskRunner = request.app.state.runner
+    database: Database = request.app.state.database
+
+    async with database.session() as session:
+        task = await TaskRepository.get(session, task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
+        workspace = await WorkspaceRepository.get_by_agent_instance_id(session, task.agent_instance_id)
+        if instance is None or instance.user_id != user.id:
+            raise HTTPException(status_code=403, detail="You do not have permission to retry this task")
+        if task.category != TaskCategory.coding:
+            raise HTTPException(status_code=409, detail="Only coding tasks can be retried")
+        if task.status != TaskStatus.failed:
+            raise HTTPException(status_code=409, detail="Only failed tasks can be retried")
+        queued_task = await TaskRepository.set_queued(session, task_id)
+
+    if queued_task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    try:
+        dispatched = await runner.dispatch_existing_task(
+            task_id,
+            recovered=False,
+            fail_task_on_dispatch_error=True,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Task retry dispatch failed: {exc}") from exc
+    if not dispatched:
+        raise HTTPException(status_code=409, detail="Task retry dispatch skipped because the task is no longer queued")
+
+    repo, project = _resolved_task_repo_project(queued_task, workspace)
+    return TaskResponse.from_record(queued_task, repo=repo, project=project)
+
+
 @router.patch("/{task_id}/status", response_model=TaskResponse)
 async def update_task_status(
     request: Request,
