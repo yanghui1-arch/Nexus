@@ -34,3 +34,21 @@ def test_parser_only_matches_second_level_markdown_headings():
 
     assert "SECOND_LEVEL_HEADING_PATTERN" in source
     assert "^##(?!#)" in source
+
+
+def test_parser_preserves_legacy_answer_fallback_contract():
+    source = PARSER.read_text()
+
+    assert "fullText = answer ?? ''" in source
+    assert "status = recognizedCount === 0" in source
+    assert "? 'unrecognized'" in source
+    assert "unrecognizedParts.push" in source
+
+
+def test_parser_supports_markdown_parse_failure_fallback_contract():
+    source = PARSER.read_text()
+
+    assert "fullText" in source
+    assert "unrecognizedContent" in source
+    assert "status: 'empty'" in source
+    assert "status }" in source
