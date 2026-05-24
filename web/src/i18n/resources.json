@@ -191,7 +191,14 @@
         "loadingQueue": "正在加载评审队列…",
         "emptyQueue": "{{queue}} 队列中没有 Nexus 任务。",
         "githubPr": "GitHub PR",
-        "githubIssue": "GitHub Issue"
+        "githubIssue": "GitHub Issue",
+        "failed": "失败",
+        "refreshQueue": "刷新队列",
+        "loadFailedTitle": "加载队列失败",
+        "tryAgain": "重试",
+        "emptyFailedQueue": "当前没有失败的 coding tasks。你可以返回任务看板查看进行中的任务，或创建一个新任务。",
+        "goToTaskBoard": "返回任务看板",
+        "createTask": "创建任务"
       },
       "processTracking": {
         "title": "进度追踪",
@@ -561,7 +568,14 @@
         "loadingQueue": "Loading review queue...",
         "emptyQueue": "No Nexus tasks are in {{queue}}.",
         "githubPr": "GitHub PR",
-        "githubIssue": "GitHub Issue"
+        "githubIssue": "GitHub Issue",
+        "failed": "Failed",
+        "refreshQueue": "Refresh queue",
+        "loadFailedTitle": "Failed to load queue",
+        "tryAgain": "Try again",
+        "emptyFailedQueue": "There are no failed coding tasks. Return to the Task Board to review active work, or create a new task.",
+        "goToTaskBoard": "Back to Task Board",
+        "createTask": "Create task"
       },
       "processTracking": {
         "title": "Process Tracking",
