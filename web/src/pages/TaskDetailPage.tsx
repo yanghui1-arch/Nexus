@@ -10,6 +10,11 @@ import { Badge } from '@/components/ui/badge';
 import { classifyFailureReason } from '@/lib/failure-reason-classifier';
 import { STATUS_META } from '@/lib/workspace-task-view';
 import {
+  taskCategoryLabel,
+  taskSourceNode,
+  truncateTaskError,
+} from '@/lib/task-display';
+import {
   Card,
   CardContent,
   CardDescription,
@@ -51,6 +56,7 @@ function MetadataRow({
 
 function LegacyTaskDetail({ task }: { task: LegacyTask }) {
   const { t } = useTranslation();
+  const taskError = truncateTaskError(task.error);
   const failureReason = task.error ? classifyFailureReason(task.error) : null;
 
   return (
@@ -78,14 +84,14 @@ function LegacyTaskDetail({ task }: { task: LegacyTask }) {
             <code>{task.metadata.branch}</code>
           </div>
         ) : null}
-        {task.error ? (
-          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        {taskError ? (
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" title={task.error ?? undefined}>
             {failureReason ? (
               <Badge variant="outline" className="mb-2 border-destructive/30 text-destructive">
                 {failureReason}
               </Badge>
             ) : null}
-            <p className="whitespace-pre-wrap break-words">{task.error}</p>
+            <p className="whitespace-pre-wrap break-words">{taskError}</p>
           </div>
         ) : null}
       </CardContent>
@@ -189,6 +195,7 @@ export default function TaskDetailPage() {
     );
   }
 
+  const detailError = truncateTaskError(task.error);
   const failureReason = task.error ? classifyFailureReason(task.error) : null;
 
   return (
@@ -208,6 +215,8 @@ export default function TaskDetailPage() {
         </div>
         <MetadataRow label={t('taskDetail.repository')} value={detailValue(task.repo)} />
         <MetadataRow label={t('taskDetail.project')} value={detailValue(task.project)} />
+        <MetadataRow label={t('taskDetail.category')} value={taskCategoryLabel(task.category)} />
+        <MetadataRow label={t('taskDetail.source')} value={taskSourceNode(task)} />
         <MetadataRow label={t('taskDetail.created')} value={new Date(task.created_at).toLocaleString()} />
         <MetadataRow label={t('taskDetail.updated')} value={new Date(task.updated_at).toLocaleString()} />
         <MetadataRow
@@ -226,14 +235,14 @@ export default function TaskDetailPage() {
             <p className="mt-2 whitespace-pre-wrap break-words">{task.result}</p>
           </div>
         ) : null}
-        {task.error ? (
-          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        {detailError ? (
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" title={task.error ?? undefined}>
             {failureReason ? (
               <Badge variant="outline" className="mb-2 border-destructive/30 text-destructive">
                 {failureReason}
               </Badge>
             ) : null}
-            <p className="whitespace-pre-wrap break-words">{task.error}</p>
+            <p className="whitespace-pre-wrap break-words">{detailError}</p>
           </div>
         ) : null}
       </CardContent>
