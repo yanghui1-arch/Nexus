@@ -172,6 +172,10 @@ export interface ApiAgentInstanceCreateRequest {
   is_active?: boolean;
 }
 
+export interface ApiAgentInstanceUpdateRequest {
+  display_name?: string | null;
+}
+
 export interface ApiAgentInstanceStatusUpdateRequest {
   is_active: boolean;
 }
@@ -186,6 +190,7 @@ export interface ApiAgentInstance {
   agent: ApiAgentKind;
   client_id: string;
   display_name: string | null;
+  expires_at: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

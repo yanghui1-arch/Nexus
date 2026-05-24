@@ -16,6 +16,7 @@ export type WorkspaceAgentOption = {
   agent: ApiAgentInstance['agent'];
   workspaceStatus: NonNullable<ApiAgentInstance['workspace']>['status'] | null;
   workspaceRepo: string | null;
+  workspaceProject: string | null;
 };
 
 export type WorkspaceTaskView = {
@@ -134,6 +135,7 @@ export function toWorkspaceAgentOption(
     agent: instance.agent,
     workspaceStatus: instance.workspace?.status ?? null,
     workspaceRepo: instance.workspace?.github_repo ?? null,
+    workspaceProject: instance.workspace?.project ?? null,
   };
 }
 
