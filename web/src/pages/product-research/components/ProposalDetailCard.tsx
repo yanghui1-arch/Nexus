@@ -41,8 +41,8 @@ function buildDetailTabs(sections: ProposalAnswerSectionMap): DetailTab[] {
   return [
     {
       content: combineSections(sections, ['problemOpportunity', 'userBusinessImpact', 'proposedScope']),
-      labelKey: 'productResearch.proposalSectionTabs.scope',
-      value: 'scope',
+      labelKey: 'productResearch.proposalSectionTabs.overview',
+      value: 'overview',
     },
     {
       content: combineSections(sections, ['repositoryEvidence', 'externalEvidence']),
@@ -58,11 +58,6 @@ function buildDetailTabs(sections: ProposalAnswerSectionMap): DetailTab[] {
       content: combineSections(sections, ['suggestedSmallFeatureBreakdown']),
       labelKey: 'productResearch.proposalSectionTabs.breakdown',
       value: 'breakdown',
-    },
-    {
-      content: combineSections(sections, ['openQuestions']),
-      labelKey: 'productResearch.proposalSectionTabs.openQuestions',
-      value: 'open-questions',
     },
   ].filter(tab => tab.content.trim());
 }

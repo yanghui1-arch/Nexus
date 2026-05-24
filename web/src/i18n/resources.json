@@ -332,11 +332,10 @@
           "closed": "已关闭"
         },
         "proposalSectionTabs": {
+          "overview": "概览",
           "evidence": "证据",
-          "scope": "范围",
           "risks": "风险",
-          "breakdown": "拆分",
-          "openQuestions": "待确认问题"
+          "breakdown": "拆分"
         }
       },
       "taskDetail": {
@@ -698,11 +697,10 @@
           "closed": "Closed"
         },
         "proposalSectionTabs": {
+          "overview": "Overview",
           "evidence": "Evidence",
-          "scope": "Scope",
           "risks": "Risks",
-          "breakdown": "Breakdown",
-          "openQuestions": "Open Questions"
+          "breakdown": "Breakdown"
         }
       },
       "taskDetail": {
