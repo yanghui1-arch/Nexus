@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import uuid
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from src.server.product_discovery import (
     ProductDiscoveryPoller,
@@ -53,15 +54,19 @@ def _settings(**overrides):
 
 
 def _metrics(**overrides):
+    """Create product discovery proposal metrics."""
     values = {
         "pending_proposal_count": 0,
         "pending_proposal_limit": 50,
+        "cooldown_seconds": 3600,
+        "latest_discovery_or_proposal_at": None,
     }
     values.update(overrides)
     return ProductDiscoveryProposalMetrics(**values)
 
 
 def test_decision_skips_when_pending_proposal_limit_reached():
+    """Verify decision skips once pending proposal backlog reaches the limit."""
     candidate = SimpleNamespace(id=uuid.uuid4())
     workspace = SimpleNamespace(github_repo="owner/repo", project="nexus")
 
@@ -76,7 +81,44 @@ def test_decision_skips_when_pending_proposal_limit_reached():
     assert decision.reason.details["pending_proposal_count"] == 50
 
 
+def test_decision_skips_when_cooldown_is_active():
+    """Verify decision skips while discovery cooldown is active."""
+    now = datetime(2025, 1, 1, tzinfo=UTC)
+    candidate = SimpleNamespace(id=uuid.uuid4())
+    workspace = SimpleNamespace(github_repo="owner/repo", project="nexus")
+
+    decision = decide_product_discovery_dispatch(
+        candidate=candidate,
+        workspace=workspace,
+        metrics=_metrics(latest_discovery_or_proposal_at=now - timedelta(minutes=10)),
+        now=now,
+    )
+
+    assert decision.action == "skip"
+    assert decision.reason.code == "cooldown_active"
+
+
+def test_decision_allows_dispatch_after_cooldown_without_pending_backlog():
+    """Verify decision allows dispatch when no backlog exists and cooldown elapsed."""
+    now = datetime(2025, 1, 1, tzinfo=UTC)
+    candidate = SimpleNamespace(id=uuid.uuid4())
+    workspace = SimpleNamespace(github_repo="owner/repo", project="nexus")
+
+    decision = decide_product_discovery_dispatch(
+        candidate=candidate,
+        workspace=workspace,
+        metrics=_metrics(latest_discovery_or_proposal_at=now - timedelta(hours=2)),
+        now=now,
+    )
+
+    assert decision.action == "dispatch"
+    assert decision.reason.code == "dispatch_allowed"
+    assert decision.reason.details["repo"] == "owner/repo"
+    assert decision.reason.details["project"] == "nexus"
+
+
 def test_decision_skips_when_context_is_missing():
+    """Verify missing workspace repo/project returns a missing-context reason."""
     candidate = SimpleNamespace(id=uuid.uuid4())
 
     decision = decide_product_discovery_dispatch(
@@ -86,7 +128,7 @@ def test_decision_skips_when_context_is_missing():
     )
 
     assert decision.action == "skip"
-    assert decision.reason.code == "missing_workspace_context"
+    assert decision.reason.code == "missing-context"
 
 
 def test_decision_allows_dispatch():
@@ -116,7 +158,7 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
 
     async def fake_proposals(session, **kwargs):
         """Provide fake recent proposals."""
-        captured["proposal_kwargs"] = kwargs
+        captured.setdefault("proposal_kwargs", []).append(kwargs)
         return []
 
     monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
@@ -137,13 +179,46 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
     payload = runner.submit_task.await_args.args[0]
     assert payload.agent_instance_id == candidate.id
     assert payload.agent == AgentName.marc
-    assert captured["proposal_kwargs"] == {
+    assert captured["proposal_kwargs"][-1] == {
         "user_id": candidate.user_id,
         "project": "nexus",
         "repo": "owner/repo",
         "limit": 5,
     }
+    assert payload.question
+    assert "owner/repo" in payload.question
+    assert "nexus" in payload.question
     assert "- None" in payload.question
+
+
+def test_poll_once_skips_missing_context_without_unhandled_exception(monkeypatch):
+    """Verify missing workspace metadata is skipped with a missing-context reason."""
+    candidate = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc, user_id=uuid.uuid4())
+    runner = FakeRunner()
+
+    async def fake_list(session, *, limit):
+        """Provide a fake list."""
+        return [candidate]
+
+    async def fake_workspace(session, agent_instance_id):
+        """Provide workspace with missing project metadata."""
+        return SimpleNamespace(github_repo="owner/repo", project=None)
+
+    monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
+    monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
+
+    poller = ProductDiscoveryPoller(
+        settings=_settings(),
+        database=FakeDatabase(),
+        runner=runner,
+    )
+
+    with patch("src.server.product_discovery.logger") as fake_logger:
+        result = asyncio.run(poller.poll_once())
+
+    assert result == 0
+    runner.submit_task.assert_not_awaited()
+    assert "missing-context" in fake_logger.info.call_args.args[2].code
 
 
 def test_product_discovery_prompt_limits_and_sanitizes_proposals() -> None:
@@ -154,21 +229,32 @@ def test_product_discovery_prompt_limits_and_sanitizes_proposals() -> None:
         SimpleNamespace(title="Drop me", summary="Should not appear", answer="SECRET_ANSWER_THREE"),
     ]
 
-    question = build_product_discovery_question(proposals, proposal_limit=2)
+    question = build_product_discovery_question(
+        proposals,
+        proposal_limit=2,
+        repo="owner/repo",
+        project="nexus",
+    )
 
     assert question.count("- Title:") == 2
+    assert "owner/repo" in question
+    assert "nexus" in question
     assert "Drop me" not in question
     assert "SECRET_ANSWER" not in question
     assert "T" * 150 in question
     assert "S" * 550 in question
-    assert len(question) == len(build_product_discovery_question(proposals[:2], proposal_limit=2))
+    assert len(question) == len(
+        build_product_discovery_question(proposals[:2], proposal_limit=2, repo="owner/repo", project="nexus")
+    )
 
 
 def test_product_discovery_prompt_handles_empty_proposals() -> None:
     """Verify empty recent proposals render predictable context."""
-    question = build_product_discovery_question([], proposal_limit=5)
+    question = build_product_discovery_question([], proposal_limit=5, repo="owner/repo", project="nexus")
 
     assert question.endswith("- None")
+    assert "owner/repo" in question
+    assert "nexus" in question
     assert "Answer:" not in question
 
 
@@ -271,7 +357,7 @@ async def test_product_discovery_metrics_count_only_proposed_proposals(monkeypat
     async def fake_proposals(session, **filters):
         """Provide proposed proposals only for metrics."""
         captured["filters"] = filters
-        return [SimpleNamespace(status=ProductProposalStatus.proposed)]
+        return [SimpleNamespace(status=ProductProposalStatus.proposed, created_at=None)]
 
     monkeypatch.setattr(ProductProposalRepository, "list", fake_proposals)
     poller = ProductDiscoveryPoller(
