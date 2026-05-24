@@ -2,6 +2,8 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
 from src.agents.base.agent import BaseAgentResponse
 from src.server.celery import execution
 from src.server.postgres.models import GithubPullRequestFeedbackKind, TaskCategory, TaskStatus, TaskWorkItemStatus
@@ -53,14 +55,14 @@ def make_task(**overrides):
         "agent": SimpleNamespace(value="sophie"),
         "category": TaskCategory.coding,
         "repo": "owner/repo",
-        "project": None,
+        "project": "workspace",
         "question": "do the task",
         "checkpoint": None,
         "resume_status": None,
     }
     values.update(overrides)
     values.setdefault("category", SimpleNamespace(value="coding"))
-    values.setdefault("project", None)
+    values.setdefault("project", "workspace")
     return SimpleNamespace(**values)
 
 
@@ -217,6 +219,43 @@ def test_build_marc_agent_with_optional_repo_context(monkeypatch):
         "github_repo": "owner/repo",
         "github_token": "marc-token",
     }
+
+
+def test_load_binding_requires_repo_and_project_context(monkeypatch):
+    """Verify binding rejects tasks that resolve without repo/project context."""
+    agent_instance_id = "agent-instance-id"
+    task = make_task(
+        agent_instance_id=agent_instance_id,
+        agent=SimpleNamespace(value="marc"),
+        repo="snapshot/repo",
+        project=None,
+    )
+    instance = SimpleNamespace(
+        id=agent_instance_id,
+        is_active=True,
+        agent=SimpleNamespace(value="marc"),
+    )
+    workspace = SimpleNamespace(
+        workspace_key="workspace-key",
+        github_repo="current/repo",
+        project=None,
+    )
+
+    async def fake_get(session, requested_agent_instance_id):
+        """Provide a fake agent instance lookup."""
+        assert requested_agent_instance_id == agent_instance_id
+        return instance
+
+    async def fake_ensure(session, agent_instance):
+        """Provide a fake workspace binding."""
+        assert agent_instance is instance
+        return workspace
+
+    monkeypatch.setattr(AgentInstanceRepository, "get", fake_get)
+    monkeypatch.setattr(WorkspaceRepository, "ensure_for_agent_instance", fake_ensure)
+
+    with pytest.raises(RuntimeError, match="Missing repo/project context."):
+        asyncio.run(execution._load_binding(FakeDatabase(), task))
 
 
 def test_run_agent_uses_fresh_context_without_checkpoint(monkeypatch):
