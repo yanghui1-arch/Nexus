@@ -59,37 +59,18 @@ Proposal quality gate:
 - Suggested small-feature breakdowns must be small enough for a coding agent to implement independently.
 - Every proposal must explicitly list non-goals: items that are intentionally out of scope, so the implementation does not expand unexpectedly. Example: for a proposal to add GitHub issue search filters, non-goals might include redesigning the whole issue page or changing authentication.
 
-Return and create clear proposals with title, plan type, and a complete answer formatted for fast human review.
+Return and create clear proposals with title, plan type, summary, and decision-ready answer content.
 
-# Proposal answer template
-When creating a product proposal, the `answer` field must use these markdown sections in this order:
+# Proposal output contract
+When creating a product proposal:
+- Match the proposal `title` language to the user's or task's language. Use Chinese for Chinese requests and English for English requests.
+- Keep `summary` to 1-3 sentences focused on what should be done and why it is worth doing.
+- Make `answer` concise and decision-oriented: help the reviewer decide whether to approve, defer, or reject the proposal.
+- Do not force every proposal into a fixed set of markdown sections. Use only the sections that improve review speed and decision quality.
+- Include enough evidence, scope, non-goals, and risk/mitigation detail for a safe approval decision.
+- Keep repository evidence explicit; every proposal still needs at least 2 repository-level evidence points.
+- Include external evidence when market, ecosystem, or trend claims are used.
+- Include `Open Questions` only when there are real unresolved decisions or missing facts that need human input.
 
-## Problem / Opportunity
-Describe the concrete user, business, or system-quality problem/opportunity and why now.
-
-## User & Business Impact
-Explain who benefits, expected user experience improvement, and business/system value.
-
-## Repository Evidence
-Cite relevant repository files, APIs, UI flows, database models, tests, issues, or observed gaps. If evidence is missing, say what was checked and what is unknown.
-
-## External Evidence
-Summarize useful web/customer/market evidence with links when available. If external research is not needed or unavailable, state that explicitly.
-
-## Proposed Scope
-List the smallest coherent scope that should be approved for implementation.
-
-## Non-goals
-List related work that should stay out of this proposal to prevent scope creep.
-
-## Risks & Mitigations
-Identify product, technical, operational, security, privacy, or rollout risks and how to reduce them.
-
-## Suggested Small-feature Breakdown
-Break the approved work into review-sized features or feature items suitable for implementation planning.
-
-## Open Questions
-List decisions or missing facts that need human input before or during planning.
-
-Keep every section specific and evidence-backed. Prefer concise bullets over long prose. Do not omit a section; write "None identified" only when appropriate.
+A strong `answer` usually includes concise bullets for the problem/opportunity, relevant evidence, proposed scope, non-goals, risks/mitigations, and a suggested small-feature breakdown. Omit optional sections that add no decision value.
 """

@@ -561,3 +561,16 @@ def test_feature_repository_sync_status_from_items_reopens_linked_proposal_when_
 
     assert updated.status == FeatureStatus.planned
     assert proposal.status == ProductProposalStatus.planned
+
+
+def test_create_proposal_tool_schema_describes_decision_ready_contract():
+    """Verify create_proposal schema guides Marc toward the proposal contract."""
+    from src.tools.product import CREATE_PRODUCT_PROPOSAL
+
+    props = CREATE_PRODUCT_PROPOSAL["function"]["parameters"]["properties"]
+
+    assert "user's or task's language" in props["title"]["description"]
+    assert "1-3 sentence summary" in props["summary"]["description"]
+    assert "what to do and why" in props["summary"]["description"]
+    assert "decision-ready" in props["answer"]["description"]
+    assert "Open Questions only" in props["answer"]["description"]
