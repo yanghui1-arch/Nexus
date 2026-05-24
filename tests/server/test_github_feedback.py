@@ -597,6 +597,132 @@ def test_poll_once_dispatches_merge_conflict_feedback(monkeypatch):
     assert "resolve merge conflicts" in captured[0]["body"]
 
 
+def test_poll_once_does_not_dispatch_unknown_mergeability_as_conflict(monkeypatch):
+    """Verify unknown mergeability does not wake the task as a conflict."""
+    task = SimpleNamespace(
+        id=uuid.uuid4(),
+        repo="owner/repo",
+        external_pull_request_url="https://github.com/owner/repo/pull/12",
+        agent=SimpleNamespace(value="sophie"),
+        status=TaskStatus.waiting_for_review,
+        result="review finished",
+        updated_at=datetime.fromisoformat("2024-01-10T00:00:00+00:00"),
+    )
+    runner = SimpleNamespace(dispatch_github_feedback=AsyncMock(return_value=True))
+
+    async def fake_list_candidates(session, *, limit):
+        """Provide a fake list candidates."""
+        return [task]
+
+    async def fake_fetch_pull_request(self, client, token, repo, pull_request_number):
+        """Provide a fake fetch pull request."""
+        return {
+            "state": "open",
+            "merged_at": None,
+            "mergeable": None,
+            "mergeable_state": "unknown",
+            "html_url": "https://github.com/owner/repo/pull/12",
+            "updated_at": "2024-01-11T00:00:00Z",
+            "base": {"sha": "base-1"},
+            "head": {"sha": "abc123"},
+        }
+
+    async def fake_resolve_viewer_login(self, client, token):
+        """Provide a fake resolve viewer login."""
+        return "nexus-bot"
+
+    async def fake_fetch_feedback_items(self, client, token, repo, pull_request_number):
+        """Provide a fake fetch feedback items."""
+        return []
+
+    async def fake_has_pending_newer_than(session, task_id, *, cutoff):
+        """Provide a fake has pending newer than."""
+        return False
+
+    monkeypatch.setattr(TaskRepository, "list_external_pull_request_candidates", fake_list_candidates)
+    monkeypatch.setattr(GithubFeedbackPoller, "_fetch_pull_request", fake_fetch_pull_request)
+    monkeypatch.setattr(GithubFeedbackPoller, "_resolve_viewer_login", fake_resolve_viewer_login)
+    monkeypatch.setattr(GithubFeedbackPoller, "_fetch_feedback_items", fake_fetch_feedback_items)
+    monkeypatch.setattr(
+        GithubPullRequestFeedbackRepository,
+        "has_pending_newer_than",
+        fake_has_pending_newer_than,
+    )
+
+    poller = GithubFeedbackPoller(
+        settings=_make_settings(),
+        database=FakeDatabase(),
+        runner=runner,
+    )
+    discovered = asyncio.run(poller.poll_once())
+
+    assert discovered == 0
+    runner.dispatch_github_feedback.assert_not_awaited()
+
+
+def test_poll_once_does_not_dispatch_blocked_pull_request_as_conflict(monkeypatch):
+    """Verify non-conflict merge blockers do not wake the task as a conflict."""
+    task = SimpleNamespace(
+        id=uuid.uuid4(),
+        repo="owner/repo",
+        external_pull_request_url="https://github.com/owner/repo/pull/12",
+        agent=SimpleNamespace(value="sophie"),
+        status=TaskStatus.waiting_for_review,
+        result="review finished",
+        updated_at=datetime.fromisoformat("2024-01-10T00:00:00+00:00"),
+    )
+    runner = SimpleNamespace(dispatch_github_feedback=AsyncMock(return_value=True))
+
+    async def fake_list_candidates(session, *, limit):
+        """Provide a fake list candidates."""
+        return [task]
+
+    async def fake_fetch_pull_request(self, client, token, repo, pull_request_number):
+        """Provide a fake fetch pull request."""
+        return {
+            "state": "open",
+            "merged_at": None,
+            "mergeable": False,
+            "mergeable_state": "blocked",
+            "html_url": "https://github.com/owner/repo/pull/12",
+            "updated_at": "2024-01-11T00:00:00Z",
+            "base": {"sha": "base-1"},
+            "head": {"sha": "abc123"},
+        }
+
+    async def fake_resolve_viewer_login(self, client, token):
+        """Provide a fake resolve viewer login."""
+        return "nexus-bot"
+
+    async def fake_fetch_feedback_items(self, client, token, repo, pull_request_number):
+        """Provide a fake fetch feedback items."""
+        return []
+
+    async def fake_has_pending_newer_than(session, task_id, *, cutoff):
+        """Provide a fake has pending newer than."""
+        return False
+
+    monkeypatch.setattr(TaskRepository, "list_external_pull_request_candidates", fake_list_candidates)
+    monkeypatch.setattr(GithubFeedbackPoller, "_fetch_pull_request", fake_fetch_pull_request)
+    monkeypatch.setattr(GithubFeedbackPoller, "_resolve_viewer_login", fake_resolve_viewer_login)
+    monkeypatch.setattr(GithubFeedbackPoller, "_fetch_feedback_items", fake_fetch_feedback_items)
+    monkeypatch.setattr(
+        GithubPullRequestFeedbackRepository,
+        "has_pending_newer_than",
+        fake_has_pending_newer_than,
+    )
+
+    poller = GithubFeedbackPoller(
+        settings=_make_settings(),
+        database=FakeDatabase(),
+        runner=runner,
+    )
+    discovered = asyncio.run(poller.poll_once())
+
+    assert discovered == 0
+    runner.dispatch_github_feedback.assert_not_awaited()
+
+
 def test_poll_once_redispatches_later_merge_conflict_episode(monkeypatch):
     """Verify a later conflict on the same PR is redispatched as new feedback."""
     task = SimpleNamespace(

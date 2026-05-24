@@ -512,8 +512,10 @@ def _build_pr_merge_conflict_item(
 ) -> _GithubFeedbackItem | None:
     """Build feedback for a pull request merge conflict."""
     mergeable_state = _normalize_text(pull_request.get("mergeable_state"))
-    mergeable = pull_request.get("mergeable")
-    if mergeable is not False and mergeable_state not in {"dirty", "unknown"}:
+    # Only wake the agent when GitHub positively reports an actual merge conflict.
+    # Transitional or policy states like unknown/behind/blocked/draft should not
+    # trigger a conflict-resolution task.
+    if mergeable_state != "dirty":
         return None
 
     body = (
