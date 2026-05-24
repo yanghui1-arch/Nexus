@@ -24,6 +24,9 @@ import {
   hasValidatedProposalPlan,
 } from '../utils';
 import { ProposalPlanList } from './ProposalPlanList';
+
+type DetailTabKey = 'decision-brief' | 'plan-list';
+
 type ProposalDetailCardProps = {
   activeReview: ReviewActionState;
   onReview: (proposalId: string, status: ReviewActionStatus) => Promise<void>;
@@ -70,9 +73,9 @@ export function ProposalDetailCard({
   const proposalAnswer = parseProposalAnswerSections(proposal.answer);
   const hasSectionTabs = Object.keys(proposalAnswer.sections).length > 0;
   const [activeDetailTab, setActiveDetailTab] = useState<ProposalAnswerSectionTab>('decision-brief');
-  const [activeTab, setActiveTab] = useState<'description' | 'plan-list'>('description');
+  const [activeTab, setActiveTab] = useState<DetailTabKey>('decision-brief');
   const visibleTab = activeTab === 'plan-list' && !canOpenPlanList
-    ? 'description'
+    ? 'decision-brief'
     : activeTab;
   const showRetryPlanning = planningStatus === 'failed';
   const showRecoverPlanning =
@@ -124,7 +127,7 @@ export function ProposalDetailCard({
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-2">
-                {showViewTask ? (
+              {showViewTask ? (
                 <Button asChild type="button" size="sm" variant="outline">
                   <Link to={`/task/${planningRun?.task_id}`}>
                     {t('productResearch.planningViewTask')}
@@ -168,18 +171,20 @@ export function ProposalDetailCard({
           if (value === 'plan-list' && !canOpenPlanList) {
             return;
           }
-          setActiveTab(value as 'description' | 'plan-list');
+          setActiveTab(value as DetailTabKey);
         }}
         className="gap-3"
       >
         <TabsList>
-          <TabsTrigger value="description">{t('common.description')}</TabsTrigger>
+          <TabsTrigger value="decision-brief">
+            {t('productResearch.decisionBrief')}
+          </TabsTrigger>
           <TabsTrigger value="plan-list" disabled={!canOpenPlanList}>
             {t('productResearch.planList')}
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="description" className="flex flex-col gap-8">
+        <TabsContent value="decision-brief" className="flex flex-col gap-8">
           {hasSectionTabs ? (
             <Tabs
               value={activeDetailTab}
