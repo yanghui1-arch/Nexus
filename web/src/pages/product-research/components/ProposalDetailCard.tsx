@@ -43,10 +43,11 @@ function BriefDisclosure({
 }) {
   return (
     <details className="group border-t py-4" open>
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-base font-medium">
+      <summary className="flex cursor-pointer list-none items-center gap-2 text-base font-medium">
+        <span className="text-muted-foreground transition-transform group-open:rotate-90" aria-hidden="true">
+          ›
+        </span>
         <h3 className="text-base font-semibold">{title}</h3>
-        <span className="text-sm text-muted-foreground group-open:hidden">＋</span>
-        <span className="hidden text-sm text-muted-foreground group-open:inline">－</span>
       </summary>
       <div className="mt-3 text-sm leading-6">
         {content?.trim() ? (
@@ -84,7 +85,7 @@ export function ProposalDetailCard({
     ? 'decision-brief'
     : activeTab;
   const answerSections = getProposalBriefSections(proposal.answer);
-  const decisionContext = [answerSections.scope, answerSections.problem]
+  const decisionContext = [proposal.summary, answerSections.scope, answerSections.problem]
     .filter(Boolean)
     .join('\n\n');
   const approachContent = answerSections.nextSteps || proposal.summary;
