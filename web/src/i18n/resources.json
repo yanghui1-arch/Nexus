@@ -13,6 +13,7 @@
       },
       "nav": {
         "taskBoard": "任务看板",
+        "failedTaskQueue": "失败任务队列",
         "workspaceSettings": "工作区配置",
         "publishTask": "发布任务",
         "processTracking": "进度追踪",
@@ -177,6 +178,22 @@
         "loadingTasks": "正在加载任务…",
         "emptyColumn": "此列暂无任务。",
         "openReview": "打开评审"
+      },
+      "failedTaskQueue": {
+        "title": "失败任务队列",
+        "description": "按仓库、智能体、失败时间和错误关键词筛选失败任务。",
+        "repoFilter": "按仓库筛选失败任务",
+        "agentFilter": "按智能体筛选失败任务",
+        "sortOrder": "失败时间排序",
+        "errorKeyword": "错误关键词",
+        "allRepos": "全部仓库",
+        "allAgents": "全部智能体",
+        "newestFirst": "失败时间：最新优先",
+        "oldestFirst": "失败时间：最早优先",
+        "errorKeywordPlaceholder": "搜索错误关键词",
+        "loading": "正在加载失败任务…",
+        "empty": "没有匹配的失败任务。",
+        "failedRelative": "失败于 {{time}}"
       },
       "codeReview": {
         "title": "代码评审",
@@ -383,6 +400,7 @@
       },
       "nav": {
         "taskBoard": "Task Board",
+        "failedTaskQueue": "Failed Task Queue",
         "workspaceSettings": "Workspace Settings",
         "publishTask": "Publish Task",
         "processTracking": "Process Tracking",
@@ -547,6 +565,22 @@
         "loadingTasks": "Loading tasks...",
         "emptyColumn": "No tasks in this column.",
         "openReview": "Open Review"
+      },
+      "failedTaskQueue": {
+        "title": "Failed Task Queue",
+        "description": "Filter failed tasks by repository, agent, failure time, and error keywords.",
+        "repoFilter": "Filter failed tasks by repository",
+        "agentFilter": "Filter failed tasks by agent",
+        "sortOrder": "Failure time sort order",
+        "errorKeyword": "Error keyword",
+        "allRepos": "All repositories",
+        "allAgents": "All agents",
+        "newestFirst": "Failure time: newest first",
+        "oldestFirst": "Failure time: oldest first",
+        "errorKeywordPlaceholder": "Search error keywords",
+        "loading": "Loading failed tasks...",
+        "empty": "No failed tasks match these filters.",
+        "failedRelative": "Failed {{time}}"
       },
       "codeReview": {
         "title": "Code Review",
