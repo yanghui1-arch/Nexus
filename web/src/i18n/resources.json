@@ -33,6 +33,10 @@
         "closed": "已关闭",
         "failed": "失败"
       },
+      "taskCategory": {
+        "coding": "编码任务",
+        "product discovery": "产品研究"
+      },
       "common": {
         "title": "标题",
         "project": "项目",
@@ -365,7 +369,15 @@
         "started": "开始时间",
         "finished": "结束时间",
         "result": "结果",
-        "failedToLoad": "加载任务失败。"
+        "failedToLoad": "加载任务失败。",
+        "failedActionPanel": {
+          "title": "任务执行失败",
+          "description": "请先查看失败摘要，再返回失败队列继续处理。",
+          "errorSummary": "错误摘要",
+          "failureClass": "失败分类",
+          "failedAt": "失败时间",
+          "backToQueue": "返回 Failed Task Queue"
+        }
       }
     }
   },
@@ -402,6 +414,10 @@
         "merged": "Merged",
         "closed": "Closed",
         "failed": "Failed"
+      },
+      "taskCategory": {
+        "coding": "Coding task",
+        "product discovery": "Product discovery"
       },
       "common": {
         "title": "Title",
@@ -735,7 +751,15 @@
         "started": "Started",
         "finished": "Finished",
         "result": "Result",
-        "failedToLoad": "Failed to load task."
+        "failedToLoad": "Failed to load task.",
+        "failedActionPanel": {
+          "title": "Task execution failed",
+          "description": "Review the failure summary, then return to the failed queue for triage.",
+          "errorSummary": "Error summary",
+          "failureClass": "Failure class",
+          "failedAt": "Failed at",
+          "backToQueue": "Back to Failed Task Queue"
+        }
       }
     }
   }
