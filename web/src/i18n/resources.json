@@ -335,7 +335,13 @@
           "overview": "概览",
           "evidence": "证据",
           "breakdown": "拆分"
-        }
+        },
+        "decisionBrief": "决策摘要",
+        "decisionBriefUnavailable": "该章节暂无结构化摘要。请切换到“描述”查看原始内容。",
+        "decisionBriefFullTextHint": "需要更多证据、风险和完整计划时，请切换到“描述”查看原始内容。",
+        "decisionBriefDecision": "决策方向",
+        "decisionBriefApproach": "实施路径",
+        "decisionBriefValue": "预期收益"
       },
       "taskDetail": {
         "title": "任务详情",
@@ -699,7 +705,13 @@
           "overview": "Overview",
           "evidence": "Evidence",
           "breakdown": "Breakdown"
-        }
+        },
+        "decisionBrief": "Decision Brief",
+        "decisionBriefUnavailable": "This section is not available as a structured summary. Open Description for the original content.",
+        "decisionBriefFullTextHint": "For more evidence, risks, and the complete plan, open Description to view the original content.",
+        "decisionBriefDecision": "Decision Direction",
+        "decisionBriefApproach": "Implementation Approach",
+        "decisionBriefValue": "Expected Value"
       },
       "taskDetail": {
         "title": "Task Detail",
