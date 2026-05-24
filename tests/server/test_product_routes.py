@@ -650,3 +650,102 @@ def test_retry_planning_rejects_when_workspace_context_missing(monkeypatch) -> N
     runner.create_task_record.assert_not_awaited()
     runner.dispatch_existing_task.assert_not_awaited()
 
+
+def test_retry_planning_rejects_when_agent_inactive(monkeypatch) -> None:
+    proposal_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    workspace = SimpleNamespace(
+        agent_instance_id=uuid.uuid4(),
+        github_repo="owner/repo",
+        project="nexus",
+        status="idle",
+    )
+    runner = SimpleNamespace(create_task_record=AsyncMock())
+
+    monkeypatch.setattr(
+        ProductProposalRepository,
+        "get",
+        AsyncMock(return_value=_proposal(id=proposal_id, user_id=user_id, status=ProductProposalStatus.approved)),
+    )
+    monkeypatch.setattr(
+        ProposalPlanningRunRepository,
+        "get_latest_by_proposal",
+        AsyncMock(return_value=_planning_run(proposal_id=proposal_id, status="failed")),
+    )
+    monkeypatch.setattr(
+        TaskRepository,
+        "get",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                id=uuid.uuid4(),
+                agent_instance_id=workspace.agent_instance_id,
+                repo="owner/repo",
+                project="nexus",
+            )
+        ),
+    )
+    monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", AsyncMock(return_value=workspace))
+    monkeypatch.setattr(
+        AgentInstanceRepository,
+        "get",
+        AsyncMock(return_value=SimpleNamespace(id=workspace.agent_instance_id, user_id=user_id, is_active=False)),
+    )
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(runner=runner, user_id=user_id))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(f"/v1/product/proposals/{proposal_id}/retry-planning")
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Original retry agent is no longer available"
+    runner.create_task_record.assert_not_awaited()
+
+
+def test_retry_planning_rejects_when_original_task_context_changed(monkeypatch) -> None:
+    proposal_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    agent_instance_id = uuid.uuid4()
+    workspace = SimpleNamespace(
+        agent_instance_id=agent_instance_id,
+        github_repo="owner/other",
+        project="nexus",
+        status="idle",
+    )
+    original_task = SimpleNamespace(
+        id=uuid.uuid4(),
+        agent_instance_id=agent_instance_id,
+        repo="owner/other",
+        project="nexus",
+    )
+    runner = SimpleNamespace(create_task_record=AsyncMock())
+
+    monkeypatch.setattr(
+        ProductProposalRepository,
+        "get",
+        AsyncMock(return_value=_proposal(id=proposal_id, user_id=user_id, status=ProductProposalStatus.approved)),
+    )
+    monkeypatch.setattr(
+        ProposalPlanningRunRepository,
+        "get_latest_by_proposal",
+        AsyncMock(return_value=_planning_run(proposal_id=proposal_id, task_id=original_task.id, status="failed")),
+    )
+    monkeypatch.setattr(TaskRepository, "get", AsyncMock(return_value=original_task))
+    monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", AsyncMock(return_value=workspace))
+    monkeypatch.setattr(
+        AgentInstanceRepository,
+        "get",
+        AsyncMock(return_value=SimpleNamespace(id=agent_instance_id, user_id=user_id, is_active=True)),
+    )
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(runner=runner, user_id=user_id))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(f"/v1/product/proposals/{proposal_id}/retry-planning")
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Original retry repo/project no longer matches the proposal"
+    runner.create_task_record.assert_not_awaited()
