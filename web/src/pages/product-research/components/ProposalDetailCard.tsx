@@ -50,11 +50,6 @@ function buildDetailTabs(sections: ProposalAnswerSectionMap): DetailTab[] {
       value: 'evidence',
     },
     {
-      content: combineSections(sections, ['risksMitigations']),
-      labelKey: 'productResearch.proposalSectionTabs.risks',
-      value: 'risks',
-    },
-    {
       content: combineSections(sections, ['suggestedSmallFeatureBreakdown']),
       labelKey: 'productResearch.proposalSectionTabs.breakdown',
       value: 'breakdown',

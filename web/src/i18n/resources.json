@@ -334,7 +334,6 @@
         "proposalSectionTabs": {
           "overview": "概览",
           "evidence": "证据",
-          "risks": "风险",
           "breakdown": "拆分"
         }
       },
@@ -699,7 +698,6 @@
         "proposalSectionTabs": {
           "overview": "Overview",
           "evidence": "Evidence",
-          "risks": "Risks",
           "breakdown": "Breakdown"
         }
       },
