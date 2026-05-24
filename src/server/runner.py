@@ -128,17 +128,21 @@ class AgentTaskRunner:
                 if reset is None:
                     continue
 
-            # Recovery must preserve the repo snapshot captured when the task was created.
-            # Legacy rows may still have repo only on the workspace, so keep that fallback.
+            # Recovery must preserve the repo/project snapshot captured when the task
+            # was created. Legacy rows may still need workspace fallback for one or
+            # both fields, so keep that compatibility path here.
             resolved_repo = task.repo or (workspace.github_repo if workspace is not None else None)
-            if task.category == TaskCategory.coding and not resolved_repo:
+            resolved_project = task.project if task.project is not None else (
+                workspace.project if workspace is not None else None
+            )
+            if not resolved_repo or not resolved_project:
                 async with self._database.session() as session:
                     await TaskRepository.set_failed(
                         session,
                         task.id,
-                        error="Recovery failed: task repo snapshot is missing.",
+                        error="Recovery failed: task repo/project context is missing.",
                     )
-                logger.warning("Failed to recover task %s because repo context is missing.", task.id)
+                logger.warning("Failed to recover task %s because repo/project context is missing.", task.id)
                 continue
 
             try:
@@ -266,8 +270,8 @@ class AgentTaskRunner:
 
         category = _task_category_for_agent(AgentName(request.agent.value))
         workspace = await WorkspaceRepository.ensure_for_agent_instance(session, instance)
-        if category == TaskCategory.coding and not workspace.github_repo:
-            raise ValueError("workspace repo is required for coding agents")
+        if not workspace.github_repo or not workspace.project:
+            raise ValueError("workspace repo and project are required for task submission")
 
         # Snapshot the workspace repo/project onto the task so later workspace edits do
         # not rewrite the historical execution context for already-submitted work.
