@@ -26,8 +26,12 @@ class ProposalNotFoundAfterPlanningStartError(ProposalPlanningError):
     """Raised when the proposal disappears during planning task startup."""
 
 
-def _build_planning_question(proposal: ProductProposalRecord) -> str:
-    return (
+def _build_planning_question(
+    proposal: ProductProposalRecord,
+    *,
+    retry_of_task_id: uuid.UUID | None = None,
+) -> str:
+    question = (
         "Plan the approved product proposal below. "
         "Create one or more features, then create one or more feature items for each feature.\n\n"
         f"Proposal ID: {proposal.id}\n"
@@ -38,6 +42,9 @@ def _build_planning_question(proposal: ProductProposalRecord) -> str:
         f"Summary: {proposal.summary}\n"
         f"Answer: {proposal.answer}"
     )
+    if retry_of_task_id is not None:
+        question = f"{question}\n\nRetry source failed task ID: {retry_of_task_id}"
+    return question
 
 
 async def start_proposal_planning(
@@ -46,6 +53,7 @@ async def start_proposal_planning(
     runner: AgentTaskRunner,
     proposal: ProductProposalRecord,
     user_id: uuid.UUID,
+    retry_of_task_id: uuid.UUID | None = None,
 ) -> ProductProposalRecord:
     """Start the Marc planning task for an approved proposal.
 
@@ -61,6 +69,7 @@ async def start_proposal_planning(
         runner: Task runner used to create and dispatch the planning task.
         proposal: Approved proposal that should be decomposed into features/items.
         user_id: Current user id used to scope Marc instance selection.
+        retry_of_task_id: Failed planning task id that this new task retries, when applicable.
 
     Returns:
         The refreshed proposal record after the planning task has been enqueued.
@@ -83,7 +92,7 @@ async def start_proposal_planning(
     planning_request = TaskCreateRequest(
         agent_instance_id=marc_instances[0].id,
         agent=AgentKind.marc,
-        question=_build_planning_question(proposal),
+        question=_build_planning_question(proposal, retry_of_task_id=retry_of_task_id),
         external_issue_url=None,
     )
     # Persist both the planning task row and its tracking row before dispatch.
