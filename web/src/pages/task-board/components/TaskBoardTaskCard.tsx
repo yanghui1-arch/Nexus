@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { classifyFailureReason } from '@/lib/failure-reason-classifier';
 import { timeAgo, type WorkspaceTaskView } from '@/lib/workspace-task-view';
 
 type TaskBoardTaskCardProps = {
@@ -18,6 +20,7 @@ export function TaskBoardTaskCard({
     task.status === 'merged' ||
     task.status === 'closed' ||
     Boolean(task.externalPullRequestUrl);
+  const failureReason = task.error ? classifyFailureReason(task.error) : null;
 
   return (
     <article className="min-w-0 rounded-lg border bg-background p-3">
@@ -38,7 +41,14 @@ export function TaskBoardTaskCard({
       </div>
 
       {task.error ? (
-        <p className="mt-2 line-clamp-2 text-xs text-destructive">{task.error}</p>
+        <div className="mt-2 flex flex-col gap-1">
+          {failureReason ? (
+            <Badge variant="outline" className="border-destructive/30 text-destructive">
+              {failureReason}
+            </Badge>
+          ) : null}
+          <p className="line-clamp-2 text-xs text-destructive">{task.error}</p>
+        </div>
       ) : null}
 
       <div className="mt-2 flex flex-col gap-0.5 text-xs text-muted-foreground">
