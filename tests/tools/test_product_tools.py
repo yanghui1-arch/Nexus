@@ -115,6 +115,8 @@ def _proposal(**overrides):
         "plan_type": "growth",
         "summary": "Help users reach value faster.",
         "answer": "Create a clearer onboarding flow.",
+        "details": None,
+        "panels": None,
         "project": "nexus",
         "repo": "owner/repo",
         "status": ProductProposalStatus.proposed,
@@ -175,6 +177,8 @@ def test_create_proposal_uses_context_task_id_and_repo_default(monkeypatch):
             plan_type=kwargs["plan_type"],
             summary=kwargs["summary"],
             answer=kwargs["answer"],
+            details=kwargs["details"],
+            panels=kwargs["panels"],
             project=kwargs["project"],
             repo=kwargs["repo"],
             user_id=kwargs["user_id"],
@@ -212,6 +216,8 @@ def test_create_proposal_uses_context_task_id_and_repo_default(monkeypatch):
         "plan_type": "growth",
         "summary": "Help users reach value faster.",
         "answer": "Create a clearer onboarding flow.",
+        "details": None,
+        "panels": None,
         "user_id": user_id,
         "project": "nexus",
         "repo": "owner/repo",
@@ -561,3 +567,51 @@ def test_feature_repository_sync_status_from_items_reopens_linked_proposal_when_
 
     assert updated.status == FeatureStatus.planned
     assert proposal.status == ProductProposalStatus.planned
+
+
+def test_create_proposal_accepts_structured_details(monkeypatch):
+    """Verify product tool forwards optional structured proposal details."""
+    details = {
+        "overview": "Add proposal panels.",
+        "scope": ["contract", "API"],
+        "evidence": ["requested by PM"],
+        "risks": ["legacy consumers"],
+        "implementation_split": ["model", "schema", "tool"],
+    }
+    panels = {"risks": {"items": ["legacy consumers"]}}
+    captured = {}
+
+    async def fake_create(session, **kwargs):
+        captured.update(kwargs)
+        return _proposal(
+            id=uuid.UUID("00000000-0000-0000-0000-000000000002"),
+            title=kwargs["title"],
+            plan_type=kwargs["plan_type"],
+            summary=kwargs["summary"],
+            answer=kwargs["answer"],
+            details=kwargs["details"],
+            panels=kwargs["panels"],
+            project=kwargs["project"],
+            repo=kwargs["repo"],
+            user_id=kwargs["user_id"],
+            source_task_id=kwargs["source_task_id"],
+        )
+
+    monkeypatch.setattr(ProductProposalRepository, "create", fake_create)
+    tools = ProductTools(database=FakeDatabase(), context=_context())
+
+    async def run():
+        return await tools.create_proposal(
+            title="Structured proposal",
+            plan_type="feature",
+            summary="Expose panels.",
+            answer="Legacy answer stays available.",
+            details=details,
+            panels=panels,
+        )
+
+    result = anyio.run(run)
+
+    assert result["success"] is True
+    assert captured["details"] == details
+    assert captured["panels"] == panels
