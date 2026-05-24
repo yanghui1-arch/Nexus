@@ -43,6 +43,7 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
         "plan_type",
         "summary",
         "answer",
+        "user_id",
         "project",
         "repo",
         "status",
@@ -146,6 +147,41 @@ class Database:
                 )
             await conn.execute(text("ALTER TABLE workspace ADD COLUMN IF NOT EXISTS github_repo VARCHAR(255)"))
             await conn.execute(text("ALTER TABLE workspace ADD COLUMN IF NOT EXISTS project VARCHAR(255)"))
+            await conn.execute(
+                text(
+                    "ALTER TABLE product_proposal "
+                    "ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES user_account(id) ON DELETE CASCADE"
+                )
+            )
+            await conn.execute(
+                text(
+                    "UPDATE product_proposal "
+                    "SET user_id = ("
+                    "SELECT ai.user_id "
+                    "FROM task t "
+                    "JOIN agent_instance ai ON ai.id = t.agent_instance_id "
+                    "WHERE t.id = product_proposal.source_task_id"
+                    ") "
+                    "WHERE user_id IS NULL AND source_task_id IS NOT NULL"
+                )
+            )
+            await conn.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_product_proposal_user_id ON product_proposal (user_id)")
+            )
+            unresolved_proposal_owner_count = int(
+                (
+                    await conn.execute(
+                        text("SELECT COUNT(*) FROM product_proposal WHERE user_id IS NULL")
+                    )
+                ).scalar_one()
+            )
+            if unresolved_proposal_owner_count > 0:
+                raise RuntimeError(
+                    "product_proposal contains rows without a resolvable user_id. "
+                    "Backfill those rows before continuing."
+                )
+            if conn.dialect.name == "postgresql":
+                await conn.execute(text("ALTER TABLE product_proposal ALTER COLUMN user_id SET NOT NULL"))
             await conn.execute(
                 text(
                     "ALTER TABLE task ADD COLUMN IF NOT EXISTS "

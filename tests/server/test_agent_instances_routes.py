@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import httpx
@@ -46,6 +46,7 @@ def test_update_workspace_persists_frontend_repo_project(monkeypatch) -> None:
         agent=AgentName.sophie,
         client_id="client-1",
         display_name="Sophie",
+        expires_at=now + timedelta(days=30),
         is_active=True,
         created_at=now,
         updated_at=now,
@@ -104,5 +105,77 @@ def test_update_workspace_persists_frontend_repo_project(monkeypatch) -> None:
     }
     payload = response.json()
     assert payload["id"] == str(instance_id)
+    assert payload["expires_at"] == instance.expires_at.isoformat()
     assert payload["workspace"]["github_repo"] == "owner/repo"
     assert payload["workspace"]["project"] == "nexus"
+
+
+def test_update_agent_instance_display_name(monkeypatch) -> None:
+    """Verify display name updates through the metadata route."""
+    user_id = uuid.uuid4()
+    instance_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+    instance = SimpleNamespace(
+        id=instance_id,
+        user_id=user_id,
+        agent=AgentName.sophie,
+        client_id="client-1",
+        display_name="Sophie",
+        expires_at=now + timedelta(days=30),
+        is_active=True,
+        created_at=now,
+        updated_at=now,
+    )
+    workspace = SimpleNamespace(
+        id=uuid.uuid4(),
+        agent_instance_id=instance_id,
+        workspace_key=f"agent-instance:{instance_id}",
+        github_repo="owner/repo",
+        project="nexus",
+        docker_container_id=None,
+        docker_volume_name=None,
+        status=WorkspaceStatus.idle,
+        last_used_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    captured = {}
+
+    async def fake_get(session, agent_instance_id):
+        """Provide a fake get."""
+        assert agent_instance_id == instance_id
+        return instance
+
+    async def fake_set_display_name(session, agent_instance_id, *, display_name):
+        """Provide a fake set display name."""
+        captured["agent_instance_id"] = agent_instance_id
+        captured["display_name"] = display_name
+        return SimpleNamespace(**{**instance.__dict__, "display_name": display_name})
+
+    async def fake_workspace(session, agent_instance_id):
+        """Provide a fake workspace lookup."""
+        assert agent_instance_id == instance_id
+        return workspace
+
+    monkeypatch.setattr(AgentInstanceRepository, "get", fake_get)
+    monkeypatch.setattr(AgentInstanceRepository, "set_display_name", fake_set_display_name)
+    monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
+
+    async def run_request() -> httpx.Response:
+        """Run the request test body."""
+        transport = httpx.ASGITransport(app=_build_app(user_id))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.patch(
+                f"/v1/agent-instances/{instance_id}",
+                json={"display_name": "Primary Sophie"},
+            )
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 200
+    assert captured == {
+        "agent_instance_id": instance_id,
+        "display_name": "Primary Sophie",
+    }
+    assert response.json()["display_name"] == "Primary Sophie"
+    assert response.json()["expires_at"] == instance.expires_at.isoformat()

@@ -203,6 +203,23 @@ class AgentInstanceRepository:
         await session.refresh(instance)
         return instance
 
+    @staticmethod
+    async def set_display_name(
+        session: AsyncSession,
+        instance_id: uuid.UUID,
+        *,
+        display_name: str | None,
+    ) -> AgentInstanceRecord | None:
+        """Update the user-facing display name for an agent instance."""
+        instance = await AgentInstanceRepository.get(session, instance_id)
+        if instance is None:
+            return None
+        instance.display_name = display_name
+        instance.updated_at = utc_now()
+        await session.commit()
+        await session.refresh(instance)
+        return instance
+
 
 class WorkspaceRepository:
     @staticmethod
@@ -345,6 +362,7 @@ class ProductProposalRepository:
         plan_type: str,
         summary: str,
         answer: str,
+        user_id: uuid.UUID,
         project: str | None,
         repo: str | None,
         source_task_id: uuid.UUID | None = None,
@@ -355,6 +373,7 @@ class ProductProposalRepository:
             plan_type=plan_type,
             summary=summary,
             answer=answer,
+            user_id=user_id,
             project=project,
             repo=repo,
             source_task_id=source_task_id,
@@ -374,25 +393,16 @@ class ProductProposalRepository:
     async def list(
         session: AsyncSession,
         *,
+        user_id: uuid.UUID | None = None,
         status: ProductProposalStatus | None = None,
         project: str | None = None,
         repo: str | None = None,
-        workspaces: list[WorkspaceRecord] | None = None,
         limit: int = 200,
     ) -> list[ProductProposalRecord]:
         """List records matching filters."""
         query = select(ProductProposalRecord)
-        if workspaces is not None:
-            if not workspaces:
-                return []
-            query = query.where(
-                or_(
-                    *(
-                        and_(ProductProposalRecord.repo == workspace.github_repo, ProductProposalRecord.project == workspace.project)
-                        for workspace in workspaces
-                    )
-                )
-            )
+        if user_id is not None:
+            query = query.where(ProductProposalRecord.user_id == user_id)
         if status is not None:
             query = query.where(ProductProposalRecord.status == status)
         if project is not None:
@@ -671,24 +681,18 @@ class FeatureRepository:
     async def list(
         session: AsyncSession,
         *,
+        user_id: uuid.UUID | None = None,
         status: FeatureStatus | None = None,
         project: str | None = None,
-        workspaces: list[WorkspaceRecord] | None = None,
         limit: int = 200,
     ) -> list[FeatureRecord]:
         """List records matching filters."""
         query = select(FeatureRecord)
-        if workspaces is not None:
-            if not workspaces:
-                return []
-            query = query.join(ProductProposalRecord, ProductProposalRecord.id == FeatureRecord.proposal_id).where(
-                or_(
-                    *(
-                        and_(ProductProposalRecord.repo == workspace.github_repo, ProductProposalRecord.project == workspace.project)
-                        for workspace in workspaces
-                    )
-                )
-            )
+        if user_id is not None:
+            query = query.join(
+                ProductProposalRecord,
+                ProductProposalRecord.id == FeatureRecord.proposal_id,
+            ).where(ProductProposalRecord.user_id == user_id)
         if status is not None:
             query = query.where(FeatureRecord.status == status)
         if project is not None:

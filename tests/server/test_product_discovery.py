@@ -102,7 +102,7 @@ def test_decision_allows_dispatch():
 
 def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
     """Verify poll once dispatches only dispatchable instances."""
-    candidate = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc)
+    candidate = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc, user_id=uuid.uuid4())
     runner = FakeRunner()
     captured = {}
 
@@ -140,7 +140,12 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
 
     assert result == 1
     assert captured["limit"] == 20
-    assert captured["proposal_kwargs"] == {"project": "nexus", "repo": "owner/repo", "limit": 200}
+    assert captured["proposal_kwargs"] == {
+        "user_id": candidate.user_id,
+        "project": "nexus",
+        "repo": "owner/repo",
+        "limit": 200,
+    }
     runner.submit_task.assert_awaited_once()
     payload = runner.submit_task.await_args.args[0]
     assert payload.agent_instance_id == candidate.id
@@ -186,6 +191,7 @@ def test_build_product_discovery_prompt_includes_status_counts_and_recent_propos
     assert "Existing proposal / rejected / Already considered." in prompt
 
 
+
 def test_product_discovery_prompt_limits_and_sanitizes_proposals() -> None:
     """Verify product discovery prompt keeps recent proposal context bounded."""
     proposals = [
@@ -214,7 +220,7 @@ def test_product_discovery_prompt_handles_empty_proposals() -> None:
 
 def test_poll_once_skips_when_stop_requested(monkeypatch):
     """Verify poll once skips when stop requested."""
-    candidate = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc)
+    candidate = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc, user_id=uuid.uuid4())
 
     async def fake_list(session, *, limit):
         """Provide a fake list."""
@@ -238,8 +244,8 @@ def test_poll_once_skips_when_stop_requested(monkeypatch):
 
 def test_poll_once_continues_after_submit_failure(monkeypatch):
     """Verify poll once continues after submit failure."""
-    first = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc)
-    second = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc)
+    first = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc, user_id=uuid.uuid4())
+    second = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc, user_id=uuid.uuid4())
     calls = []
 
     async def fake_list(session, *, limit):
@@ -323,11 +329,13 @@ async def test_product_discovery_metrics_count_only_proposed_proposals(monkeypat
     metrics = await poller._proposal_metrics(
         object(),
         SimpleNamespace(github_repo="owner/repo", project="nexus"),
+        user_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
     )
 
     assert metrics.pending_proposal_count == 1
     assert metrics.pending_proposal_limit == 50
     assert captured["filters"] == {
+        "user_id": uuid.UUID("00000000-0000-0000-0000-000000000001"),
         "project": "nexus",
         "repo": "owner/repo",
         "status": ProductProposalStatus.proposed,

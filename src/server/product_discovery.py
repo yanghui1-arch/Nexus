@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -213,7 +214,7 @@ class ProductDiscoveryPoller:
             try:
                 async with self._database.session() as session:
                     workspace = await WorkspaceRepository.get_by_agent_instance_id(session, instance.id)
-                    metrics = await self._proposal_metrics(session, workspace)
+                    metrics = await self._proposal_metrics(session, workspace, user_id=instance.user_id)
 
                 decision = decide_product_discovery_dispatch(
                     candidate=instance,
@@ -235,6 +236,7 @@ class ProductDiscoveryPoller:
                     async with self._database.session() as session:
                         proposals = await ProductProposalRepository.list(
                             session,
+                            user_id=instance.user_id,
                             project=workspace.project,
                             repo=workspace.github_repo,
                             limit=max(recent_limit, 200),
@@ -287,6 +289,8 @@ class ProductDiscoveryPoller:
         self,
         session: AsyncSession,
         workspace: WorkspaceRecord | None,
+        *,
+        user_id: uuid.UUID,
     ) -> ProductDiscoveryProposalMetrics:
         """Build proposal metrics for a workspace."""
         if workspace is None or not workspace.github_repo or not workspace.project:
@@ -297,6 +301,7 @@ class ProductDiscoveryPoller:
 
         proposals = await ProductProposalRepository.list(
             session,
+            user_id=user_id,
             repo=workspace.github_repo,
             project=workspace.project,
             status=ProductProposalStatus.proposed,
