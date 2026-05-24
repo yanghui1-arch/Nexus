@@ -330,6 +330,11 @@
           "in_progress": "进行中",
           "completed": "已完成",
           "closed": "已关闭"
+        },
+        "proposalSectionTabs": {
+          "overview": "概览",
+          "evidence": "证据",
+          "breakdown": "拆分"
         }
       },
       "taskDetail": {
@@ -689,6 +694,11 @@
           "in_progress": "In Progress",
           "completed": "Completed",
           "closed": "Closed"
+        },
+        "proposalSectionTabs": {
+          "overview": "Overview",
+          "evidence": "Evidence",
+          "breakdown": "Breakdown"
         }
       },
       "taskDetail": {
