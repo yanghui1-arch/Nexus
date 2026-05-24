@@ -74,6 +74,7 @@ class ProductWorkflowPoller:
             tela_instances = await AgentInstanceRepository.list_by_active_task_load(
                 session,
                 agent=AgentName.tela,
+                user_id=proposal.user_id,
                 github_repo=proposal.repo,
                 project=proposal.project,
                 limit=1,

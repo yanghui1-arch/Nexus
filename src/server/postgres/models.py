@@ -349,6 +349,11 @@ class ProductProposalRecord(Base):
     plan_type: Mapped[str] = mapped_column(String(32), nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     answer: Mapped[str] = mapped_column(Text, nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("user_account.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     project: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     repo: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     status: Mapped[ProductProposalStatus] = mapped_column(
