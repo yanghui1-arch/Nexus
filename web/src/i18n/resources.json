@@ -341,8 +341,11 @@
         "decisionBriefUnavailable": "该章节暂无结构化摘要。请切换到“描述”查看原始内容。",
         "decisionBriefEvidenceFallback": "暂无可提取的仓库证据摘要。请在原始内容中查看完整证据。",
         "decisionBriefNextStepsFallback": "暂无可提取的下一步计划。请查看原始建议计划。",
-        "decisionBriefFullTextHint": "需要完整上下文时，请切换到“描述”查看原始摘要和建议计划。",
-        "decisionBriefRecommendationFallback": "请评审该提案，并参考下方摘要决定是否批准。"
+        "decisionBriefFullTextHint": "需要更多证据、风险和完整计划时，请切换到“描述”查看原始内容。",
+        "decisionBriefRecommendationFallback": "请评审该提案，并参考下方摘要决定是否批准。",
+        "decisionBriefWhat": "你要干嘛？",
+        "decisionBriefWhy": "为什么要这样干？",
+        "decisionBriefBeneficiaries": "受益群体？"
       },
       "taskDetail": {
         "title": "任务详情",
@@ -712,8 +715,11 @@
         "decisionBriefUnavailable": "This section is not available as a structured summary. Open Description for the original content.",
         "decisionBriefEvidenceFallback": "No repository evidence summary could be extracted. Check the original content for full evidence.",
         "decisionBriefNextStepsFallback": "No next-step plan could be extracted. Check the original suggested plan.",
-        "decisionBriefFullTextHint": "For full context, open Description to view the original summary and suggested plan.",
-        "decisionBriefRecommendationFallback": "Review this proposal and use the summary below to decide whether to approve it."
+        "decisionBriefFullTextHint": "For more evidence, risks, and the complete plan, open Description to view the original content.",
+        "decisionBriefRecommendationFallback": "Review this proposal and use the summary below to decide whether to approve it.",
+        "decisionBriefWhat": "What are we doing?",
+        "decisionBriefWhy": "Why do it this way?",
+        "decisionBriefBeneficiaries": "Who benefits?"
       },
       "taskDetail": {
         "title": "Task Detail",

@@ -19,7 +19,7 @@ import {
   hasValidatedProposalPlan,
 } from '../utils';
 import { ProposalPlanList } from './ProposalPlanList';
-import { getFirstMeaningfulLine, getProposalBriefSections } from '../proposalBrief';
+import { getProposalBriefSections } from '../proposalBrief';
 
 type DetailTab = 'decision-brief' | 'description' | 'plan-list';
 
@@ -32,7 +32,7 @@ type ProposalDetailCardProps = {
   recoveringPlanning: boolean;
 };
 
-function BriefLine({
+function BriefDisclosure({
   content,
   fallback,
   title,
@@ -42,12 +42,20 @@ function BriefLine({
   title: string;
 }) {
   return (
-    <div className="grid gap-1 border-t py-3 md:grid-cols-[13rem_1fr] md:gap-4">
-      <dt className="text-sm font-medium text-muted-foreground">{title}</dt>
-      <dd className="text-sm leading-6">
-        {getFirstMeaningfulLine(content) ?? fallback}
-      </dd>
-    </div>
+    <details className="group border-t py-4" open>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-base font-medium">
+        <span>{title}</span>
+        <span className="text-sm text-muted-foreground group-open:hidden">＋</span>
+        <span className="hidden text-sm text-muted-foreground group-open:inline">－</span>
+      </summary>
+      <div className="mt-3 text-sm leading-6">
+        {content?.trim() ? (
+          <MarkdownContent content={content} />
+        ) : (
+          <p className="text-muted-foreground">{fallback}</p>
+        )}
+      </div>
+    </details>
   );
 }
 
@@ -76,9 +84,7 @@ export function ProposalDetailCard({
     ? 'decision-brief'
     : activeTab;
   const answerSections = getProposalBriefSections(proposal.answer);
-  const recommendation = getFirstMeaningfulLine(answerSections.scope)
-    ?? getFirstMeaningfulLine(proposal.summary)
-    ?? t('productResearch.decisionBriefRecommendationFallback');
+  const actionContent = answerSections.scope || proposal.summary;
   const showRetryPlanning = planningStatus === 'failed';
   const showRecoverPlanning =
     planningStatus === 'missing_run' || planningStatus === 'missing_task';
@@ -188,47 +194,23 @@ export function ProposalDetailCard({
         </TabsList>
 
 
-        <TabsContent value="decision-brief" className="flex flex-col gap-4">
-          <section className="border-l-2 pl-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {t('productResearch.decisionBriefApprovalAsk')}
-            </p>
-            <p className="mt-2 text-base font-medium">{recommendation}</p>
-          </section>
-
-          <dl>
-            <BriefLine
-              title={t('productResearch.summary')}
-              content={proposal.summary}
-              fallback={t('productResearch.decisionBriefUnavailable')}
-            />
-            <BriefLine
-              title={t('productResearch.decisionBriefProblem')}
-              content={answerSections.problem}
-              fallback={t('productResearch.decisionBriefUnavailable')}
-            />
-            <BriefLine
-              title={t('productResearch.decisionBriefImpact')}
-              content={answerSections.impact}
-              fallback={t('productResearch.decisionBriefUnavailable')}
-            />
-            <BriefLine
-              title={t('productResearch.decisionBriefEvidence')}
-              content={answerSections.evidence}
-              fallback={t('productResearch.decisionBriefEvidenceFallback')}
-            />
-            <BriefLine
-              title={t('productResearch.decisionBriefRisks')}
-              content={answerSections.risks}
-              fallback={t('productResearch.decisionBriefUnavailable')}
-            />
-            <BriefLine
-              title={t('productResearch.decisionBriefNextSteps')}
-              content={answerSections.nextSteps}
-              fallback={t('productResearch.decisionBriefNextStepsFallback')}
-            />
-          </dl>
-          <p className="text-sm text-muted-foreground">
+        <TabsContent value="decision-brief" className="flex flex-col">
+          <BriefDisclosure
+            title={t('productResearch.decisionBriefWhat')}
+            content={actionContent}
+            fallback={t('productResearch.decisionBriefUnavailable')}
+          />
+          <BriefDisclosure
+            title={t('productResearch.decisionBriefWhy')}
+            content={answerSections.problem}
+            fallback={t('productResearch.decisionBriefUnavailable')}
+          />
+          <BriefDisclosure
+            title={t('productResearch.decisionBriefBeneficiaries')}
+            content={answerSections.impact}
+            fallback={t('productResearch.decisionBriefUnavailable')}
+          />
+          <p className="pt-3 text-sm text-muted-foreground">
             {t('productResearch.decisionBriefFullTextHint')}
           </p>
         </TabsContent>
