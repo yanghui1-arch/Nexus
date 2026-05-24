@@ -12,6 +12,10 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs';
 import { PROPOSAL_PLANNING_STATUS_META, PROPOSAL_STATUS_META } from '../constants';
+import {
+  parseProposalAnswerSections,
+  type ProposalAnswerSectionMap,
+} from '../proposalAnswerParser';
 import type { ReviewActionState, ReviewActionStatus } from '../types';
 import {
   formatRelativeTime,
@@ -19,9 +23,14 @@ import {
   hasValidatedProposalPlan,
 } from '../utils';
 import { ProposalPlanList } from './ProposalPlanList';
-import { getProposalBriefSections } from '../proposalBrief';
 
-type DetailTab = 'decision-brief' | 'description' | 'plan-list';
+type DetailTabKey = 'decision-brief' | 'description' | 'plan-list';
+
+type DetailTab = {
+  content: string;
+  labelKey: string;
+  value: string;
+};
 
 type ProposalDetailCardProps = {
   activeReview: ReviewActionState;
@@ -31,6 +40,33 @@ type ProposalDetailCardProps = {
   relatedFeatures: ApiFeature[];
   recoveringPlanning: boolean;
 };
+
+function combineSections(sections: ProposalAnswerSectionMap, keys: (keyof ProposalAnswerSectionMap)[]) {
+  return keys
+    .map(key => sections[key])
+    .filter((content): content is string => Boolean(content?.trim()))
+    .join('\n\n');
+}
+
+function buildDetailTabs(sections: ProposalAnswerSectionMap): DetailTab[] {
+  return [
+    {
+      content: combineSections(sections, ['problemOpportunity', 'userBusinessImpact', 'proposedScope']),
+      labelKey: 'productResearch.proposalSectionTabs.overview',
+      value: 'overview',
+    },
+    {
+      content: combineSections(sections, ['repositoryEvidence', 'externalEvidence']),
+      labelKey: 'productResearch.proposalSectionTabs.evidence',
+      value: 'evidence',
+    },
+    {
+      content: combineSections(sections, ['suggestedSmallFeatureBreakdown']),
+      labelKey: 'productResearch.proposalSectionTabs.breakdown',
+      value: 'breakdown',
+    },
+  ].filter(tab => tab.content.trim());
+}
 
 function BriefDisclosure({
   content,
@@ -80,15 +116,20 @@ export function ProposalDetailCard({
   const isPending = proposal.status === 'proposed';
   const canOpenPlanList =
     hasValidatedProposalPlan(proposal) && relatedFeatures.length > 0;
-  const [activeTab, setActiveTab] = useState<DetailTab>('decision-brief');
+  const proposalAnswer = parseProposalAnswerSections(proposal.answer);
+  const detailTabs = buildDetailTabs(proposalAnswer.sections);
+  const hasSectionTabs = Object.keys(proposalAnswer.sections).length > 0;
+  const [activeTab, setActiveTab] = useState<DetailTabKey>('decision-brief');
   const visibleTab = activeTab === 'plan-list' && !canOpenPlanList
     ? 'decision-brief'
     : activeTab;
-  const answerSections = getProposalBriefSections(proposal.answer);
-  const decisionContext = [proposal.summary, answerSections.scope, answerSections.problem]
-    .filter(Boolean)
-    .join('\n\n');
-  const approachContent = answerSections.nextSteps || proposal.summary;
+  const decisionContext = [
+    proposal.summary,
+    proposalAnswer.sections.proposedScope,
+    proposalAnswer.sections.problemOpportunity,
+  ].filter(Boolean).join('\n\n');
+  const approachContent = proposalAnswer.sections.suggestedSmallFeatureBreakdown
+    || proposal.summary;
   const showRetryPlanning = planningStatus === 'failed';
   const showRecoverPlanning =
     planningStatus === 'missing_run' || planningStatus === 'missing_task';
@@ -183,7 +224,7 @@ export function ProposalDetailCard({
           if (value === 'plan-list' && !canOpenPlanList) {
             return;
           }
-          setActiveTab(value as DetailTab);
+          setActiveTab(value as DetailTabKey);
         }}
         className="gap-3"
       >
@@ -196,7 +237,6 @@ export function ProposalDetailCard({
             {t('productResearch.planList')}
           </TabsTrigger>
         </TabsList>
-
 
         <TabsContent value="decision-brief" className="flex flex-col">
           <BriefDisclosure
@@ -211,7 +251,7 @@ export function ProposalDetailCard({
           />
           <BriefDisclosure
             title={t('productResearch.decisionBriefValue')}
-            content={answerSections.impact}
+            content={proposalAnswer.sections.userBusinessImpact}
             fallback={t('productResearch.decisionBriefUnavailable')}
           />
           <p className="pt-3 text-sm text-muted-foreground">
@@ -220,19 +260,38 @@ export function ProposalDetailCard({
         </TabsContent>
 
         <TabsContent value="description" className="flex flex-col gap-8">
-          <section className="flex flex-col gap-3">
-            <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {t('productResearch.summary')}
-            </h3>
-            <MarkdownContent content={proposal.summary} />
-          </section>
+          {hasSectionTabs ? (
+            <Tabs defaultValue={detailTabs[0]?.value} className="gap-3">
+              <TabsList className="flex h-auto flex-wrap justify-start">
+                {detailTabs.map(tab => (
+                  <TabsTrigger key={tab.value} value={tab.value}>
+                    {t(tab.labelKey)}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+              {detailTabs.map(tab => (
+                <TabsContent key={tab.value} value={tab.value}>
+                  <MarkdownContent content={tab.content} />
+                </TabsContent>
+              ))}
+            </Tabs>
+          ) : (
+            <>
+              <section className="flex flex-col gap-3">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  {t('productResearch.summary')}
+                </h3>
+                <MarkdownContent content={proposal.summary} />
+              </section>
 
-          <section className="flex flex-col gap-3">
-            <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {t('productResearch.suggestedPlan')}
-            </h3>
-            <MarkdownContent content={proposal.answer} />
-          </section>
+              <section className="flex flex-col gap-3">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  {t('productResearch.suggestedPlan')}
+                </h3>
+                <MarkdownContent content={proposal.answer} />
+              </section>
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="plan-list">

@@ -331,21 +331,14 @@
           "completed": "已完成",
           "closed": "已关闭"
         },
+        "proposalSectionTabs": {
+          "overview": "概览",
+          "evidence": "证据",
+          "breakdown": "拆分"
+        },
         "decisionBrief": "决策摘要",
-        "decisionBriefApprovalAsk": "Approval ask / 一句话推荐",
-        "decisionBriefProblem": "Problem / Opportunity 摘要",
-        "decisionBriefImpact": "User & Business Impact 摘要",
-        "decisionBriefEvidence": "Top Repository Evidence",
-        "decisionBriefRisks": "Top Risks & Mitigations",
-        "decisionBriefNextSteps": "下一步计划概览",
         "decisionBriefUnavailable": "该章节暂无结构化摘要。请切换到“描述”查看原始内容。",
-        "decisionBriefEvidenceFallback": "暂无可提取的仓库证据摘要。请在原始内容中查看完整证据。",
-        "decisionBriefNextStepsFallback": "暂无可提取的下一步计划。请查看原始建议计划。",
         "decisionBriefFullTextHint": "需要更多证据、风险和完整计划时，请切换到“描述”查看原始内容。",
-        "decisionBriefRecommendationFallback": "请评审该提案，并参考下方摘要决定是否批准。",
-        "decisionBriefWhat": "决策方向",
-        "decisionBriefWhy": "决策方向",
-        "decisionBriefBeneficiaries": "预期收益",
         "decisionBriefDecision": "决策方向",
         "decisionBriefApproach": "实施路径",
         "decisionBriefValue": "预期收益"
@@ -708,21 +701,14 @@
           "completed": "Completed",
           "closed": "Closed"
         },
+        "proposalSectionTabs": {
+          "overview": "Overview",
+          "evidence": "Evidence",
+          "breakdown": "Breakdown"
+        },
         "decisionBrief": "Decision Brief",
-        "decisionBriefApprovalAsk": "Approval ask / one-line recommendation",
-        "decisionBriefProblem": "Problem / Opportunity summary",
-        "decisionBriefImpact": "User & Business Impact summary",
-        "decisionBriefEvidence": "Top Repository Evidence",
-        "decisionBriefRisks": "Top Risks & Mitigations",
-        "decisionBriefNextSteps": "Next-step plan overview",
         "decisionBriefUnavailable": "This section is not available as a structured summary. Open Description for the original content.",
-        "decisionBriefEvidenceFallback": "No repository evidence summary could be extracted. Check the original content for full evidence.",
-        "decisionBriefNextStepsFallback": "No next-step plan could be extracted. Check the original suggested plan.",
         "decisionBriefFullTextHint": "For more evidence, risks, and the complete plan, open Description to view the original content.",
-        "decisionBriefRecommendationFallback": "Review this proposal and use the summary below to decide whether to approve it.",
-        "decisionBriefWhat": "Decision Direction",
-        "decisionBriefWhy": "Decision Direction",
-        "decisionBriefBeneficiaries": "Expected Value",
         "decisionBriefDecision": "Decision Direction",
         "decisionBriefApproach": "Implementation Approach",
         "decisionBriefValue": "Expected Value"
