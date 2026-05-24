@@ -332,11 +332,11 @@
           "closed": "已关闭"
         },
         "proposalSectionTabs": {
-          "evidence": "Evidence",
-          "scope": "Scope",
-          "risks": "Risks",
-          "breakdown": "Breakdown",
-          "openQuestions": "Open Questions"
+          "evidence": "证据",
+          "scope": "范围",
+          "risks": "风险",
+          "breakdown": "拆分",
+          "openQuestions": "待确认问题"
         }
       },
       "taskDetail": {

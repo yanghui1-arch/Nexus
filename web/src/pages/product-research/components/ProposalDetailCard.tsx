@@ -40,14 +40,14 @@ function combineSections(sections: ProposalAnswerSectionMap, keys: (keyof Propos
 function buildDetailTabs(sections: ProposalAnswerSectionMap): DetailTab[] {
   return [
     {
+      content: combineSections(sections, ['problemOpportunity', 'userBusinessImpact', 'proposedScope']),
+      labelKey: 'productResearch.proposalSectionTabs.scope',
+      value: 'scope',
+    },
+    {
       content: combineSections(sections, ['repositoryEvidence', 'externalEvidence']),
       labelKey: 'productResearch.proposalSectionTabs.evidence',
       value: 'evidence',
-    },
-    {
-      content: combineSections(sections, ['problemOpportunity', 'userBusinessImpact', 'proposedScope', 'nonGoals']),
-      labelKey: 'productResearch.proposalSectionTabs.scope',
-      value: 'scope',
     },
     {
       content: combineSections(sections, ['risksMitigations']),
