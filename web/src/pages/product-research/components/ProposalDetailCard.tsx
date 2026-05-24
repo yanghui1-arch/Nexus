@@ -24,7 +24,6 @@ import {
   hasValidatedProposalPlan,
 } from '../utils';
 import { ProposalPlanList } from './ProposalPlanList';
-
 type ProposalDetailCardProps = {
   activeReview: ReviewActionState;
   onReview: (proposalId: string, status: ReviewActionStatus) => Promise<void>;
