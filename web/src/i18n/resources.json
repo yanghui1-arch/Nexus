@@ -343,9 +343,12 @@
         "decisionBriefNextStepsFallback": "暂无可提取的下一步计划。请查看原始建议计划。",
         "decisionBriefFullTextHint": "需要更多证据、风险和完整计划时，请切换到“描述”查看原始内容。",
         "decisionBriefRecommendationFallback": "请评审该提案，并参考下方摘要决定是否批准。",
-        "decisionBriefWhat": "你要干嘛？",
-        "decisionBriefWhy": "为什么要这样干？",
-        "decisionBriefBeneficiaries": "受益群体？"
+        "decisionBriefWhat": "决策方向",
+        "decisionBriefWhy": "决策方向",
+        "decisionBriefBeneficiaries": "预期收益",
+        "decisionBriefDecision": "决策方向",
+        "decisionBriefApproach": "实施路径",
+        "decisionBriefValue": "预期收益"
       },
       "taskDetail": {
         "title": "任务详情",
@@ -717,9 +720,12 @@
         "decisionBriefNextStepsFallback": "No next-step plan could be extracted. Check the original suggested plan.",
         "decisionBriefFullTextHint": "For more evidence, risks, and the complete plan, open Description to view the original content.",
         "decisionBriefRecommendationFallback": "Review this proposal and use the summary below to decide whether to approve it.",
-        "decisionBriefWhat": "What are we doing?",
-        "decisionBriefWhy": "Why do it this way?",
-        "decisionBriefBeneficiaries": "Who benefits?"
+        "decisionBriefWhat": "Decision Direction",
+        "decisionBriefWhy": "Decision Direction",
+        "decisionBriefBeneficiaries": "Expected Value",
+        "decisionBriefDecision": "Decision Direction",
+        "decisionBriefApproach": "Implementation Approach",
+        "decisionBriefValue": "Expected Value"
       },
       "taskDetail": {
         "title": "Task Detail",

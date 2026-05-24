@@ -44,7 +44,7 @@ function BriefDisclosure({
   return (
     <details className="group border-t py-4" open>
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-base font-medium">
-        <span>{title}</span>
+        <h3 className="text-base font-semibold">{title}</h3>
         <span className="text-sm text-muted-foreground group-open:hidden">＋</span>
         <span className="hidden text-sm text-muted-foreground group-open:inline">－</span>
       </summary>
@@ -84,7 +84,10 @@ export function ProposalDetailCard({
     ? 'decision-brief'
     : activeTab;
   const answerSections = getProposalBriefSections(proposal.answer);
-  const actionContent = answerSections.scope || proposal.summary;
+  const decisionContext = [answerSections.scope, answerSections.problem]
+    .filter(Boolean)
+    .join('\n\n');
+  const approachContent = answerSections.nextSteps || proposal.summary;
   const showRetryPlanning = planningStatus === 'failed';
   const showRecoverPlanning =
     planningStatus === 'missing_run' || planningStatus === 'missing_task';
@@ -196,17 +199,17 @@ export function ProposalDetailCard({
 
         <TabsContent value="decision-brief" className="flex flex-col">
           <BriefDisclosure
-            title={t('productResearch.decisionBriefWhat')}
-            content={actionContent}
+            title={t('productResearch.decisionBriefDecision')}
+            content={decisionContext}
             fallback={t('productResearch.decisionBriefUnavailable')}
           />
           <BriefDisclosure
-            title={t('productResearch.decisionBriefWhy')}
-            content={answerSections.problem}
+            title={t('productResearch.decisionBriefApproach')}
+            content={approachContent}
             fallback={t('productResearch.decisionBriefUnavailable')}
           />
           <BriefDisclosure
-            title={t('productResearch.decisionBriefBeneficiaries')}
+            title={t('productResearch.decisionBriefValue')}
             content={answerSections.impact}
             fallback={t('productResearch.decisionBriefUnavailable')}
           />
