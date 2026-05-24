@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Callable
+from typing import Any, Callable
 
 from mwin import track
 from openai import pydantic_function_tool
@@ -20,6 +20,14 @@ class CreateProductProposal(BaseModel):
     plan_type: str = Field(description="Proposal type, such as feature, fix, patch, or growth")
     summary: str = Field(description="Brief business summary of the proposal")
     answer: str = Field(description="Full proposal details, evidence, risks, and suggested breakdown")
+    details: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional structured details JSON with overview, scope, evidence, risks, and implementation split",
+    )
+    panels: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional UI panel JSON for structured proposal sections",
+    )
     project: str | None = Field(default=None, description="Optional project name")
     repo: str | None = Field(default=None, description="Optional repository, such as owner/repo")
 
@@ -81,6 +89,8 @@ class ProductTools:
         plan_type: str,
         summary: str,
         answer: str,
+        details: dict[str, Any] | None = None,
+        panels: dict[str, Any] | None = None,
         project: str | None = None,
         repo: str | None = None,
     ) -> dict:
@@ -100,6 +110,8 @@ class ProductTools:
                 plan_type=plan_type,
                 summary=summary,
                 answer=answer,
+                details=details,
+                panels=panels,
                 user_id=self._context.user_id,
                 project=project,
                 repo=proposal_repo,
