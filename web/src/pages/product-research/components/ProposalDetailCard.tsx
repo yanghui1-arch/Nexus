@@ -4,7 +4,6 @@ import { Link } from 'react-router-dom';
 import type { ApiFeature, ApiProductProposal } from '@/api/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MarkdownContent } from '@/components/ui/markdown-content';
 import {
   Tabs,
   TabsContent,
@@ -20,8 +19,13 @@ import {
   hasValidatedProposalPlan,
 } from '../utils';
 import { ProposalPlanList } from './ProposalPlanList';
-
-type DetailTabKey = 'decision-brief' | 'plan-list';
+import { ProposalDetailPanel, ProposalOverviewPanel } from './ProposalDetailPanels';
+import {
+  combineProposalSections,
+  summarizeProposalLine,
+  type ProposalDetailTabKey,
+  type ProposalOverviewItem,
+} from './proposalDetailPanel';
 
 type ProposalDetailCardProps = {
   activeReview: ReviewActionState;
@@ -31,34 +35,6 @@ type ProposalDetailCardProps = {
   relatedFeatures: ApiFeature[];
   recoveringPlanning: boolean;
 };
-
-function BriefDisclosure({
-  content,
-  fallback,
-  title,
-}: {
-  content: string | undefined;
-  fallback: string;
-  title: string;
-}) {
-  return (
-    <details className="group border-t py-4" open>
-      <summary className="flex cursor-pointer list-none items-center gap-2 text-base font-medium">
-        <span className="text-muted-foreground transition-transform group-open:rotate-90" aria-hidden="true">
-          ›
-        </span>
-        <h3 className="text-base font-semibold">{title}</h3>
-      </summary>
-      <div className="mt-3 text-sm leading-6">
-        {content?.trim() ? (
-          <MarkdownContent content={content} />
-        ) : (
-          <p className="text-muted-foreground">{fallback}</p>
-        )}
-      </div>
-    </details>
-  );
-}
 
 export function ProposalDetailCard({
   activeReview,
@@ -81,17 +57,47 @@ export function ProposalDetailCard({
   const canOpenPlanList =
     hasValidatedProposalPlan(proposal) && relatedFeatures.length > 0;
   const proposalAnswer = parseProposalAnswerSections(proposal.answer);
-  const [activeTab, setActiveTab] = useState<DetailTabKey>('decision-brief');
+  const [activeTab, setActiveTab] = useState<ProposalDetailTabKey>('overview');
   const visibleTab = activeTab === 'plan-list' && !canOpenPlanList
-    ? 'decision-brief'
+    ? 'overview'
     : activeTab;
-  const decisionContext = [
-    proposal.summary,
+  const scopeContent = combineProposalSections(
     proposalAnswer.sections.proposedScope,
-    proposalAnswer.sections.problemOpportunity,
-  ].filter(Boolean).join('\n\n');
-  const approachContent = proposalAnswer.sections.suggestedSmallFeatureBreakdown
-    || proposal.summary;
+    proposalAnswer.sections.nonGoals
+      ? `## ${t('productResearch.detailNonGoals')}\n${proposalAnswer.sections.nonGoals}`
+      : undefined,
+  );
+  const evidenceContent = combineProposalSections(
+    proposalAnswer.sections.repositoryEvidence,
+    proposalAnswer.sections.externalEvidence,
+  );
+  const breakdownContent = proposalAnswer.sections.suggestedSmallFeatureBreakdown;
+  const fullDescription = proposalAnswer.fullText || proposal.summary;
+  const overviewItems: ProposalOverviewItem[] = [
+    {
+      label: t('productResearch.overviewConclusion'),
+      content: summarizeProposalLine(
+        proposal.summary || proposalAnswer.sections.problemOpportunity,
+        t('productResearch.decisionBriefUnavailable'),
+      ),
+    },
+    {
+      label: t('productResearch.overviewUsersValue'),
+      content: summarizeProposalLine(proposalAnswer.sections.userBusinessImpact, t('productResearch.decisionBriefUnavailable')),
+    },
+    {
+      label: t('productResearch.overviewApprovalAdvice'),
+      content: t(isPending ? 'productResearch.overviewApprovalAdvicePending' : 'productResearch.overviewApprovalAdviceReviewed'),
+    },
+    {
+      label: t('productResearch.overviewHighestRisk'),
+      content: summarizeProposalLine(proposalAnswer.sections.risksMitigations, t('productResearch.overviewNoRisk')),
+    },
+    {
+      label: t('productResearch.overviewPrimaryAction'),
+      content: summarizeProposalLine(breakdownContent, t('productResearch.overviewPrimaryActionFallback')),
+    },
+  ];
   const showRetryPlanning = planningStatus === 'failed';
   const showRecoverPlanning =
     planningStatus === 'missing_run' || planningStatus === 'missing_task';
@@ -186,38 +192,53 @@ export function ProposalDetailCard({
           if (value === 'plan-list' && !canOpenPlanList) {
             return;
           }
-          setActiveTab(value as DetailTabKey);
+          setActiveTab(value as ProposalDetailTabKey);
         }}
         className="gap-3"
       >
-        <TabsList>
-          <TabsTrigger value="decision-brief">
-            {t('productResearch.decisionBrief')}
+        <TabsList className="flex h-auto flex-wrap justify-start">
+          <TabsTrigger value="overview">
+            {t('productResearch.detailOverview')}
+          </TabsTrigger>
+          <TabsTrigger value="scope">
+            {t('productResearch.detailScope')}
+          </TabsTrigger>
+          <TabsTrigger value="evidence">
+            {t('productResearch.detailEvidence')}
+          </TabsTrigger>
+          <TabsTrigger value="risk">
+            {t('productResearch.detailRisk')}
+          </TabsTrigger>
+          <TabsTrigger value="breakdown">
+            {t('productResearch.detailBreakdown')}
+          </TabsTrigger>
+          <TabsTrigger value="description">
+            {t('productResearch.detailDescription')}
           </TabsTrigger>
           <TabsTrigger value="plan-list" disabled={!canOpenPlanList}>
             {t('productResearch.planList')}
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="decision-brief" className="flex flex-col">
-          <BriefDisclosure
-            title={t('productResearch.decisionBriefDecision')}
-            content={decisionContext}
-            fallback={t('productResearch.decisionBriefUnavailable')}
-          />
-          <BriefDisclosure
-            title={t('productResearch.decisionBriefApproach')}
-            content={approachContent}
-            fallback={t('productResearch.decisionBriefUnavailable')}
-          />
-          <BriefDisclosure
-            title={t('productResearch.decisionBriefValue')}
-            content={proposalAnswer.sections.userBusinessImpact}
-            fallback={t('productResearch.decisionBriefUnavailable')}
-          />
+        <TabsContent value="overview">
+          <ProposalOverviewPanel items={overviewItems} />
         </TabsContent>
 
-
+        <TabsContent value="scope">
+          <ProposalDetailPanel content={scopeContent} fallback={t('productResearch.decisionBriefUnavailable')} />
+        </TabsContent>
+        <TabsContent value="evidence">
+          <ProposalDetailPanel content={evidenceContent} fallback={t('productResearch.decisionBriefUnavailable')} />
+        </TabsContent>
+        <TabsContent value="risk">
+          <ProposalDetailPanel content={proposalAnswer.sections.risksMitigations} fallback={t('productResearch.decisionBriefUnavailable')} />
+        </TabsContent>
+        <TabsContent value="breakdown">
+          <ProposalDetailPanel content={breakdownContent} fallback={t('productResearch.decisionBriefUnavailable')} />
+        </TabsContent>
+        <TabsContent value="description">
+          <ProposalDetailPanel content={fullDescription} fallback={t('productResearch.decisionBriefUnavailable')} />
+        </TabsContent>
         <TabsContent value="plan-list">
           <ProposalPlanList features={relatedFeatures} />
         </TabsContent>
