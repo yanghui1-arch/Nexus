@@ -96,6 +96,16 @@ class FakeFeatureItemSyncSession:
         return SimpleNamespace(scalar_one=lambda: len(self.item_statuses))
 
 
+def _context(*, task_id: uuid.UUID | None = None, user_id: uuid.UUID | None = None) -> NexusTaskContext:
+    """Create a Nexus task context for product-tool tests."""
+    return NexusTaskContext(
+        task_id=task_id or uuid.uuid4(),
+        database=FakeDatabase(),
+        user_id=user_id or uuid.uuid4(),
+        repo="owner/repo",
+    )
+
+
 def _proposal(**overrides):
     """Create a product proposal record."""
     now = datetime.now(timezone.utc)
@@ -153,6 +163,8 @@ def test_create_proposal_uses_context_task_id_and_repo_default(monkeypatch):
     task_id = uuid.uuid4()
     captured = {}
 
+    user_id = uuid.uuid4()
+
     async def fake_create(session, **kwargs):
         """Provide a fake create."""
         captured["session"] = session
@@ -165,11 +177,12 @@ def test_create_proposal_uses_context_task_id_and_repo_default(monkeypatch):
             answer=kwargs["answer"],
             project=kwargs["project"],
             repo=kwargs["repo"],
+            user_id=kwargs["user_id"],
             source_task_id=kwargs["source_task_id"],
         )
 
     monkeypatch.setattr(ProductProposalRepository, "create", fake_create)
-    context = NexusTaskContext(task_id=task_id, database=FakeDatabase(), repo="owner/repo")
+    context = _context(task_id=task_id, user_id=user_id)
     tools = ProductTools(database=FakeDatabase(), context=context)
 
     async def run():
@@ -199,6 +212,7 @@ def test_create_proposal_uses_context_task_id_and_repo_default(monkeypatch):
         "plan_type": "growth",
         "summary": "Help users reach value faster.",
         "answer": "Create a clearer onboarding flow.",
+        "user_id": user_id,
         "project": "nexus",
         "repo": "owner/repo",
         "source_task_id": task_id,
@@ -206,15 +220,7 @@ def test_create_proposal_uses_context_task_id_and_repo_default(monkeypatch):
 
 
 def test_create_proposal_without_context_has_no_source_task(monkeypatch):
-    """Verify create proposal without context has no source task."""
-    captured = {}
-
-    async def fake_create(session, **kwargs):
-        """Provide a fake create."""
-        captured.update(kwargs)
-        return _proposal(source_task_id=kwargs["source_task_id"], repo=kwargs["repo"])
-
-    monkeypatch.setattr(ProductProposalRepository, "create", fake_create)
+    """Verify create proposal requires Nexus task context."""
     tools = ProductTools(database=FakeDatabase())
 
     async def run():
@@ -229,9 +235,10 @@ def test_create_proposal_without_context_has_no_source_task(monkeypatch):
 
     result = anyio.run(run)
 
-    assert result["success"] is True
-    assert captured["source_task_id"] is None
-    assert captured["repo"] == "owner/default"
+    assert result == {
+        "success": False,
+        "message": "Nexus task context is not available.",
+    }
 
 
 def test_create_feature_for_product_proposal_requires_approved_proposal(monkeypatch):
@@ -240,10 +247,11 @@ def test_create_feature_for_product_proposal_requires_approved_proposal(monkeypa
 
     async def fake_get(session, pid):
         """Provide a fake get."""
-        return _proposal(id=pid, status=ProductProposalStatus.proposed)
+        return _proposal(id=pid, user_id=context.user_id, status=ProductProposalStatus.proposed)
 
     monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
-    tools = ProductTools(database=FakeDatabase())
+    context = _context()
+    tools = ProductTools(database=FakeDatabase(), context=context)
 
     async def run():
         """Run the async test body."""
@@ -266,10 +274,11 @@ def test_create_feature_for_product_proposal_from_approved_proposal(monkeypatch)
     proposal_id = uuid.uuid4()
     feature = _feature(id=uuid.uuid4(), proposal_id=proposal_id)
     captured = {}
+    context = _context()
 
     async def fake_get(session, pid):
         """Provide a fake get."""
-        return _proposal(id=pid, status=ProductProposalStatus.approved)
+        return _proposal(id=pid, user_id=context.user_id, status=ProductProposalStatus.approved)
 
     async def fake_create(session, **kwargs):
         """Provide a fake create."""
@@ -278,7 +287,7 @@ def test_create_feature_for_product_proposal_from_approved_proposal(monkeypatch)
 
     monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
     monkeypatch.setattr(FeatureRepository, "create", fake_create)
-    tools = ProductTools(database=FakeDatabase())
+    tools = ProductTools(database=FakeDatabase(), context=context)
 
     async def run():
         """Run the async test body."""
@@ -311,10 +320,11 @@ def test_create_feature_for_product_proposal_from_planned_proposal(monkeypatch):
     """Verify create feature for product proposal from planned proposal."""
     proposal_id = uuid.uuid4()
     feature = _feature(id=uuid.uuid4(), proposal_id=proposal_id)
+    context = _context()
 
     async def fake_get(session, pid):
         """Provide a fake get."""
-        return _proposal(id=pid, user_id=uuid.uuid4(), status=ProductProposalStatus.planned)
+        return _proposal(id=pid, user_id=context.user_id, status=ProductProposalStatus.planned)
 
     async def fake_create(session, **kwargs):
         """Provide a fake create."""
@@ -322,7 +332,7 @@ def test_create_feature_for_product_proposal_from_planned_proposal(monkeypatch):
 
     monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
     monkeypatch.setattr(FeatureRepository, "create", fake_create)
-    tools = ProductTools(database=FakeDatabase())
+    tools = ProductTools(database=FakeDatabase(), context=context)
 
     async def run():
         """Run the async test body."""
@@ -347,7 +357,7 @@ def test_create_feature_item_requires_existing_feature(monkeypatch):
         return None
 
     monkeypatch.setattr(FeatureRepository, "get", fake_get)
-    tools = ProductTools(database=FakeDatabase())
+    tools = ProductTools(database=FakeDatabase(), context=_context())
 
     async def run():
         """Run the async test body."""
@@ -371,10 +381,15 @@ def test_create_feature_item_from_feature(monkeypatch):
     feature = _feature(id=feature_id)
     item = _feature_item(feature_id=feature_id, order_index=2)
     captured = {}
+    context = _context()
 
     async def fake_get(session, fid):
         """Provide a fake get."""
         return feature
+
+    async def fake_get_proposal(session, proposal_id):
+        """Provide a fake proposal lookup."""
+        return _proposal(id=proposal_id, user_id=context.user_id)
 
     async def fake_create(session, **kwargs):
         """Provide a fake create."""
@@ -382,8 +397,9 @@ def test_create_feature_item_from_feature(monkeypatch):
         return item
 
     monkeypatch.setattr(FeatureRepository, "get", fake_get)
+    monkeypatch.setattr(ProductProposalRepository, "get", fake_get_proposal)
     monkeypatch.setattr(FeatureItemRepository, "create", fake_create)
-    tools = ProductTools(database=FakeDatabase())
+    tools = ProductTools(database=FakeDatabase(), context=context)
 
     async def run():
         """Run the async test body."""
@@ -408,6 +424,68 @@ def test_create_feature_item_from_feature(monkeypatch):
         "feature_id": feature_id,
         "title": "Knowledge base",
         "description": "Add a searchable knowledge base.",
+    }
+
+
+def test_create_feature_for_product_proposal_rejects_cross_user_proposal(monkeypatch):
+    """Verify product tool refuses proposals owned by another user."""
+    proposal_id = uuid.uuid4()
+    context = _context()
+
+    async def fake_get(session, pid):
+        """Provide a fake get."""
+        return _proposal(id=pid, user_id=uuid.uuid4(), status=ProductProposalStatus.approved)
+
+    monkeypatch.setattr(ProductProposalRepository, "get", fake_get)
+    tools = ProductTools(database=FakeDatabase(), context=context)
+
+    async def run():
+        """Run the async test body."""
+        return await tools.create_feature_for_product_proposal(
+            proposal_id=proposal_id,
+            title="RAG",
+            description="Add RAG capability.",
+        )
+
+    result = anyio.run(run)
+
+    assert result == {
+        "success": False,
+        "message": "Proposal is not available in this task context.",
+    }
+
+
+def test_create_feature_item_rejects_cross_user_feature(monkeypatch):
+    """Verify product tool refuses features owned by another user."""
+    feature_id = uuid.uuid4()
+    feature = _feature(id=feature_id)
+    context = _context()
+
+    async def fake_get(session, fid):
+        """Provide a fake get."""
+        return feature
+
+    async def fake_get_proposal(session, proposal_id):
+        """Provide a fake proposal lookup."""
+        return _proposal(id=proposal_id, user_id=uuid.uuid4())
+
+    monkeypatch.setattr(FeatureRepository, "get", fake_get)
+    monkeypatch.setattr(ProductProposalRepository, "get", fake_get_proposal)
+    tools = ProductTools(database=FakeDatabase(), context=context)
+
+    async def run():
+        """Run the async test body."""
+        return await tools.create_feature_item(
+            feature_id=feature_id,
+            title="Knowledge base",
+            description="Add a searchable knowledge base.",
+        )
+
+    result = anyio.run(run)
+
+    assert result == {
+        "success": False,
+        "message": "Feature is not available in this task context.",
     }
 
 

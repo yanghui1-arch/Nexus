@@ -152,6 +152,7 @@ def test_load_binding_prefers_task_snapshot_over_workspace_context(monkeypatch):
         id=agent_instance_id,
         is_active=True,
         agent=SimpleNamespace(value="sophie"),
+        user_id="user-id",
     )
     workspace = SimpleNamespace(
         workspace_key="workspace-key",
@@ -177,6 +178,7 @@ def test_load_binding_prefers_task_snapshot_over_workspace_context(monkeypatch):
     assert binding.github_repo == "snapshot/repo"
     assert binding.project == "snapshot-project"
     assert binding.workspace_key == "workspace-key"
+    assert binding.user_id == "user-id"
 
 
 def test_build_marc_agent_with_optional_repo_context(monkeypatch):
@@ -234,6 +236,7 @@ def test_load_binding_requires_repo_and_project_context(monkeypatch):
         id=agent_instance_id,
         is_active=True,
         agent=SimpleNamespace(value="marc"),
+        user_id="user-id",
     )
     workspace = SimpleNamespace(
         workspace_key="workspace-key",
@@ -324,6 +327,7 @@ def test_run_code_agent_workflow_small_task_passthrough(monkeypatch):
             task=task,
             on_progress=None,
             settings=SimpleNamespace(),
+            user_id="user-id",
             workspace_key="workspace",
             github_repo="owner/repo",
             recovered=False,
@@ -418,6 +422,7 @@ def test_run_agent_workflow_pauses_when_work_item_is_ready(monkeypatch):
             task=task,
             on_progress=None,
             settings=SimpleNamespace(),
+            user_id="user-id",
             workspace_key="workspace",
             github_repo="owner/repo",
             recovered=False,
@@ -540,6 +545,7 @@ def test_run_agent_workflow_keeps_checkpoint_between_work_items(monkeypatch):
             task=task,
             on_progress=None,
             settings=SimpleNamespace(),
+            user_id="user-id",
             workspace_key="workspace",
             github_repo="owner/repo",
             recovered=False,
@@ -609,6 +615,7 @@ def test_run_agent_workflow_waits_when_all_work_items_review_ready(monkeypatch):
             task=task,
             on_progress=None,
             settings=SimpleNamespace(),
+            user_id="user-id",
             workspace_key="workspace",
             github_repo="owner/repo",
             recovered=False,
@@ -677,6 +684,7 @@ def test_run_agent_workflow_processes_github_feedback_from_checkpoint(monkeypatc
             task=task,
             on_progress=None,
             settings=SimpleNamespace(github_feedback_batch_size=5),
+            user_id="user-id",
             workspace_key="workspace",
             github_repo="owner/repo",
             recovered=False,

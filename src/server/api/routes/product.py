@@ -12,9 +12,9 @@ from src.server.postgres.models import (
     ProposalPlanningRunStatus,
     FeatureStatus,
     UserRecord,
-    WorkspaceRecord,
 )
 from src.server.postgres.repositories import (
+    AgentInstanceRepository,
     FeatureItemRepository,
     FeatureRepository,
     ProductProposalRepository,
@@ -37,28 +37,12 @@ from src.server.schemas import (
 
 router = APIRouter(prefix="/v1/product", tags=["product"])
 
-
-def _proposal_accessible_to_user_workspaces(
+def _proposal_owned_by_user(
     proposal: ProductProposalRecord,
-    workspaces: list[WorkspaceRecord],
+    user_id: uuid.UUID,
 ) -> bool:
-    """Check whether a proposal belongs to one of the user's workspaces.
-
-    Product proposals do not store user ownership directly. A user can access a
-    proposal only when the proposal's repo/project pair matches a workspace owned
-    by one of the user's agent instances.
-
-    Args:
-        proposal: Product proposal being accessed.
-        workspaces: Workspaces owned by the current user's agent instances.
-
-    Returns:
-        True when the proposal repo/project is visible to the user; otherwise False.
-    """
-    return any(
-        workspace.github_repo == proposal.repo and workspace.project == proposal.project
-        for workspace in workspaces
-    )
+    """Return whether the product proposal belongs to the current user."""
+    return proposal.user_id == user_id
 
 
 @router.post("/proposals", response_model=ProductProposalResponse, status_code=201)
@@ -67,21 +51,26 @@ async def create_proposal(
     payload: ProductProposalCreateRequest,
     user: UserRecord = Depends(get_current_user),
 ) -> ProductProposalResponse:
-    """Create a product proposal for an accessible workspace."""
+    """Create a product proposal for a user-owned workspace."""
     database: Database = request.app.state.database
     async with database.session() as session:
-        # Product proposals do not store a user_id directly. Access is derived from
-        # the current user's agent workspaces, so users may only create proposals
-        # for repo/project pairs that one of their agent instances owns.
         workspaces = await WorkspaceRepository.list_for_user(session, user_id=user.id)
         if not any(workspace.github_repo == payload.repo and workspace.project == payload.project for workspace in workspaces):
             raise HTTPException(status_code=403, detail="Repo/project is not available for this user")
+        if payload.source_task_id is not None:
+            source_task = await TaskRepository.get(session, payload.source_task_id)
+            if source_task is None:
+                raise HTTPException(status_code=404, detail="Source task not found")
+            instance = await AgentInstanceRepository.get(session, source_task.agent_instance_id)
+            if instance is None or instance.user_id != user.id:
+                raise HTTPException(status_code=404, detail="Source task not found")
         proposal = await ProductProposalRepository.create(
             session,
             title=payload.title,
             plan_type=payload.plan_type,
             summary=payload.summary,
             answer=payload.answer,
+            user_id=user.id,
             project=payload.project,
             repo=payload.repo,
             source_task_id=payload.source_task_id,
@@ -109,13 +98,12 @@ async def list_proposals(
     """List product proposals visible to the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
-        workspaces = await WorkspaceRepository.list_for_user(session, user_id=user.id)
         proposals = await ProductProposalRepository.list(
             session,
+            user_id=user.id,
             status=status,
             project=project,
             repo=repo,
-            workspaces=workspaces,
             limit=limit,
         )
         latest_runs = await ProposalPlanningRunRepository.get_latest_by_proposal_ids(
@@ -150,8 +138,7 @@ async def get_proposal(
     database: Database = request.app.state.database
     async with database.session() as session:
         proposal = await ProductProposalRepository.get(session, proposal_id)
-        workspaces = await WorkspaceRepository.list_for_user(session, user_id=user.id)
-        if proposal is None or not _proposal_accessible_to_user_workspaces(proposal, workspaces):
+        if proposal is None or not _proposal_owned_by_user(proposal, user.id):
             raise HTTPException(status_code=404, detail="Proposal not found")
         latest_planning_run = await ProposalPlanningRunRepository.get_latest_by_proposal(session, proposal.id)
         latest_planning_task_exists = None
@@ -176,8 +163,7 @@ async def update_proposal_status(
     runner: AgentTaskRunner = request.app.state.runner
     async with database.session() as session:
         existing = await ProductProposalRepository.get(session, proposal_id)
-        workspaces = await WorkspaceRepository.list_for_user(session, user_id=user.id)
-        if existing is None or not _proposal_accessible_to_user_workspaces(existing, workspaces):
+        if existing is None or not _proposal_owned_by_user(existing, user.id):
             raise HTTPException(status_code=404, detail="Proposal not found")
         previous_status = existing.status
         proposal = await ProductProposalRepository.set_status(session, proposal_id, payload.status)
@@ -225,8 +211,7 @@ async def retry_proposal_planning(
     runner: AgentTaskRunner = request.app.state.runner
     async with database.session() as session:
         proposal = await ProductProposalRepository.get(session, proposal_id)
-        workspaces = await WorkspaceRepository.list_for_user(session, user_id=user.id)
-        if proposal is None or not _proposal_accessible_to_user_workspaces(proposal, workspaces):
+        if proposal is None or not _proposal_owned_by_user(proposal, user.id):
             raise HTTPException(status_code=404, detail="Proposal not found")
         if proposal.status != ProductProposalStatus.approved:
             raise HTTPException(status_code=409, detail="Only approved proposals can retry planning")
@@ -281,12 +266,11 @@ async def list_features(
     """List features visible to the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
-        workspaces = await WorkspaceRepository.list_for_user(session, user_id=user.id)
         features = await FeatureRepository.list(
             session,
+            user_id=user.id,
             status=status,
             project=project,
-            workspaces=workspaces,
             limit=limit,
         )
     return [FeatureResponse.from_record(feature) for feature in features]
@@ -307,8 +291,7 @@ async def get_feature(
         if feature.proposal_id is None:
             raise HTTPException(status_code=404, detail="Feature not found")
         proposal = await ProductProposalRepository.get(session, feature.proposal_id)
-        workspaces = await WorkspaceRepository.list_for_user(session, user_id=user.id)
-        if proposal is None or not _proposal_accessible_to_user_workspaces(proposal, workspaces):
+        if proposal is None or not _proposal_owned_by_user(proposal, user.id):
             raise HTTPException(status_code=404, detail="Feature not found")
         items = await FeatureItemRepository.list_by_feature(session, feature_id)
     return FeatureResponse.from_record(feature, items=items)
