@@ -84,6 +84,40 @@ class AgentTaskRunner:
 
         return task.id
 
+    async def retry_failed_task(self, task_id: uuid.UUID) -> uuid.UUID:
+        """Clone a failed task into a fresh queued task and dispatch it."""
+        async with self._database.session() as session:
+            source = await TaskRepository.get(session, task_id)
+            if source is None:
+                raise ValueError("Task not found")
+            if source.status != TaskStatus.failed:
+                raise ValueError("Only failed tasks can be retried")
+            if not source.repo or not source.project:
+                raise ValueError("Failed task repo/project context is missing")
+
+            retry = await TaskRepository.create_pending(
+                session,
+                agent=source.agent,
+                agent_instance_id=source.agent_instance_id,
+                category=source.category,
+                question=source.question,
+                repo=source.repo,
+                project=source.project,
+                external_issue_url=source.external_issue_url,
+            )
+            await session.commit()
+            await session.refresh(retry)
+
+        dispatched = await self.dispatch_existing_task(
+            retry.id,
+            recovered=False,
+            fail_task_on_dispatch_error=True,
+        )
+        if not dispatched:
+            raise RuntimeError(f"Task `{retry.id}` is no longer dispatchable (status/lease changed).")
+        logger.info("Failed task `%s` was retried as `%s`.", task_id, retry.id)
+        return retry.id
+
     async def recover_unfinished_tasks(self) -> int:
         """Recover queued/running tasks whose dispatch lease is missing or expired.
         Recover three types task - Queued tasks but not be submitted, Running task but not finalized
