@@ -365,6 +365,17 @@
         "started": "开始时间",
         "finished": "结束时间",
         "result": "结果",
+        "retry": "Retry",
+        "retrying": "Retry 中…",
+        "retryConfirmTitle": "确认 Retry 任务？",
+        "retryConfirmDescription": "系统会基于当前失败任务创建一个新的任务并重新加入队列。",
+        "confirmRetry": "确认 Retry",
+        "cancelRetry": "取消",
+        "retryStarted": "Retry 已创建",
+        "retryStartedDescription": "新任务已提交到队列，即将打开新任务详情。",
+        "viewRetryTask": "查看新任务",
+        "retryFailed": "Retry 失败",
+        "retryFailedDescription": "无法重试该任务。",
         "failedToLoad": "加载任务失败。"
       }
     }
@@ -735,6 +746,17 @@
         "started": "Started",
         "finished": "Finished",
         "result": "Result",
+        "retry": "Retry",
+        "retrying": "Retrying...",
+        "retryConfirmTitle": "Retry this task?",
+        "retryConfirmDescription": "Nexus will create a new task from this failed task and queue it again.",
+        "confirmRetry": "Retry task",
+        "cancelRetry": "Cancel",
+        "retryStarted": "Retry created",
+        "retryStartedDescription": "The new task has been queued and will open now.",
+        "viewRetryTask": "View new task",
+        "retryFailed": "Retry failed",
+        "retryFailedDescription": "Unable to retry this task.",
         "failedToLoad": "Failed to load task."
       }
     }
