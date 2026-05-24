@@ -1,13 +1,13 @@
 import { startTransition, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, GitBranch } from 'lucide-react';
+import { AlertCircle, ArrowLeft, GitBranch } from 'lucide-react';
 import { ApiError, getErrorDetail } from '@/api/client';
 import { getTask } from '@/api/tasks';
 import type { ApiTask } from '@/api/types';
 import { useAppLayout } from '@/components/layout/AppLayout';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { STATUS_META } from '@/lib/workspace-task-view';
 import {
   Card,
   CardContent,
@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { STATUS_META } from '@/lib/workspace-task-view';
 import { getTaskById } from '@/data/mockWorkflows';
 import { usePolling } from '@/lib/usePolling';
 
@@ -45,6 +46,61 @@ function MetadataRow({
       <span className="text-muted-foreground">{label}</span>
       <span className="min-w-0 truncate text-right">{value}</span>
     </div>
+  );
+}
+
+function getFailureSummary(task: ApiTask): string {
+  return task.error?.trim() || task.result?.trim() || '-';
+}
+
+function FailedTaskActionPanel({ task }: { task: ApiTask }) {
+  const { t } = useTranslation();
+
+  return (
+    <Card className="h-fit max-w-3xl border-destructive/30 bg-destructive/5">
+      <CardHeader>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="size-4" />
+              {t('taskDetail.failedActionPanel.title')}
+            </CardTitle>
+            <CardDescription>{t('taskDetail.failedActionPanel.description')}</CardDescription>
+          </div>
+          <Badge variant="destructive">{t(`status.${task.status}`)}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4 text-sm">
+        <div className="rounded-md border border-destructive/30 bg-background px-3 py-2">
+          <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+            {t('taskDetail.failedActionPanel.errorSummary')}
+          </p>
+          <p className="mt-2 whitespace-pre-wrap break-words text-destructive">
+            {getFailureSummary(task)}
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <MetadataRow
+            label={t('taskDetail.failedActionPanel.failureClass')}
+            value={<Badge variant="outline">{t(`taskCategory.${task.category}`)}</Badge>}
+          />
+          <MetadataRow
+            label={t('taskDetail.failedActionPanel.failedAt')}
+            value={detailValue(task.finished_at ? new Date(task.finished_at).toLocaleString() : null)}
+          />
+        </div>
+
+        <div className="flex justify-end">
+          <Button asChild variant="outline" size="sm">
+            <Link to="/task-board?status=failed">
+              <ArrowLeft className="size-4" />
+              {t('taskDetail.failedActionPanel.backToQueue')}
+            </Link>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -182,14 +238,16 @@ export default function TaskDetailPage() {
   }
 
   return (
-    <Card className="h-fit max-w-3xl">
-      <CardHeader>
-        <CardTitle>{t('taskDetail.metadata')}</CardTitle>
-        <CardDescription>{t('taskDetail.backendDescription')}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3 text-sm">
-        <MetadataRow label={t('taskDetail.agent')} value={task.agent} />
-        <MetadataRow label={t('taskDetail.agentInstance')} value={task.agent_instance_id} />
+    <div className="flex max-w-3xl flex-col gap-4">
+      {task.status === 'failed' ? <FailedTaskActionPanel task={task} /> : null}
+      <Card className="h-fit">
+        <CardHeader>
+          <CardTitle>{t('taskDetail.metadata')}</CardTitle>
+          <CardDescription>{t('taskDetail.backendDescription')}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 text-sm">
+          <MetadataRow label={t('taskDetail.agent')} value={task.agent} />
+          <MetadataRow label={t('taskDetail.agentInstance')} value={task.agent_instance_id} />
         <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
           <span className="text-muted-foreground">{t('taskDetail.status')}</span>
           <Badge variant={STATUS_META[task.status].badgeVariant}>
@@ -221,7 +279,8 @@ export default function TaskDetailPage() {
             {task.error}
           </div>
         ) : null}
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
