@@ -158,11 +158,6 @@ export default function ProductResearchPage() {
       return;
     }
 
-    if (proposalId && selectedProposal?.status === 'rejected') {
-      setProposalFilter('rejected');
-      return;
-    }
-
     if (
       proposalId &&
       (selectedProposal?.status === 'approved' ||
@@ -202,7 +197,13 @@ export default function ProductResearchPage() {
           : t('productResearch.requirementRejected'),
       );
       await reloadSnapshot('mutation');
-      setProposalFilter(status === 'approved' ? 'accepted' : 'rejected');
+      if (status === 'approved') {
+        setProposalFilter('accepted');
+      } else {
+        setProposalFilter('proposed');
+        setProposalPage(1);
+        navigate('/product-research', { replace: true });
+      }
     } catch (error) {
       toast.error(t('productResearch.updateProposalFailed'), {
         description: getErrorDetail(error, t('productResearch.updateProposalFailedDescription')),
