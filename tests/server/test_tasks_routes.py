@@ -591,3 +591,87 @@ def test_consult_task_returns_process_reply(monkeypatch: pytest.MonkeyPatch) -> 
         {'role': 'user', 'content': 'Original task request'},
         {'role': 'assistant', 'content': 'Checkpointed progress'},
     ]
+
+
+def test_retry_failed_task_dispatches_cloned_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify retry creates a queued replacement and leaves the failed task unchanged."""
+    now = datetime.now(timezone.utc)
+    failed_task = _make_task(
+        question='retry this failed task',
+        status=TaskStatus.failed,
+        created_at=now - timedelta(minutes=10),
+        repo='owner/retry-repo',
+        project='retry-project',
+        agent=AgentName.tela,
+    )
+    failed_task.error = 'worker failed'
+    retry_task = _make_task(
+        question=failed_task.question,
+        status=TaskStatus.queued,
+        created_at=now,
+        repo=failed_task.repo,
+        project=failed_task.project,
+        agent=failed_task.agent,
+        agent_instance_id=failed_task.agent_instance_id,
+    )
+    runner = SimpleNamespace(retry_failed_task=AsyncMock(return_value=retry_task.id))
+
+    async def fake_get(session, task_id, **kwargs):
+        """Provide original and retry task records."""
+        if task_id == failed_task.id:
+            return failed_task
+        if task_id == retry_task.id:
+            return retry_task
+        return None
+
+    monkeypatch.setattr(TaskRepository, 'get', fake_get)
+    monkeypatch.setattr(AgentInstanceRepository, 'get', _fake_get_current_user_instance)
+
+    async def run_request() -> httpx.Response:
+        """Run the request test body."""
+        transport = httpx.ASGITransport(app=_build_app(runner_obj=runner))
+        async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
+            return await client.post(f'/v1/tasks/{failed_task.id}/retry')
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 202
+    assert response.json() == {
+        'task_id': str(retry_task.id),
+        'agent_instance_id': str(failed_task.agent_instance_id),
+        'category': failed_task.category.value,
+        'status': TaskStatus.queued.value,
+    }
+    assert failed_task.status == TaskStatus.failed
+    assert failed_task.error == 'worker failed'
+    runner.retry_failed_task.assert_awaited_once_with(failed_task.id)
+
+
+def test_retry_rejects_non_failed_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify only failed tasks can be retried."""
+    task = _make_task(
+        question='still running',
+        status=TaskStatus.running,
+        created_at=datetime.now(timezone.utc),
+    )
+    runner = SimpleNamespace(retry_failed_task=AsyncMock())
+
+    async def fake_get(session, task_id, **kwargs):
+        """Provide a fake task."""
+        assert task_id == task.id
+        return task
+
+    monkeypatch.setattr(TaskRepository, 'get', fake_get)
+    monkeypatch.setattr(AgentInstanceRepository, 'get', _fake_get_current_user_instance)
+
+    async def run_request() -> httpx.Response:
+        """Run the request test body."""
+        transport = httpx.ASGITransport(app=_build_app(runner_obj=runner))
+        async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
+            return await client.post(f'/v1/tasks/{task.id}/retry')
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 409
+    assert response.json()['detail'] == 'Only failed tasks can be retried'
+    runner.retry_failed_task.assert_not_awaited()
