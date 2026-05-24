@@ -12,6 +12,7 @@ import ProductResearchPage from '@/pages/product-research';
 import PublishTaskPage from '@/pages/publish-task';
 import TaskBoardPage from '@/pages/task-board';
 import TaskDetailPage from '@/pages/TaskDetailPage';
+import WorkspaceSettingsPage from '@/pages/workspace-settings';
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
             <Route element={<AppLayout />}>
               <Route path="/" element={<Navigate to={DEFAULT_WORKSPACE_PATH} replace />} />
               <Route path="/pricing" element={<PricingPage />} />
+              <Route path="/workspace-settings" element={<WorkspaceSettingsPage />} />
               <Route path="/publish-task" element={<PublishTaskPage />} />
               <Route path="/process-tracking" element={<ProcessTrackingPage />} />
               <Route path="/product-research" element={<ProductResearchPage />} />
@@ -38,6 +40,10 @@ function App() {
               <Route path="/code-review/nexus" element={<NexusReviewPage />} />
               <Route path="/code-review/nexus/tasks/:taskId" element={<NexusReviewPage />} />
               <Route path="/workspace" element={<Navigate to={DEFAULT_WORKSPACE_PATH} replace />} />
+              <Route
+                path="/workspace/workspace-settings"
+                element={<Navigate to="/workspace-settings" replace />}
+              />
               <Route path="/workspace/publish-task" element={<Navigate to="/publish-task" replace />} />
               <Route
                 path="/workspace/process-tracking"
