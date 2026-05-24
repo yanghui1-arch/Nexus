@@ -481,8 +481,9 @@ def _build_agent(
 
     agent_name = task.agent.value
     resolved_repo = task.repo or github_repo
-    if agent_name in _CODING_AGENTS and not resolved_repo:
-        raise RuntimeError("Missing repo context.")
+    resolved_project = task.project
+    if not resolved_repo or not resolved_project:
+        raise RuntimeError("Missing repo/project context.")
 
     shared = {
         "base_url": settings.base_url,
@@ -575,8 +576,8 @@ async def _load_binding(database: Database, task: TaskRecord) -> _ExecutionBindi
         # for legacy rows that predate that snapshot behavior.
         github_repo = task.repo or workspace.github_repo
         project = task.project if task.project is not None else workspace.project
-        if task.agent.value in _CODING_AGENTS and github_repo is None:
-            raise RuntimeError("Missing repo context.")
+        if not github_repo or not project:
+            raise RuntimeError("Missing repo/project context.")
 
     return _ExecutionBinding(
         github_repo=github_repo,
