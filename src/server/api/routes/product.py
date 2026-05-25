@@ -70,6 +70,8 @@ async def create_proposal(
             plan_type=payload.plan_type,
             summary=payload.summary,
             answer=payload.answer,
+            details=payload.details,
+            panels=payload.panels,
             user_id=user.id,
             project=payload.project,
             repo=payload.repo,

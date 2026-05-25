@@ -365,6 +365,8 @@ class ProductProposalRepository:
         user_id: uuid.UUID,
         project: str | None,
         repo: str | None,
+        details: dict[str, Any] | None = None,
+        panels: dict[str, Any] | None = None,
         source_task_id: uuid.UUID | None = None,
     ) -> ProductProposalRecord:
         """Create a new database record."""
@@ -373,6 +375,8 @@ class ProductProposalRepository:
             plan_type=plan_type,
             summary=summary,
             answer=answer,
+            details=details,
+            panels=panels,
             user_id=user_id,
             project=project,
             repo=repo,

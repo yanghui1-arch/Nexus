@@ -43,6 +43,8 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
         "plan_type",
         "summary",
         "answer",
+        "details",
+        "panels",
         "user_id",
         "project",
         "repo",
@@ -182,6 +184,8 @@ class Database:
                 )
             if conn.dialect.name == "postgresql":
                 await conn.execute(text("ALTER TABLE product_proposal ALTER COLUMN user_id SET NOT NULL"))
+            await conn.execute(text("ALTER TABLE product_proposal ADD COLUMN IF NOT EXISTS details JSON"))
+            await conn.execute(text("ALTER TABLE product_proposal ADD COLUMN IF NOT EXISTS panels JSON"))
             await conn.execute(
                 text(
                     "ALTER TABLE task ADD COLUMN IF NOT EXISTS "

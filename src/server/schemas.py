@@ -38,6 +38,8 @@ class ProductProposalCreateRequest(BaseModel):
     plan_type: str = Field(min_length=1, max_length=32)
     summary: str = Field(min_length=1)
     answer: str = Field(min_length=1)
+    details: dict[str, Any] | None = None
+    panels: dict[str, Any] | None = None
     project: str | None = None
     repo: str | None = None
     source_task_id: uuid.UUID | None = None
@@ -112,6 +114,8 @@ class ProductProposalResponse(BaseModel):
     plan_type: str
     summary: str
     answer: str
+    details: dict[str, Any] | None = None
+    panels: dict[str, Any] | None = None
     project: str | None
     repo: str | None
     status: ProductProposalStatus
@@ -135,6 +139,8 @@ class ProductProposalResponse(BaseModel):
             plan_type=proposal.plan_type,
             summary=proposal.summary,
             answer=proposal.answer,
+            details=proposal.details,
+            panels=proposal.panels,
             project=proposal.project,
             repo=proposal.repo,
             status=proposal.status,

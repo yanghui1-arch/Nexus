@@ -60,6 +60,8 @@ def _proposal(**overrides: Any) -> Any:
         "plan_type": "feature",
         "summary": "Improve answer quality with retrieval.",
         "answer": "Build RAG in small slices.",
+        "details": None,
+        "panels": None,
         "project": "nexus",
         "repo": "owner/repo",
         "user_id": uuid.uuid4(),
@@ -592,3 +594,50 @@ def test_retry_planning_dispatches_new_task_when_planning_task_is_missing(monkey
         recovered=False,
         fail_task_on_dispatch_error=True,
     )
+
+
+def test_create_proposal_round_trips_structured_details(monkeypatch) -> None:
+    """Verify proposal creation accepts optional structured detail JSON."""
+    user_id = uuid.uuid4()
+    details = {
+        "overview": "Add richer details.",
+        "scope": ["backend contract", "tool payload"],
+        "evidence": [{"label": "customer", "value": "requested"}],
+        "risks": ["schema drift"],
+        "implementation_split": ["model", "schema", "tests"],
+    }
+    panels = {"overview": {"title": "Overview", "body": "Add richer details."}}
+    captured = {}
+
+    async def fake_create(session, **kwargs):
+        captured.update(kwargs)
+        return _proposal(id=uuid.UUID("00000000-0000-0000-0000-000000000020"), **kwargs)
+
+    monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
+    monkeypatch.setattr(ProductProposalRepository, "create", fake_create)
+    monkeypatch.setattr(ProposalPlanningRunRepository, "get_latest_by_proposal", AsyncMock(return_value=None))
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(user_id=user_id))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(
+                "/v1/product/proposals",
+                json={
+                    "title": "Structured proposal",
+                    "plan_type": "feature",
+                    "summary": "Expose proposal panels.",
+                    "answer": "Keep markdown answer for compatibility.",
+                    "details": details,
+                    "panels": panels,
+                    "project": "nexus",
+                    "repo": "owner/repo",
+                },
+            )
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 201
+    assert captured["details"] == details
+    assert captured["panels"] == panels
+    assert response.json()["details"] == details
+    assert response.json()["panels"] == panels

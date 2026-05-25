@@ -349,6 +349,8 @@ class ProductProposalRecord(Base):
     plan_type: Mapped[str] = mapped_column(String(32), nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     answer: Mapped[str] = mapped_column(Text, nullable=False)
+    details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    panels: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("user_account.id", ondelete="CASCADE"),
         nullable=False,
