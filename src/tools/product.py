@@ -16,10 +16,18 @@ from src.tools.nexus import NexusTaskContext
 class CreateProductProposal(BaseModel):
     """Create a product proposal for human review."""
 
-    title: str = Field(description="Short proposal title")
+    title: str = Field(description="Short proposal title in the user's or task's language")
     plan_type: str = Field(description="Proposal type, such as feature, fix, patch, or growth")
-    summary: str = Field(description="Brief business summary of the proposal")
-    answer: str = Field(description="Full proposal details, evidence, risks, and suggested breakdown")
+    summary: str = Field(
+        description="1-3 sentence summary focused on what to do and why it is worth doing"
+    )
+    answer: str = Field(
+        description=(
+            "Concise, decision-ready proposal details. Include necessary evidence, risks, "
+            "scope, non-goals, and suggested breakdown; include Open Questions only when "
+            "real unresolved items exist."
+        )
+    )
     project: str | None = Field(default=None, description="Optional project name")
     repo: str | None = Field(default=None, description="Optional repository, such as owner/repo")
 

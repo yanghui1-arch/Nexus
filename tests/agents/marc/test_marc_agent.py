@@ -119,3 +119,17 @@ def test_marc_step_passes_read_only_tools_to_openai():
         assert {_tool_name(definition) for definition in kwargs["tools"]} == EXPECTED_TOOLS
 
     anyio.run(run)
+
+
+def test_marc_prompt_uses_decision_ready_proposal_contract():
+    """Verify Marc proposals are not forced into a fixed section template."""
+    from src.agents.marc.system_prompt import MARC_SYSTEM_PROMPT
+
+    assert "Match the proposal `title` language" in MARC_SYSTEM_PROMPT
+    assert "Keep `summary` to 1-3 sentences" in MARC_SYSTEM_PROMPT
+    assert "decision-oriented" in MARC_SYSTEM_PROMPT
+    assert "Do not force every proposal into a fixed set of markdown sections" in MARC_SYSTEM_PROMPT
+    assert "Include `Open Questions` only when" in MARC_SYSTEM_PROMPT
+    assert "every proposal still needs at least 2 repository-level evidence points" in MARC_SYSTEM_PROMPT
+    assert "# Proposal answer template" not in MARC_SYSTEM_PROMPT
+    assert "Do not omit a section" not in MARC_SYSTEM_PROMPT
