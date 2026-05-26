@@ -915,11 +915,14 @@ def test_execute_agent_task_defers_current_queued_dispatch_when_agent_busy(monke
     monkeypatch.setattr(execution, "Database", lambda database_url: FakeExecutionDatabase())
     monkeypatch.setattr(execution, "_load_task", AsyncMock(return_value=task))
     monkeypatch.setattr(execution, "_load_binding", fake_load_binding)
-    monkeypatch.setattr(execution, "_mark_workspace_running", AsyncMock())
+    mark_workspace_running = AsyncMock()
+    release_workspace = AsyncMock()
+
+    monkeypatch.setattr(execution, "_mark_workspace_running", mark_workspace_running)
     monkeypatch.setattr(execution, "_claim_running", false_claim)
     monkeypatch.setattr(execution, "_is_current_queued_dispatch", true_current_dispatch)
     monkeypatch.setattr(execution, "_mark_failed", fail_mark_failed)
-    monkeypatch.setattr(execution, "_release_workspace", AsyncMock())
+    monkeypatch.setattr(execution, "_release_workspace", release_workspace)
 
     with pytest.raises(execution.AgentTaskLeaseDeferred) as exc_info:
         asyncio.run(
@@ -934,3 +937,5 @@ def test_execute_agent_task_defers_current_queued_dispatch_when_agent_busy(monke
         )
 
     assert exc_info.value.countdown_seconds == 3
+    mark_workspace_running.assert_not_awaited()
+    release_workspace.assert_not_awaited()

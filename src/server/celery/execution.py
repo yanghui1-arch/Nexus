@@ -83,6 +83,7 @@ async def execute_agent_task(
     pending_checkpoint_tasks: set[asyncio.Task[Any]] = set()
     stop_lease_heartbeat = asyncio.Event()
     lease_heartbeat_task: asyncio.Task[Any] | None = None
+    workspace_claimed = False
     binding: _ExecutionBinding | None = None
     task: TaskRecord | None = None
 
@@ -180,6 +181,7 @@ async def execute_agent_task(
             return
 
         await _mark_workspace_running(database, task.agent_instance_id)
+        workspace_claimed = True
 
         # Heartbeat keeps lease fresh so recovery only picks truly orphaned running tasks.
         lease_heartbeat_task = asyncio.create_task(
@@ -234,7 +236,7 @@ async def execute_agent_task(
         if awaitables:
             await asyncio.gather(*awaitables, return_exceptions=True)
 
-        if binding is not None and task is not None:
+        if workspace_claimed and task is not None:
             await _release_workspace(database, task.agent_instance_id)
 
         await database.disconnect()
