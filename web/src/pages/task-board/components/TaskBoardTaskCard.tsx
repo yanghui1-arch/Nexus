@@ -1,6 +1,14 @@
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { classifyFailureReason } from '@/lib/failure-reason-classifier';
+import {
+  taskCategoryLabel,
+  taskSourceLabel,
+  taskSourceNode,
+  truncateTaskError,
+} from '@/lib/task-display';
 import { timeAgo, type WorkspaceTaskView } from '@/lib/workspace-task-view';
 
 type TaskBoardTaskCardProps = {
@@ -13,6 +21,15 @@ export function TaskBoardTaskCard({
   onOpenReview,
 }: TaskBoardTaskCardProps) {
   const { t } = useTranslation();
+  const taskError = truncateTaskError(task.error);
+  const failureReason = task.error ? classifyFailureReason(task.error) : null;
+  const sourceTask = {
+    category: task.category,
+    external_issue_url: task.externalIssueUrl,
+    external_pull_request_url: task.externalPullRequestUrl,
+    error: task.error,
+  };
+  const sourceLabel = taskSourceLabel(sourceTask);
   const canOpenReview =
     task.status === 'waiting_for_review' ||
     task.status === 'merged' ||
@@ -24,6 +41,12 @@ export function TaskBoardTaskCard({
       <p className="line-clamp-3 text-sm font-medium leading-snug">{task.question}</p>
 
       <div className="mt-2 flex flex-col gap-0.5 text-xs text-muted-foreground">
+        <span className="truncate" title={taskCategoryLabel(task.category)}>
+          {taskCategoryLabel(task.category)}
+        </span>
+        <span className="truncate" title={sourceLabel}>
+          {taskSourceNode(sourceTask)}
+        </span>
         <span className="truncate" title={task.repo ?? '-'}>
           {task.repo ?? t('common.noRepository')}
         </span>
@@ -37,8 +60,11 @@ export function TaskBoardTaskCard({
         ) : null}
       </div>
 
-      {task.error ? (
-        <p className="mt-2 line-clamp-2 text-xs text-destructive">{task.error}</p>
+      {taskError ? (
+        <div className="mt-2 flex flex-col gap-1 text-xs text-destructive" title={task.error ?? undefined}>
+          {failureReason ? <Badge variant="outline">{failureReason}</Badge> : null}
+          <p className="line-clamp-2">{taskError}</p>
+        </div>
       ) : null}
 
       <div className="mt-2 flex flex-col gap-0.5 text-xs text-muted-foreground">

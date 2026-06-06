@@ -217,6 +217,7 @@ async def retry_proposal_planning(
             raise HTTPException(status_code=409, detail="Only approved proposals can retry planning")
 
         latest_planning_run = await ProposalPlanningRunRepository.get_latest_by_proposal(session, proposal.id)
+        retry_of_task_id: uuid.UUID | None = None
         if latest_planning_run is not None:
             latest_planning_task = await TaskRepository.get(session, latest_planning_run.task_id)
             if latest_planning_task is not None:
@@ -232,6 +233,7 @@ async def retry_proposal_planning(
                         status_code=409,
                         detail="Only failed planning runs can be retried",
                     )
+                retry_of_task_id = latest_planning_run.task_id
 
         try:
             proposal = await start_proposal_planning(
@@ -239,6 +241,7 @@ async def retry_proposal_planning(
                 runner=runner,
                 proposal=proposal,
                 user_id=user.id,
+                retry_of_task_id=retry_of_task_id,
             )
         except NoActiveMarcAgentInstanceError as exc:
             raise HTTPException(status_code=409, detail="No active Marc agent instance is available") from exc
