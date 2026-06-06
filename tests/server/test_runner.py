@@ -5,6 +5,7 @@ import sys
 import types
 import uuid
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -27,8 +28,14 @@ fake_celery_module = types.ModuleType("celery")
 fake_celery_module.Celery = _FakeCelery
 sys.modules.setdefault("celery", fake_celery_module)
 
-from src.server.postgres.models import AgentName, TaskCategory
-from src.server.postgres.repositories import AgentInstanceRepository, TaskRepository, WorkspaceRepository
+from src.server.postgres.models import AgentName, TaskCategory, TaskStatus
+from src.server.postgres.repositories import (
+    AgentInstanceRepository,
+    FeatureItemRepository,
+    ProposalPlanningRunRepository,
+    TaskRepository,
+    WorkspaceRepository,
+)
 from src.server.runner import AgentTaskRunner
 
 
@@ -141,3 +148,172 @@ def test_create_task_record_requires_workspace_repo_and_project(
 
     with pytest.raises(ValueError, match="workspace repo and project are required for task submission"):
         asyncio.run(runner._create_task_record(object(), request))
+
+
+def test_retry_failed_task_clones_required_fields(monkeypatch) -> None:
+    """Verify failed task retry creates a fresh queued task from the source."""
+    source_task_id = uuid.uuid4()
+    retry_task_id = uuid.uuid4()
+    agent_instance_id = uuid.uuid4()
+    source_task = SimpleNamespace(
+        id=source_task_id,
+        agent=AgentName.tela,
+        agent_instance_id=agent_instance_id,
+        category=TaskCategory.coding,
+        question="fix retry semantics",
+        repo="owner/repo",
+        project="nexus",
+        external_issue_url="https://github.com/owner/repo/issues/9",
+        status=TaskStatus.failed,
+    )
+    retry_task = SimpleNamespace(id=retry_task_id)
+    session = SimpleNamespace(
+        commit=AsyncMock(),
+        refresh=AsyncMock(),
+    )
+
+    class FakeDatabase:
+        def session(self):
+            class Context:
+                async def __aenter__(self_inner):
+                    return session
+
+                async def __aexit__(self_inner, exc_type, exc, tb):
+                    return None
+
+            return Context()
+
+    captured: dict[str, object] = {}
+
+    async def fake_get(session_arg, task_id):
+        """Provide the failed source task."""
+        assert session_arg is session
+        assert task_id == source_task_id
+        return source_task
+
+    async def fake_create_pending(session_arg, **kwargs):
+        """Capture cloned task fields."""
+        assert session_arg is session
+        captured.update(kwargs)
+        return retry_task
+
+    async def fake_dispatch_existing_task(task_id, **kwargs):
+        """Capture dispatch arguments."""
+        captured["dispatch_task_id"] = task_id
+        captured["dispatch_kwargs"] = kwargs
+        return True
+
+    async def fake_get_planning_run(session_arg, task_id):
+        """Return no linked planning run for a coding task retry."""
+        assert session_arg is session
+        assert task_id == source_task_id
+        return None
+
+    async def fake_reassign_task(session_arg, **kwargs):
+        """Capture feature-item reassignment for coding retries."""
+        assert session_arg is session
+        captured["reassign_kwargs"] = kwargs
+        return []
+
+    monkeypatch.setattr(TaskRepository, "get", fake_get)
+    monkeypatch.setattr(TaskRepository, "create_pending", fake_create_pending)
+    monkeypatch.setattr(ProposalPlanningRunRepository, "get_by_task_id", fake_get_planning_run)
+    monkeypatch.setattr(FeatureItemRepository, "reassign_task", fake_reassign_task)
+
+    runner = AgentTaskRunner(
+        settings=SimpleNamespace(),
+        database=FakeDatabase(),
+    )
+    monkeypatch.setattr(runner, "dispatch_existing_task", fake_dispatch_existing_task)
+
+    new_task_id = asyncio.run(runner.retry_failed_task(source_task_id))
+
+    assert new_task_id == retry_task_id
+    assert captured == {
+        "agent": AgentName.tela,
+        "agent_instance_id": agent_instance_id,
+        "category": TaskCategory.coding,
+        "question": "fix retry semantics",
+        "repo": "owner/repo",
+        "project": "nexus",
+        "external_issue_url": "https://github.com/owner/repo/issues/9",
+        "reassign_kwargs": {
+            "source_task_id": source_task_id,
+            "retry_task_id": retry_task_id,
+        },
+        "dispatch_task_id": retry_task_id,
+        "dispatch_kwargs": {
+            "recovered": False,
+            "fail_task_on_dispatch_error": True,
+        },
+    }
+    session.commit.assert_awaited_once()
+    session.refresh.assert_awaited_once_with(retry_task)
+
+
+def test_retry_failed_pm_task_creates_new_planning_run(monkeypatch) -> None:
+    """Verify PM retries preserve proposal-planning tracking."""
+    source_task_id = uuid.uuid4()
+    retry_task_id = uuid.uuid4()
+    proposal_id = uuid.uuid4()
+    source_task = SimpleNamespace(
+        id=source_task_id,
+        agent=AgentName.marc,
+        agent_instance_id=uuid.uuid4(),
+        category=TaskCategory.pm,
+        question="plan proposal",
+        repo="owner/repo",
+        project="nexus",
+        external_issue_url=None,
+        status=TaskStatus.failed,
+    )
+    retry_task = SimpleNamespace(id=retry_task_id)
+    planning_run = SimpleNamespace(proposal_id=proposal_id)
+    session = SimpleNamespace(commit=AsyncMock(), refresh=AsyncMock())
+
+    class FakeDatabase:
+        def session(self):
+            class Context:
+                async def __aenter__(self_inner):
+                    return session
+
+                async def __aexit__(self_inner, exc_type, exc, tb):
+                    return None
+
+            return Context()
+
+    captured: dict[str, object] = {}
+
+    async def fake_get(session_arg, task_id):
+        return source_task
+
+    async def fake_create_pending(session_arg, **kwargs):
+        return retry_task
+
+    async def fake_get_planning_run(session_arg, task_id):
+        assert task_id == source_task_id
+        return planning_run
+
+    async def fake_create_planning_run(session_arg, **kwargs):
+        captured["planning_run_kwargs"] = kwargs
+        return SimpleNamespace(id=uuid.uuid4())
+
+    async def fake_reassign_task(session_arg, **kwargs):
+        raise AssertionError("PM retry should not reassign feature items")
+
+    monkeypatch.setattr(TaskRepository, "get", fake_get)
+    monkeypatch.setattr(TaskRepository, "create_pending", fake_create_pending)
+    monkeypatch.setattr(ProposalPlanningRunRepository, "get_by_task_id", fake_get_planning_run)
+    monkeypatch.setattr(ProposalPlanningRunRepository, "create_pending", fake_create_planning_run)
+    monkeypatch.setattr(FeatureItemRepository, "reassign_task", fake_reassign_task)
+
+    runner = AgentTaskRunner(settings=SimpleNamespace(), database=FakeDatabase())
+    monkeypatch.setattr(runner, "dispatch_existing_task", AsyncMock(return_value=True))
+
+    new_task_id = asyncio.run(runner.retry_failed_task(source_task_id))
+
+    assert new_task_id == retry_task_id
+    assert captured["planning_run_kwargs"] == {
+        "proposal_id": proposal_id,
+        "task_id": retry_task_id,
+    }

@@ -16,6 +16,7 @@ from src.server.postgres.database import Database
 from src.server.postgres.models import AgentName, TaskCategory, TaskStatus
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
+    FeatureItemRepository,
     ProposalPlanningRunRepository,
     TaskRepository,
     WorkspaceRepository,
@@ -83,6 +84,64 @@ class AgentTaskRunner:
             raise
 
         return task.id
+
+    async def retry_failed_task(self, task_id: uuid.UUID) -> uuid.UUID:
+        """Clone a failed task into a fresh queued task and dispatch it."""
+        async with self._database.session() as session:
+            source = await TaskRepository.get(session, task_id)
+            if source is None:
+                raise ValueError("Task not found")
+            if source.status != TaskStatus.failed:
+                raise ValueError("Only failed tasks can be retried")
+            if not source.repo or not source.project:
+                raise ValueError("Failed task repo/project context is missing")
+
+            retry = await TaskRepository.create_pending(
+                session,
+                agent=source.agent,
+                agent_instance_id=source.agent_instance_id,
+                category=source.category,
+                question=source.question,
+                repo=source.repo,
+                project=source.project,
+                external_issue_url=source.external_issue_url,
+            )
+            await self._clone_task_links(session, source_task_id=task_id, retry_task_id=retry.id)
+            await session.commit()
+            await session.refresh(retry)
+
+        dispatched = await self.dispatch_existing_task(
+            retry.id,
+            recovered=False,
+            fail_task_on_dispatch_error=True,
+        )
+        if not dispatched:
+            raise RuntimeError(f"Task `{retry.id}` is no longer dispatchable (status/lease changed).")
+        logger.info("Failed task `%s` was retried as `%s`.", task_id, retry.id)
+        return retry.id
+
+    async def _clone_task_links(
+        self,
+        session: AsyncSession,
+        *,
+        source_task_id: uuid.UUID,
+        retry_task_id: uuid.UUID,
+    ) -> None:
+        """Copy product workflow links that make the retry observable."""
+        planning_run = await ProposalPlanningRunRepository.get_by_task_id(session, source_task_id)
+        if planning_run is not None:
+            await ProposalPlanningRunRepository.create_pending(
+                session,
+                proposal_id=planning_run.proposal_id,
+                task_id=retry_task_id,
+            )
+            return
+
+        await FeatureItemRepository.reassign_task(
+            session,
+            source_task_id=source_task_id,
+            retry_task_id=retry_task_id,
+        )
 
     async def recover_unfinished_tasks(self) -> int:
         """Recover queued/running tasks whose dispatch lease is missing or expired.

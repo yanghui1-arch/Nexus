@@ -219,6 +219,45 @@ async def update_task_status(
     return TaskResponse.from_record(updated)
 
 
+@router.post("/{task_id}/retry", response_model=TaskSubmitResponse, status_code=202)
+async def retry_failed_task(
+    request: Request,
+    task_id: uuid.UUID,
+    user: UserRecord = Depends(get_current_user),
+) -> TaskSubmitResponse:
+    """Clone a failed task into a new queued task and dispatch it."""
+    database: Database = request.app.state.database
+    runner: AgentTaskRunner = request.app.state.runner
+    async with database.session() as session:
+        task = await TaskRepository.get(session, task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
+        if instance is None or instance.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Task not found")
+        if task.status != TaskStatus.failed:
+            raise HTTPException(status_code=409, detail="Only failed tasks can be retried")
+
+    try:
+        retry_task_id = await runner.retry_failed_task(task_id)
+    except ValueError as exc:
+        if str(exc) == "Task not found":
+            raise HTTPException(status_code=404, detail="Task not found") from exc
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    async with database.session() as session:
+        retry_task = await TaskRepository.get(session, retry_task_id)
+    if retry_task is None:
+        raise HTTPException(status_code=500, detail="Retry task could not be loaded")
+
+    return TaskSubmitResponse(
+        task_id=retry_task.id,
+        agent_instance_id=retry_task.agent_instance_id,
+        category=retry_task.category,
+        status=TaskStatus.queued,
+    )
+
+
 @router.post("/{task_id}/consult", response_model=TaskConsultResponse)
 async def consult_task(
     request: Request,
