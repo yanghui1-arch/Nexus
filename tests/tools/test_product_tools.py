@@ -103,6 +103,7 @@ def _context(*, task_id: uuid.UUID | None = None, user_id: uuid.UUID | None = No
         database=FakeDatabase(),
         user_id=user_id or uuid.uuid4(),
         repo="owner/repo",
+        project="nexus",
     )
 
 
@@ -158,8 +159,8 @@ def _feature_item(**overrides):
     return SimpleNamespace(**values)
 
 
-def test_create_proposal_uses_context_task_id_and_repo_default(monkeypatch):
-    """Verify create proposal uses context task id and repo default."""
+def test_create_proposal_uses_context_task_project_and_repo_default(monkeypatch):
+    """Verify create proposal uses the task context repo/project snapshot."""
     task_id = uuid.uuid4()
     captured = {}
 
@@ -192,7 +193,6 @@ def test_create_proposal_uses_context_task_id_and_repo_default(monkeypatch):
             plan_type="growth",
             summary="Help users reach value faster.",
             answer="Create a clearer onboarding flow.",
-            project="nexus",
         )
 
     result = anyio.run(run)
@@ -217,6 +217,43 @@ def test_create_proposal_uses_context_task_id_and_repo_default(monkeypatch):
         "repo": "owner/repo",
         "source_task_id": task_id,
     }
+
+
+def test_create_proposal_uses_context_project_even_when_repo_is_overridden(monkeypatch):
+    """Verify create proposal always persists the task project snapshot."""
+    captured = {}
+
+    async def fake_create(session, **kwargs):
+        """Provide a fake create."""
+        captured["session"] = session
+        captured.update(kwargs)
+        return _proposal(
+            project=kwargs["project"],
+            repo=kwargs["repo"],
+            user_id=kwargs["user_id"],
+            source_task_id=kwargs["source_task_id"],
+        )
+
+    monkeypatch.setattr(ProductProposalRepository, "create", fake_create)
+    context = _context()
+    tools = ProductTools(database=FakeDatabase(), context=context)
+
+    async def run():
+        """Run the async test body."""
+        return await tools.create_proposal(
+            title="Improve onboarding",
+            plan_type="growth",
+            summary="Help users reach value faster.",
+            answer="Create a clearer onboarding flow.",
+            repo="owner/override",
+        )
+
+    result = anyio.run(run)
+
+    assert result["success"] is True
+    assert result["project"] == "nexus"
+    assert result["repo"] == "owner/override"
+    assert captured["project"] == "nexus"
 
 
 def test_create_proposal_without_context_has_no_source_task(monkeypatch):

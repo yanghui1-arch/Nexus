@@ -25,6 +25,7 @@ class NexusTaskContext:
     database: Database
     user_id: uuid.UUID
     repo: str
+    project: str
     current_work_item_id: uuid.UUID | None = None
 
     @property

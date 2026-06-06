@@ -69,11 +69,19 @@ def test_marc_tool_kits_are_read_only():
         )
         pool = SimpleNamespace(acquire=AsyncMock(return_value=sandbox), release=AsyncMock())
         marc = make_marc()
-        marc.set_nexus_task_context(SimpleNamespace(task_id="task-id", database=SimpleNamespace(), repo="owner/repo"))
+        marc.set_nexus_task_context(
+            SimpleNamespace(
+                task_id="task-id",
+                database=SimpleNamespace(),
+                repo="owner/repo",
+                project="nexus",
+            )
+        )
         with patch("src.agents.marc.agent.get_sandbox_pool_manager", return_value=pool):
             async with marc:
                 assert set(marc.tool_kits) == EXPECTED_TOOLS
                 assert FORBIDDEN_MUTATING_TOOLS.isdisjoint(marc.tool_kits)
+                assert "- Project: nexus" in marc.system_prompt
         pool.acquire.assert_awaited_once()
         pool.release.assert_awaited_once_with(sandbox)
 

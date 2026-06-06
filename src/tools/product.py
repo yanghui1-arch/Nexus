@@ -20,7 +20,6 @@ class CreateProductProposal(BaseModel):
     plan_type: str = Field(description="Proposal type, such as feature, fix, patch, or growth")
     summary: str = Field(description="Brief business summary of the proposal")
     answer: str = Field(description="Full proposal details, evidence, risks, and suggested breakdown")
-    project: str | None = Field(default=None, description="Optional project name")
     repo: str | None = Field(default=None, description="Optional repository, such as owner/repo")
 
 
@@ -81,12 +80,13 @@ class ProductTools:
         plan_type: str,
         summary: str,
         answer: str,
-        project: str | None = None,
         repo: str | None = None,
     ) -> dict:
         """Create a product proposal."""
         if self._context is None:
             return {"success": False, "message": "Nexus task context is not available."}
+        if not self._context.project:
+            return {"success": False, "message": "Nexus task project context is not available."}
 
         proposal_repo = repo
         if not proposal_repo and self._context.repo:
@@ -101,7 +101,7 @@ class ProductTools:
                 summary=summary,
                 answer=answer,
                 user_id=self._context.user_id,
-                project=project,
+                project=self._context.project,
                 repo=proposal_repo,
                 source_task_id=proposal_source_task_id,
             )

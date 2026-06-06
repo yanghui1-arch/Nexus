@@ -45,6 +45,11 @@ class Marc(Agent):
 
     async def __aenter__(self) -> "Marc":
         repo_url = self.repo_url or (f"https://github.com/{self.github_repo}" if self.github_repo else None)
+        current_project = (
+            getattr(self._nexus_task_context, "project", None)
+            if self._nexus_task_context is not None
+            else None
+        )
         self._sandbox_pool_manager = get_sandbox_pool_manager()
         self._sandbox = await self._sandbox_pool_manager.acquire(
             config=self.sandbox_config,
@@ -78,6 +83,8 @@ class Marc(Agent):
                 repo_lines.append(f"- GitHub repo URL: {repo_url}")
             if self.github_token:
                 repo_lines.append(f"- GitHub token: {self.github_token}")
+            if current_project:
+                repo_lines.append(f"- Project: {current_project}")
             self.system_prompt = self.system_prompt + "\n".join(repo_lines) + "\n"
         return self
 

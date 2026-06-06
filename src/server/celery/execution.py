@@ -269,6 +269,7 @@ async def _run_code_agent_workflow(
         database=database,
         user_id=user_id,
         repo=task.repo or github_repo or "",
+        project=task.project or "",
     )
     agent = _build_agent(
         task=task,
@@ -406,6 +407,7 @@ async def _run_pm_agent_workflow(
         database=database,
         user_id=user_id,
         repo=task.repo or github_repo or "",
+        project=task.project or "",
     )
     agent = _build_agent(
         task=task,
