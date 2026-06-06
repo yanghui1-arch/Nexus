@@ -591,3 +591,127 @@ def test_consult_task_returns_process_reply(monkeypatch: pytest.MonkeyPatch) -> 
         {'role': 'user', 'content': 'Original task request'},
         {'role': 'assistant', 'content': 'Checkpointed progress'},
     ]
+
+
+async def _post_retry(app: FastAPI, task_id: uuid.UUID) -> httpx.Response:
+    """Post to the retry route."""
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
+        return await client.post(f'/v1/tasks/{task_id}/retry')
+
+
+def test_retry_task_creates_new_task_without_overwriting_original(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify retry returns a fresh queued task and leaves the failed source untouched."""
+    now = datetime.now(timezone.utc)
+    source = _make_task(question='retry this', status=TaskStatus.failed, created_at=now)
+    retried = _make_task(
+        question=source.question,
+        status=TaskStatus.queued,
+        created_at=now + timedelta(seconds=1),
+        agent=source.agent,
+        agent_instance_id=source.agent_instance_id,
+        repo=source.repo,
+        project=source.project,
+    )
+    runner = SimpleNamespace(retry_failed_task=AsyncMock(return_value=retried.id))
+    seen_ids: list[uuid.UUID] = []
+
+    async def fake_get(session, task_id, **kwargs):
+        """Return the source before dispatch and the retried task afterward."""
+        seen_ids.append(task_id)
+        return source if task_id == source.id else retried
+
+    monkeypatch.setattr(TaskRepository, 'get', fake_get)
+    monkeypatch.setattr(AgentInstanceRepository, 'get', _fake_get_current_user_instance)
+
+    response = asyncio.run(_post_retry(_build_app(runner_obj=runner), source.id))
+
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload['id'] == str(retried.id)
+    assert payload['id'] != str(source.id)
+    assert payload['status'] == TaskStatus.queued.value
+    assert source.status == TaskStatus.failed
+    assert seen_ids == [source.id, retried.id]
+    runner.retry_failed_task.assert_awaited_once_with(source.id)
+
+
+def test_retry_task_returns_forbidden_for_unowned_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify retry rejects a task owned by another user."""
+    task = _make_task(question='private task', status=TaskStatus.failed, created_at=datetime.now(timezone.utc))
+    runner = SimpleNamespace(retry_failed_task=AsyncMock())
+    monkeypatch.setattr(TaskRepository, 'get', AsyncMock(return_value=task))
+    monkeypatch.setattr(
+        AgentInstanceRepository,
+        'get',
+        AsyncMock(return_value=SimpleNamespace(id=task.agent_instance_id, user_id=uuid.uuid4())),
+    )
+
+    response = asyncio.run(_post_retry(_build_app(runner_obj=runner), task.id))
+
+    assert response.status_code == 403
+    assert response.json() == {'detail': 'You do not have permission to retry this task'}
+    runner.retry_failed_task.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ('task_kwargs', 'expected_detail'),
+    [
+        ({'category': TaskCategory.pm}, 'Only coding tasks can be retried'),
+        ({'status': TaskStatus.running}, 'Only failed tasks can be retried'),
+    ],
+)
+def test_retry_task_rejects_invalid_status_or_category(
+    monkeypatch: pytest.MonkeyPatch,
+    task_kwargs: dict[str, Any],
+    expected_detail: str,
+) -> None:
+    """Verify retry rejects non-coding and non-failed source tasks."""
+    task_data = {'status': TaskStatus.failed, **task_kwargs}
+    task = _make_task(
+        question='invalid retry',
+        created_at=datetime.now(timezone.utc),
+        **task_data,
+    )
+    runner = SimpleNamespace(retry_failed_task=AsyncMock())
+    monkeypatch.setattr(TaskRepository, 'get', AsyncMock(return_value=task))
+    monkeypatch.setattr(AgentInstanceRepository, 'get', _fake_get_current_user_instance)
+
+    response = asyncio.run(_post_retry(_build_app(runner_obj=runner), task.id))
+
+    assert response.status_code == 409
+    assert response.json() == {'detail': expected_detail}
+    runner.retry_failed_task.assert_not_called()
+
+
+def test_retry_task_rejects_missing_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify retry rejects failed tasks without repo/project execution context."""
+    task = _make_task(
+        question='missing context',
+        status=TaskStatus.failed,
+        created_at=datetime.now(timezone.utc),
+        repo=None,
+        project=None,
+    )
+    runner = SimpleNamespace(retry_failed_task=AsyncMock())
+    monkeypatch.setattr(TaskRepository, 'get', AsyncMock(return_value=task))
+    monkeypatch.setattr(AgentInstanceRepository, 'get', _fake_get_current_user_instance)
+
+    response = asyncio.run(_post_retry(_build_app(runner_obj=runner), task.id))
+
+    assert response.status_code == 409
+    assert response.json() == {'detail': 'Failed task repo/project context is missing'}
+    runner.retry_failed_task.assert_not_called()
+
+
+def test_retry_task_formats_dispatch_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify retry dispatch failures use the standard FastAPI error shape."""
+    task = _make_task(question='retry fails', status=TaskStatus.failed, created_at=datetime.now(timezone.utc))
+    runner = SimpleNamespace(retry_failed_task=AsyncMock(side_effect=RuntimeError('broker unavailable')))
+    monkeypatch.setattr(TaskRepository, 'get', AsyncMock(return_value=task))
+    monkeypatch.setattr(AgentInstanceRepository, 'get', _fake_get_current_user_instance)
+
+    response = asyncio.run(_post_retry(_build_app(runner_obj=runner), task.id))
+
+    assert response.status_code == 503
+    assert response.json() == {'detail': 'Task retry dispatch failed: broker unavailable'}
