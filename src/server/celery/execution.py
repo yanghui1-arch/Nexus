@@ -34,7 +34,7 @@ from src.server.postgres.repositories import (
 from src.tools.nexus import NexusTaskContext
 
 
-__all__ = ["execute_agent_task"]
+__all__ = ["AgentTaskLeaseDeferred", "execute_agent_task"]
 
 _agents: dict[str, Any] = {
     "tela": Tela,
@@ -47,6 +47,17 @@ _WORK_ITEM_REVIEW_READY_STATUSES = {
     TaskWorkItemStatus.approved,
     TaskWorkItemStatus.closed,
 }
+
+
+class AgentTaskLeaseDeferred(Exception):
+    """Raised when a task delivery should be retried after lease contention."""
+
+    def __init__(self, *, countdown_seconds: int) -> None:
+        """Initialize the deferred lease signal."""
+        self.countdown_seconds = max(1, countdown_seconds)
+        super().__init__(
+            f"Task lease claim deferred for {self.countdown_seconds} second(s)."
+        )
 
 
 @dataclass(frozen=True)
@@ -72,6 +83,7 @@ async def execute_agent_task(
     pending_checkpoint_tasks: set[asyncio.Task[Any]] = set()
     stop_lease_heartbeat = asyncio.Event()
     lease_heartbeat_task: asyncio.Task[Any] | None = None
+    workspace_claimed = False
     binding: _ExecutionBinding | None = None
     task: TaskRecord | None = None
 
@@ -140,8 +152,6 @@ async def execute_agent_task(
         # resolved repo/project, including legacy rows that still used workspace fallback.
         task.repo = binding.github_repo
         task.project = binding.project
-        await _mark_workspace_running(database, task.agent_instance_id)
-
         # Worker can start only if it proves it owns the latest dispatch lease token.
         started = await _claim_running(
             database,
@@ -151,11 +161,27 @@ async def execute_agent_task(
             expected_agent_instance_id=task.agent_instance_id,
         )
         if not started:
+            if await _is_current_queued_dispatch(
+                database,
+                task_id,
+                dispatch_token=dispatch_token,
+            ):
+                countdown_seconds = max(1, cfg.task_dispatch_lease_seconds // 3)
+                logger.info(
+                    "Task %s lease claim deferred; agent is busy and delivery will retry in %s second(s).",
+                    task_id,
+                    countdown_seconds,
+                )
+                raise AgentTaskLeaseDeferred(countdown_seconds=countdown_seconds)
+
             logger.warning(
                 "Task %s lease claim failed; stale or duplicate broker delivery will be skipped.",
                 task_id,
             )
             return
+
+        await _mark_workspace_running(database, task.agent_instance_id)
+        workspace_claimed = True
 
         # Heartbeat keeps lease fresh so recovery only picks truly orphaned running tasks.
         lease_heartbeat_task = asyncio.create_task(
@@ -192,6 +218,8 @@ async def execute_agent_task(
             await _mark_post_execution_wait_state(database, task_id, None)
             logger.info("Task %s returned to its waiting state.", task_id)
 
+    except AgentTaskLeaseDeferred:
+        raise
     except Exception as exc:
         logger.exception("Task %s failed in worker", task_id)
         await _mark_failed(database, task_id, str(exc))
@@ -208,7 +236,7 @@ async def execute_agent_task(
         if awaitables:
             await asyncio.gather(*awaitables, return_exceptions=True)
 
-        if binding is not None and task is not None:
+        if workspace_claimed and task is not None:
             await _release_workspace(database, task.agent_instance_id)
 
         await database.disconnect()
@@ -625,6 +653,22 @@ async def _claim_running(
             if planning_run is not None:
                 await ProposalPlanningRunRepository.set_running(session, planning_run.id)
     return True
+
+
+async def _is_current_queued_dispatch(
+    database: Database,
+    task_id: uuid.UUID,
+    *,
+    dispatch_token: str,
+) -> bool:
+    """Return whether this delivery still owns a queued dispatch lease."""
+    async with database.session() as session:
+        task = await TaskRepository.get(session, task_id)
+    return (
+        task is not None
+        and task.status == TaskStatus.queued
+        and task.dispatch_token == dispatch_token
+    )
 
 
 async def _lease_heartbeat(

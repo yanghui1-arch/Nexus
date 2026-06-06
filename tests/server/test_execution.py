@@ -882,3 +882,60 @@ def test_mark_waiting_for_review_fails_planning_run_when_plan_is_invalid(monkeyp
         "task_failed": ("task-id", "missing feature items"),
         "run_failed": ("planning-run-id", "missing feature items"),
     }
+
+
+def test_execute_agent_task_defers_current_queued_dispatch_when_agent_busy(monkeypatch):
+    """Verify current queued deliveries retry instead of being acknowledged and dropped."""
+    task = make_task(
+        id="task-id",
+        agent_instance_id="agent-instance-id",
+        status=TaskStatus.queued,
+        dispatch_token="token-1",
+    )
+
+    class FakeExecutionDatabase(FakeDatabase):
+        async def connect(self):
+            return None
+
+        async def disconnect(self):
+            return None
+
+    async def fake_load_binding(database, requested_task):
+        return execution._ExecutionBinding("user-id", "owner/repo", "workspace", "workspace-key")
+
+    async def false_claim(*args, **kwargs):
+        return False
+
+    async def true_current_dispatch(*args, **kwargs):
+        return True
+
+    async def fail_mark_failed(*args, **kwargs):
+        raise AssertionError("lease contention should not fail the task")
+
+    monkeypatch.setattr(execution, "Database", lambda database_url: FakeExecutionDatabase())
+    monkeypatch.setattr(execution, "_load_task", AsyncMock(return_value=task))
+    monkeypatch.setattr(execution, "_load_binding", fake_load_binding)
+    mark_workspace_running = AsyncMock()
+    release_workspace = AsyncMock()
+
+    monkeypatch.setattr(execution, "_mark_workspace_running", mark_workspace_running)
+    monkeypatch.setattr(execution, "_claim_running", false_claim)
+    monkeypatch.setattr(execution, "_is_current_queued_dispatch", true_current_dispatch)
+    monkeypatch.setattr(execution, "_mark_failed", fail_mark_failed)
+    monkeypatch.setattr(execution, "_release_workspace", release_workspace)
+
+    with pytest.raises(execution.AgentTaskLeaseDeferred) as exc_info:
+        asyncio.run(
+            execution.execute_agent_task(
+                task_id="task-id",
+                settings=SimpleNamespace(
+                    database_url="postgresql://example",
+                    task_dispatch_lease_seconds=9,
+                ),
+                dispatch_token="token-1",
+            )
+        )
+
+    assert exc_info.value.countdown_seconds == 3
+    mark_workspace_running.assert_not_awaited()
+    release_workspace.assert_not_awaited()

@@ -5,11 +5,12 @@ import uuid
 
 from src.logger import logger
 from src.server.celery.app import celery_app
-from src.server.celery.execution import execute_agent_task
+from src.server.celery.execution import AgentTaskLeaseDeferred, execute_agent_task
 
 
-@celery_app.task(name="nexus.execute_agent_task")
+@celery_app.task(bind=True, name="nexus.execute_agent_task", max_retries=None)
 def run_agent_task(
+    self,
     task_id: str,
     recovered: bool = False,
     dispatch_token: str | None = None,
@@ -23,6 +24,8 @@ def run_agent_task(
                 dispatch_token=dispatch_token,
             )
         )
+    except AgentTaskLeaseDeferred as exc:
+        raise self.retry(exc=exc, countdown=exc.countdown_seconds)
     except Exception as exc:
         logger.exception(
             "Celery worker failed to execute task_id=%s: %s",
