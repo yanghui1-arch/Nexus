@@ -12,6 +12,7 @@ from src.server.postgres.models import (
     ProposalPlanningRunStatus,
     FeatureStatus,
     UserRecord,
+    WorkspaceStatus,
 )
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
@@ -43,6 +44,70 @@ def _proposal_owned_by_user(
 ) -> bool:
     """Return whether the product proposal belongs to the current user."""
     return proposal.user_id == user_id
+
+
+async def _validate_retry_context(
+    session,
+    proposal: ProductProposalRecord,
+    user_id: uuid.UUID,
+    retry_task=None,
+) -> None:
+    """Validate that a planning retry still has usable task/workspace context."""
+    if not proposal.repo or not proposal.project:
+        raise HTTPException(
+            status_code=422,
+            detail="Proposal retry requires a configured repo and project",
+        )
+
+    if retry_task is not None and getattr(retry_task, "agent_instance_id", None) is not None:
+        instance = await AgentInstanceRepository.get(session, retry_task.agent_instance_id)
+        if instance is None or instance.user_id != user_id or not instance.is_active:
+            raise HTTPException(
+                status_code=422,
+                detail="Original retry agent is no longer available",
+            )
+        workspace = await WorkspaceRepository.get_by_agent_instance_id(session, retry_task.agent_instance_id)
+        if workspace is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Original retry workspace is no longer available",
+            )
+        repo = retry_task.repo or workspace.github_repo
+        project = retry_task.project if retry_task.project is not None else workspace.project
+        if repo != proposal.repo or project != proposal.project:
+            raise HTTPException(
+                status_code=422,
+                detail="Original retry repo/project no longer matches the proposal",
+            )
+    else:
+        workspaces = await WorkspaceRepository.list_for_user(session, user_id=user_id)
+        workspace = next(
+            (
+                workspace
+                for workspace in workspaces
+                if workspace.github_repo == proposal.repo and workspace.project == proposal.project
+            ),
+            None,
+        )
+        if workspace is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Proposal repo/project is no longer available for retry",
+            )
+        agent_instance_id = getattr(workspace, "agent_instance_id", None)
+        if agent_instance_id is not None:
+            instance = await AgentInstanceRepository.get(session, agent_instance_id)
+            if instance is None or instance.user_id != user_id or not instance.is_active:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Proposal agent is no longer available for retry",
+                )
+
+    if getattr(workspace, "status", None) == WorkspaceStatus.inactive:
+        raise HTTPException(
+            status_code=422,
+            detail="Proposal workspace is inactive and cannot be retried",
+        )
 
 
 @router.post("/proposals", response_model=ProductProposalResponse, status_code=201)
@@ -217,6 +282,7 @@ async def retry_proposal_planning(
             raise HTTPException(status_code=409, detail="Only approved proposals can retry planning")
 
         latest_planning_run = await ProposalPlanningRunRepository.get_latest_by_proposal(session, proposal.id)
+        latest_planning_task = None
         if latest_planning_run is not None:
             latest_planning_task = await TaskRepository.get(session, latest_planning_run.task_id)
             if latest_planning_task is not None:
@@ -232,6 +298,8 @@ async def retry_proposal_planning(
                         status_code=409,
                         detail="Only failed planning runs can be retried",
                     )
+
+        await _validate_retry_context(session, proposal, user.id, latest_planning_task)
 
         try:
             proposal = await start_proposal_planning(
