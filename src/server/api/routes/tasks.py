@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from src.agents import Sophie, Tela
+from src.agents import Jules, Sophie, Tela
 from src.agents.base import Agent
 from src.server.api.dependencies import get_current_user
 from src.server.config import get_settings
@@ -38,6 +38,7 @@ router = APIRouter(prefix="/v1/tasks", tags=["tasks"])
 available_agent_factory = {
     "tela": Tela,
     "sophie": Sophie,
+    "jules": Jules,
 }
 
 

@@ -31,7 +31,11 @@ from src.server.schemas import (
 )
 
 router = APIRouter(prefix="/v1", tags=["auth"])
-AGENT_PRICES = {AgentName.tela: Decimal("5500.00"), AgentName.sophie: Decimal("6000.00")}
+AGENT_PRICES = {
+    AgentName.tela: Decimal("5500.00"),
+    AgentName.sophie: Decimal("6000.00"),
+    AgentName.jules: Decimal("6200.00"),
+}
 
 
 

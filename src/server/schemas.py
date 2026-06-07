@@ -30,6 +30,7 @@ from src.server.postgres.models import (
 class AgentKind(str, Enum):
     tela = "tela"
     sophie = "sophie"
+    jules = "jules"
     marc = "marc"
 
 

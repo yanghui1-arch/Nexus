@@ -8,7 +8,7 @@ from typing import Any, cast
 from openai.types.chat import ChatCompletionMessage
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 
-from src.agents import Marc, Sophie, Tela
+from src.agents import Jules, Marc, Sophie, Tela
 from src.agents.base.agent import Agent, BaseAgentResponse, WorkTempStatus
 from src.logger import logger
 from src.server.config import Settings, get_settings
@@ -39,9 +39,10 @@ __all__ = ["execute_agent_task"]
 _agents: dict[str, Any] = {
     "tela": Tela,
     "sophie": Sophie,
+    "jules": Jules,
     "marc": Marc,
 }
-_CODING_AGENTS = {"tela", "sophie"}
+_CODING_AGENTS = {"tela", "sophie", "jules"}
 _WORK_ITEM_REVIEW_READY_STATUSES = {
     TaskWorkItemStatus.ready_for_review,
     TaskWorkItemStatus.approved,

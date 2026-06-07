@@ -9,6 +9,7 @@ from .docker_sandbox import (
     NODE_22,
     JAVA_17,
     JAVA_21,
+    SPRING_BOOT_JAVA_21,
     VITE_REACT_TS,
 )
 from .pool_management import SandboxPoolManager, get_sandbox_pool_manager
@@ -24,6 +25,7 @@ __all__ = [
     "NODE_22",
     "JAVA_17",
     "JAVA_21",
+    "SPRING_BOOT_JAVA_21",
     "VITE_REACT_TS",
     "SandboxPoolManager",
     "get_sandbox_pool_manager",

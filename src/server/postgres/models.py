@@ -50,6 +50,7 @@ TASK_CATEGORY_VARCHAR_LENGTH = 32
 class AgentName(str, enum.Enum):
     tela = "tela"
     sophie = "sophie"
+    jules = "jules"
     marc = "marc"
 
 

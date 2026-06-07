@@ -25,6 +25,7 @@ class SandboxConfig:
     Sandbox(PYTHON_312_GIT)  # includes git \n
     Sandbox(NODE_20) \n
     Sandbox(JAVA_21) \n
+    Sandbox(SPRING_BOOT_JAVA_21) \n
 
     ## Custom image (e.g. Python + Nginx, TS + Java, specific version)
     Sandbox(SandboxConfig(
@@ -47,6 +48,11 @@ _NODE_REACT_SETUP = CommandConfig(
     command="apt-get update && apt-get install -y --no-install-recommends git && npm install -g tsx",
     type="install",
 )
+_JAVA_SPRING_BOOT_SETUP = CommandConfig(
+    name="java-spring-boot-setup",
+    command="apt-get update && apt-get install -y --no-install-recommends git maven && rm -rf /var/lib/apt/lists/*",
+    type="install",
+)
 
 PYTHON_310 = SandboxConfig("python:3.10-slim", "python", ".py", init_commands=(_GIT_INSTALL,))
 PYTHON_311 = SandboxConfig("python:3.11-slim", "python", ".py", init_commands=(_GIT_INSTALL,))
@@ -62,6 +68,13 @@ VITE_REACT_TS = SandboxConfig("node:20-slim", "tsx", ".ts", mem_limit="512m", in
 # JVM requires more headroom than Python/Node
 JAVA_17    = SandboxConfig("eclipse-temurin:17-jdk-jammy", "java", ".java", mem_limit="256m")
 JAVA_21    = SandboxConfig("eclipse-temurin:21-jdk-jammy", "java", ".java", mem_limit="256m")
+SPRING_BOOT_JAVA_21 = SandboxConfig(
+    "eclipse-temurin:21-jdk-jammy",
+    "java",
+    ".java",
+    mem_limit="1g",
+    init_commands=(_JAVA_SPRING_BOOT_SETUP,),
+)
 
 
 class Sandbox:

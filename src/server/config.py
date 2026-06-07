@@ -50,10 +50,12 @@ def get_settings() -> Settings:
     redis_url = os.getenv("NEXUS_REDIS_URL", "redis://localhost:6379/0")
     tela_github_token = os.getenv("NEXUS_GITHUB_TOKEN")
     sophie_github_token = os.getenv("NEXUS_SOPHIE_GITHUB_TOKEN")
+    jules_github_token = os.getenv("NEXUS_JULES_GITHUB_TOKEN")
     marc_github_token = os.getenv("NEXUS_MARC_GITHUB_TOKEN")
     github_tokens = {
         "tela": tela_github_token,
         "sophie": sophie_github_token,
+        "jules": jules_github_token,
         "marc": marc_github_token,
     }
 
