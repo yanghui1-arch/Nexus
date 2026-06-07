@@ -22,7 +22,11 @@ from src.server.postgres.repositories import (
     utc_now,
 )
 
-AGENT_PRICES = {"tela": Decimal("5500.00"), "sophie": Decimal("6000.00")}
+AGENT_PRICES = {
+    "tela": Decimal("5500.00"),
+    "sophie": Decimal("6000.00"),
+    "jules": Decimal("6200.00"),
+}
 
 
 def _hash_token(token: str) -> str:
@@ -108,6 +112,33 @@ async def test_purchase_rejects_insufficient_balance(db_session):
     updated = await UserRepository.get(db_session, user_id)
     assert updated is not None
     assert updated.balance == Decimal("0.00")
+
+
+@pytest.mark.asyncio
+async def test_purchase_can_create_jules_instance(db_session):
+    """Verify purchase can create a Jules instance."""
+    user = await UserRepository.upsert_github_user(
+        db_session,
+        github_id="789",
+        github_login="java-user",
+        email=None,
+    )
+    recharged = await UserRepository.add_balance(db_session, user.id, Decimal("7000.00"))
+    assert recharged is not None
+
+    purchase = await AgentPurchaseRepository.create_purchase(
+        db_session,
+        user_id=user.id,
+        agent=AgentName.jules,
+        price=AGENT_PRICES["jules"],
+        expires_at=utc_now() + timedelta(days=30),
+    )
+
+    assert purchase.price == Decimal("6200.00")
+    assert purchase.agent_instance_id is not None
+    instance = await db_session.get(AgentInstanceRecord, purchase.agent_instance_id)
+    assert instance is not None
+    assert instance.agent == AgentName.jules
 
 
 class _AsyncSessionContext:

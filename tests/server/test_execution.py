@@ -276,6 +276,50 @@ def test_build_marc_agent_with_optional_repo_context(monkeypatch):
     }
 
 
+def test_build_jules_agent_as_coding_agent(monkeypatch):
+    """Verify build jules agent uses coding-agent context."""
+    captured_agent = {}
+
+    class FakeJules:
+        @classmethod
+        def create(cls, **kwargs):
+            """Support create tests."""
+            captured_agent.update(kwargs)
+            return "jules-agent"
+
+    task = make_task(agent=SimpleNamespace(value="jules"), repo="owner/repo")
+    settings = SimpleNamespace(
+        api_key="api-key",
+        base_url="https://api.example.com/v1",
+        model="gpt-test",
+        max_context=4096,
+        max_attempts=8,
+        github_tokens={"jules": "jules-token"},
+    )
+
+    monkeypatch.setitem(execution._agents, "jules", FakeJules)
+    monkeypatch.setattr(execution, "_CODING_AGENTS", {"tela", "sophie", "jules"})
+
+    agent = execution._build_agent(
+        task=task,
+        settings=settings,
+        workspace_key="workspace",
+        github_repo=None,
+    )
+
+    assert agent == "jules-agent"
+    assert captured_agent == {
+        "base_url": "https://api.example.com/v1",
+        "api_key": "api-key",
+        "model": "gpt-test",
+        "max_context": 4096,
+        "max_attempts": 8,
+        "github_repo": "owner/repo",
+        "sandbox_workspace_key": "workspace",
+        "github_token": "jules-token",
+    }
+
+
 def test_load_binding_requires_repo_and_project_context(monkeypatch):
     """Verify binding rejects tasks that resolve without repo/project context."""
     agent_instance_id = "agent-instance-id"

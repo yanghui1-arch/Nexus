@@ -16,6 +16,19 @@ def test_marc_github_token_is_loaded(monkeypatch):
     assert settings.github_tokens["marc"] == "marc-token"
 
 
+def test_jules_github_token_is_loaded(monkeypatch):
+    """Verify jules github token is loaded."""
+    get_settings.cache_clear()
+    monkeypatch.setenv("NEXUS_JULES_GITHUB_TOKEN", "jules-token")
+
+    try:
+        settings = get_settings()
+    finally:
+        get_settings.cache_clear()
+
+    assert settings.github_tokens["jules"] == "jules-token"
+
+
 def test_product_discovery_poll_interval_defaults_to_hourly(monkeypatch):
     """Verify product discovery poll interval defaults to hourly."""
     get_settings.cache_clear()

@@ -44,6 +44,7 @@ export function WorkspaceSettingsFilters({
       >
         <option value="all">{t('workspaceSettings.filterAllAgents')}</option>
         <option value="sophie">{t('workspaceSettings.agentSophie')}</option>
+        <option value="jules">{t('workspaceSettings.agentJules')}</option>
         <option value="tela">{t('workspaceSettings.agentTela')}</option>
         <option value="marc">{t('workspaceSettings.agentMarc')}</option>
       </Select>

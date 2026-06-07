@@ -112,6 +112,7 @@ def test_create_task_record_snapshots_workspace_repo_project(monkeypatch) -> Non
     ("agent_name", "github_repo", "project"),
     [
         ("sophie", "owner/repo", None),
+        ("jules", "owner/repo", None),
         ("marc", None, "nexus"),
     ],
 )

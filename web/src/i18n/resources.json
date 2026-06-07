@@ -83,6 +83,11 @@
             "description": "前端交付、界面打磨和产品页面。",
             "reactImplementation": "React 实现",
             "designSystemFit": "设计系统适配"
+          },
+          "jules": {
+            "description": "Java Spring Boot 后端、API 和持久化交付。",
+            "springBootDelivery": "Spring Boot 实现",
+            "persistenceAndApi": "持久化与 API 设计"
           }
         }
       },
@@ -162,6 +167,7 @@
         "needsSetupCountLabel": "Needs setup",
         "agentSophie": "Sophie",
         "agentTela": "Tela",
+        "agentJules": "Jules",
         "agentMarc": "Marc",
         "statusReady": "已就绪",
         "statusRunning": "运行中",
@@ -453,6 +459,11 @@
             "description": "Frontend delivery, UI polish, and product pages.",
             "reactImplementation": "React implementation",
             "designSystemFit": "Design-system fit"
+          },
+          "jules": {
+            "description": "Java Spring Boot backend, API, and persistence delivery.",
+            "springBootDelivery": "Spring Boot implementation",
+            "persistenceAndApi": "Persistence and API design"
           }
         }
       },
@@ -532,6 +543,7 @@
         "needsSetupCountLabel": "Needs setup",
         "agentSophie": "Sophie",
         "agentTela": "Tela",
+        "agentJules": "Jules",
         "agentMarc": "Marc",
         "statusReady": "Ready",
         "statusRunning": "Running",

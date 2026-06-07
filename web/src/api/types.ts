@@ -1,4 +1,4 @@
-export type ApiAgentKind = 'tela' | 'sophie' | 'marc';
+export type ApiAgentKind = 'tela' | 'sophie' | 'jules' | 'marc';
 
 export type ApiTaskCategory = 'coding' | 'product discovery';
 

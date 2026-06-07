@@ -27,6 +27,13 @@ const PLANS = [
     descriptionKey: 'pricing.plans.sophie.description',
     featureKeys: ['pricing.plans.common.access', 'pricing.plans.sophie.reactImplementation', 'pricing.plans.sophie.designSystemFit'],
   },
+  {
+    agent: 'jules' as const,
+    name: 'Jules',
+    price: '¥6,200',
+    descriptionKey: 'pricing.plans.jules.description',
+    featureKeys: ['pricing.plans.common.access', 'pricing.plans.jules.springBootDelivery', 'pricing.plans.jules.persistenceAndApi'],
+  },
 ];
 
 function formatCny(amount: string): string {
