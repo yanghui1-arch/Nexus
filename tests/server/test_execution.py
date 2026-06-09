@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.agents.base.agent import BaseAgentResponse
-from src.server.celery import execution
+from src.server.celery.execution import agents, prompt_helper, state, task as execution_task, workflows
 from src.server.postgres.models import GithubPullRequestFeedbackKind, TaskCategory, TaskStatus, TaskWorkItemStatus
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
@@ -76,7 +76,7 @@ def test_run_agent_resumes_from_checkpoint_when_passed(monkeypatch):
     fake_agent = FakeAgent()
 
     result = asyncio.run(
-        execution._run_agent(
+        workflows.run_agent(
             agent=fake_agent,
             question="do the task",
             checkpoint=checkpoint,
@@ -106,7 +106,7 @@ def test_run_agent_passes_question_as_checkpoint_resume_question(monkeypatch):
     fake_agent = FakeAgent()
 
     asyncio.run(
-        execution._run_agent(
+        workflows.run_agent(
             agent=fake_agent,
             question="Please address review feedback.",
             checkpoint=checkpoint,
@@ -172,16 +172,16 @@ def test_execute_agent_task_skips_non_redelivered_running_duplicate(monkeypatch)
         """Fail if duplicate delivery reaches execution setup."""
         raise AssertionError("duplicate running delivery should be skipped")
 
-    monkeypatch.setattr(execution, "Database", RuntimeDatabase)
-    monkeypatch.setattr(execution, "_load_task", fake_load_task)
-    monkeypatch.setattr(execution, "_load_binding", fail_if_called)
-    monkeypatch.setattr(execution, "_mark_workspace_running", fail_if_called)
-    monkeypatch.setattr(execution, "_mark_task_running", fail_if_called)
-    monkeypatch.setattr(execution, "_run_agent_workflow", fail_if_called)
-    monkeypatch.setattr(execution, "_mark_failed", fail_if_called)
+    monkeypatch.setattr(execution_task, "Database", RuntimeDatabase)
+    monkeypatch.setattr(state, "load_task", fake_load_task)
+    monkeypatch.setattr(state, "load_binding", fail_if_called)
+    monkeypatch.setattr(state, "mark_workspace_running", fail_if_called)
+    monkeypatch.setattr(state, "mark_task_running", fail_if_called)
+    monkeypatch.setattr(workflows, "run_agent_workflow", fail_if_called)
+    monkeypatch.setattr(state, "mark_failed", fail_if_called)
 
     asyncio.run(
-        execution.execute_agent_task(
+        execution_task.execute_agent_task(
             task_id=task_id,
             settings=SimpleNamespace(database_url="postgresql://test"),
             allow_running=False,
@@ -226,7 +226,7 @@ def test_load_binding_prefers_task_snapshot_over_workspace_context(monkeypatch):
     monkeypatch.setattr(AgentInstanceRepository, "get", fake_get)
     monkeypatch.setattr(WorkspaceRepository, "ensure_for_agent_instance", fake_ensure)
 
-    binding = asyncio.run(execution._load_binding(FakeDatabase(), task))
+    binding = asyncio.run(state.load_binding(FakeDatabase(), task))
 
     assert binding.github_repo == "snapshot/repo"
     assert binding.project == "snapshot-project"
@@ -255,9 +255,9 @@ def test_build_marc_agent_with_optional_repo_context(monkeypatch):
         github_tokens={"marc": "marc-token"},
     )
 
-    monkeypatch.setitem(execution._agents, "marc", FakeMarc)
+    monkeypatch.setitem(agents.AGENT_BUILDERS, "marc", FakeMarc)
 
-    agent = execution._build_agent(
+    agent = agents.build_agent(
         task=task,
         settings=settings,
         workspace_key="workspace",
@@ -297,10 +297,10 @@ def test_build_jules_agent_as_coding_agent(monkeypatch):
         github_tokens={"jules": "jules-token"},
     )
 
-    monkeypatch.setitem(execution._agents, "jules", FakeJules)
-    monkeypatch.setattr(execution, "_CODING_AGENTS", {"tela", "sophie", "jules"})
+    monkeypatch.setitem(agents.AGENT_BUILDERS, "jules", FakeJules)
+    monkeypatch.setattr(agents, "CODING_AGENTS", {"tela", "sophie", "jules"})
 
-    agent = execution._build_agent(
+    agent = agents.build_agent(
         task=task,
         settings=settings,
         workspace_key="workspace",
@@ -355,7 +355,7 @@ def test_load_binding_requires_repo_and_project_context(monkeypatch):
     monkeypatch.setattr(WorkspaceRepository, "ensure_for_agent_instance", fake_ensure)
 
     with pytest.raises(RuntimeError, match="Missing repo/project context."):
-        asyncio.run(execution._load_binding(FakeDatabase(), task))
+        asyncio.run(state.load_binding(FakeDatabase(), task))
 
 
 def test_run_agent_uses_fresh_context_without_checkpoint(monkeypatch):
@@ -363,7 +363,7 @@ def test_run_agent_uses_fresh_context_without_checkpoint(monkeypatch):
     fake_agent = FakeAgent()
 
     asyncio.run(
-        execution._run_agent(
+        workflows.run_agent(
             agent=fake_agent,
             question="do the task",
             on_progress=None,
@@ -413,17 +413,17 @@ def test_run_code_agent_workflow_small_task_passthrough(monkeypatch):
     monkeypatch.setattr(TaskWorkItemRepository, "list_by_task", no_work_items)
     monkeypatch.setattr(TaskWorkItemRepository, "get_running", no_running)
     monkeypatch.setattr(TaskWorkItemRepository, "get_next_for_execution", no_next)
-    monkeypatch.setattr(execution, "_build_agent", lambda **_: fake_agent)
-    monkeypatch.setattr(execution, "_run_agent", fake_run_agent)
-    monkeypatch.setattr(execution, "_get_latest_checkpoint", empty_checkpoint)
-    monkeypatch.setattr(execution, "_claim_pending_github_feedback", no_pending_feedback)
+    monkeypatch.setattr(agents, "build_agent", lambda **_: fake_agent)
+    monkeypatch.setattr(workflows, "run_agent", fake_run_agent)
+    monkeypatch.setattr(state, "get_latest_checkpoint", empty_checkpoint)
+    monkeypatch.setattr(state, "claim_pending_github_feedback", no_pending_feedback)
 
     result = asyncio.run(
-        execution._run_code_agent_workflow(
+        workflows.run_code_agent_workflow(
             database=FakeDatabase(),
             task=task,
             on_progress=None,
-            settings=SimpleNamespace(),
+            settings=SimpleNamespace(github_feedback_batch_size=20),
             user_id="user-id",
             workspace_key="workspace",
             github_repo="owner/repo",
@@ -468,17 +468,17 @@ def test_run_code_agent_workflow_skips_completed_checkpoint_without_work_items(m
         raise AssertionError("completed checkpoint should not rerun the agent")
 
     monkeypatch.setattr(TaskWorkItemRepository, "list_by_task", no_work_items)
-    monkeypatch.setattr(execution, "_build_agent", lambda **_: fake_agent)
-    monkeypatch.setattr(execution, "_run_agent", fail_run_agent)
-    monkeypatch.setattr(execution, "_get_latest_checkpoint", latest_checkpoint)
-    monkeypatch.setattr(execution, "_claim_pending_github_feedback", no_pending_feedback)
+    monkeypatch.setattr(agents, "build_agent", lambda **_: fake_agent)
+    monkeypatch.setattr(workflows, "run_agent", fail_run_agent)
+    monkeypatch.setattr(state, "get_latest_checkpoint", latest_checkpoint)
+    monkeypatch.setattr(state, "claim_pending_github_feedback", no_pending_feedback)
 
     result = asyncio.run(
-        execution._run_code_agent_workflow(
+        workflows.run_code_agent_workflow(
             database=FakeDatabase(),
             task=task,
             on_progress=None,
-            settings=SimpleNamespace(),
+            settings=SimpleNamespace(github_feedback_batch_size=20),
             user_id="user-id",
             workspace_key="workspace",
             github_repo="owner/repo",
@@ -494,7 +494,7 @@ def test_run_agent_workflow_pauses_when_work_item_is_ready(monkeypatch):
     """Verify run agent workflow pauses when work item is ready."""
     task = make_task()
     fake_agent = FakeAgent()
-    state = {"ready": False}
+    workflow_state = {"ready": False}
     pending_item = SimpleNamespace(
         id="item-id",
         order_index=1,
@@ -519,7 +519,7 @@ def test_run_agent_workflow_pauses_when_work_item_is_ready(monkeypatch):
 
     async def list_items(session, task_id):
         """Support list items tests."""
-        return [ready_item if state["ready"] else pending_item]
+        return [ready_item if workflow_state["ready"] else pending_item]
 
     async def no_running(session, task_id):
         """Return no running."""
@@ -527,7 +527,7 @@ def test_run_agent_workflow_pauses_when_work_item_is_ready(monkeypatch):
 
     async def next_item(session, task_id):
         """Support next item tests."""
-        return None if state["ready"] else pending_item
+        return None if workflow_state["ready"] else pending_item
 
     async def set_running(session, work_item_id):
         """Support set running tests."""
@@ -541,7 +541,7 @@ def test_run_agent_workflow_pauses_when_work_item_is_ready(monkeypatch):
         """Provide a fake run agent."""
         assert "finish_current_task_work_item" in kwargs["question"]
         assert "final executable work item" in kwargs["question"]
-        state["ready"] = True
+        workflow_state["ready"] = True
         return BaseAgentResponse(response="ready")
 
     async def empty_checkpoint(database, task_id):
@@ -559,17 +559,17 @@ def test_run_agent_workflow_pauses_when_work_item_is_ready(monkeypatch):
     monkeypatch.setattr(TaskWorkItemRepository, "get_next_for_execution", next_item)
     monkeypatch.setattr(TaskWorkItemRepository, "set_running", set_running)
     monkeypatch.setattr(TaskWorkItemRepository, "get", get_item)
-    monkeypatch.setattr(execution, "_build_agent", lambda **_: fake_agent)
-    monkeypatch.setattr(execution, "_run_agent", fake_run_agent)
-    monkeypatch.setattr(execution, "_get_latest_checkpoint", empty_checkpoint)
-    monkeypatch.setattr(execution, "_claim_pending_github_feedback", no_pending_feedback)
+    monkeypatch.setattr(agents, "build_agent", lambda **_: fake_agent)
+    monkeypatch.setattr(workflows, "run_agent", fake_run_agent)
+    monkeypatch.setattr(state, "get_latest_checkpoint", empty_checkpoint)
+    monkeypatch.setattr(state, "claim_pending_github_feedback", no_pending_feedback)
 
     result = asyncio.run(
-        execution._run_code_agent_workflow(
+        workflows.run_code_agent_workflow(
             database=FakeDatabase(),
             task=task,
             on_progress=None,
-            settings=SimpleNamespace(),
+            settings=SimpleNamespace(github_feedback_batch_size=20),
             user_id="user-id",
             workspace_key="workspace",
             github_repo="owner/repo",
@@ -681,17 +681,17 @@ def test_run_agent_workflow_keeps_checkpoint_between_work_items(monkeypatch):
     monkeypatch.setattr(TaskWorkItemRepository, "get_next_for_execution", next_item)
     monkeypatch.setattr(TaskWorkItemRepository, "set_running", set_running)
     monkeypatch.setattr(TaskWorkItemRepository, "get", get_item)
-    monkeypatch.setattr(execution, "_build_agent", lambda **_: fake_agent)
-    monkeypatch.setattr(execution, "_run_agent", fake_run_agent)
-    monkeypatch.setattr(execution, "_get_latest_checkpoint", latest_checkpoint)
-    monkeypatch.setattr(execution, "_claim_pending_github_feedback", no_pending_feedback)
+    monkeypatch.setattr(agents, "build_agent", lambda **_: fake_agent)
+    monkeypatch.setattr(workflows, "run_agent", fake_run_agent)
+    monkeypatch.setattr(state, "get_latest_checkpoint", latest_checkpoint)
+    monkeypatch.setattr(state, "claim_pending_github_feedback", no_pending_feedback)
 
     result = asyncio.run(
-        execution._run_code_agent_workflow(
+        workflows.run_code_agent_workflow(
             database=FakeDatabase(),
             task=task,
             on_progress=None,
-            settings=SimpleNamespace(),
+            settings=SimpleNamespace(github_feedback_batch_size=20),
             user_id="user-id",
             workspace_key="workspace",
             github_repo="owner/repo",
@@ -750,17 +750,17 @@ def test_run_agent_workflow_waits_when_all_work_items_review_ready(monkeypatch):
         raise AssertionError("review-ready work items should not run the agent")
 
     monkeypatch.setattr(TaskWorkItemRepository, "list_by_task", list_items)
-    monkeypatch.setattr(execution, "_build_agent", lambda **_: fake_agent)
-    monkeypatch.setattr(execution, "_run_agent", fail_run_agent)
-    monkeypatch.setattr(execution, "_get_latest_checkpoint", latest_checkpoint)
-    monkeypatch.setattr(execution, "_claim_pending_github_feedback", no_pending_feedback)
+    monkeypatch.setattr(agents, "build_agent", lambda **_: fake_agent)
+    monkeypatch.setattr(workflows, "run_agent", fail_run_agent)
+    monkeypatch.setattr(state, "get_latest_checkpoint", latest_checkpoint)
+    monkeypatch.setattr(state, "claim_pending_github_feedback", no_pending_feedback)
 
     result = asyncio.run(
-        execution._run_code_agent_workflow(
+        workflows.run_code_agent_workflow(
             database=FakeDatabase(),
             task=task,
             on_progress=None,
-            settings=SimpleNamespace(),
+            settings=SimpleNamespace(github_feedback_batch_size=20),
             user_id="user-id",
             workspace_key="workspace",
             github_repo="owner/repo",
@@ -817,14 +817,14 @@ def test_run_agent_workflow_processes_github_feedback_from_checkpoint(monkeypatc
         captured["run"] = kwargs
         return BaseAgentResponse(response="replied")
 
-    monkeypatch.setattr(execution, "_claim_pending_github_feedback", claim_feedback)
-    monkeypatch.setattr(execution, "_mark_github_feedback_processed", mark_processed)
-    monkeypatch.setattr(execution, "_get_latest_checkpoint", latest_checkpoint)
-    monkeypatch.setattr(execution, "_build_agent", lambda **_: fake_agent)
-    monkeypatch.setattr(execution, "_run_agent", fake_run_agent)
+    monkeypatch.setattr(agents, "build_agent", lambda **_: fake_agent)
+    monkeypatch.setattr(workflows, "run_agent", fake_run_agent)
+    monkeypatch.setattr(state, "get_latest_checkpoint", latest_checkpoint)
+    monkeypatch.setattr(state, "claim_pending_github_feedback", claim_feedback)
+    monkeypatch.setattr(state, "mark_github_feedback_processed", mark_processed)
 
     result = asyncio.run(
-        execution._run_code_agent_workflow(
+        workflows.run_code_agent_workflow(
             database=FakeDatabase(),
             task=task,
             on_progress=None,
@@ -868,7 +868,7 @@ def test_run_agent_workflow_marks_completed_github_feedback_from_checkpoint(monk
             html_url="https://github.com/owner/repo/pull/17#issuecomment-902",
         )
     ]
-    feedback_prompt = execution._build_github_feedback_prompt(task, feedback_items)
+    feedback_prompt = prompt_helper.build_github_feedback_prompt(task, feedback_items)
     task.checkpoint = [
         {"role": "system", "content": "checkpoint system"},
         {"role": "user", "content": feedback_prompt},
@@ -895,14 +895,14 @@ def test_run_agent_workflow_marks_completed_github_feedback_from_checkpoint(monk
         """Fail if feedback is rerun."""
         raise AssertionError("completed feedback checkpoint should not rerun the agent")
 
-    monkeypatch.setattr(execution, "_claim_pending_github_feedback", claim_feedback)
-    monkeypatch.setattr(execution, "_mark_github_feedback_processed", mark_processed)
-    monkeypatch.setattr(execution, "_get_latest_checkpoint", latest_checkpoint)
-    monkeypatch.setattr(execution, "_build_agent", lambda **_: fake_agent)
-    monkeypatch.setattr(execution, "_run_agent", fail_run_agent)
+    monkeypatch.setattr(agents, "build_agent", lambda **_: fake_agent)
+    monkeypatch.setattr(workflows, "run_agent", fail_run_agent)
+    monkeypatch.setattr(state, "get_latest_checkpoint", latest_checkpoint)
+    monkeypatch.setattr(state, "claim_pending_github_feedback", claim_feedback)
+    monkeypatch.setattr(state, "mark_github_feedback_processed", mark_processed)
 
     result = asyncio.run(
-        execution._run_code_agent_workflow(
+        workflows.run_code_agent_workflow(
             database=FakeDatabase(),
             task=task,
             on_progress=None,
@@ -947,17 +947,17 @@ def test_run_pm_agent_workflow_completes_from_checkpoint(monkeypatch):
         """Fail if the PM agent reruns."""
         raise AssertionError("completed PM checkpoint should not rerun the agent")
 
-    monkeypatch.setattr(execution, "_build_agent", lambda **_: fake_agent)
-    monkeypatch.setattr(execution, "_get_latest_checkpoint", latest_checkpoint)
-    monkeypatch.setattr(execution, "_mark_waiting_for_review", mark_waiting)
-    monkeypatch.setattr(execution, "_run_agent", fail_run_agent)
+    monkeypatch.setattr(agents, "build_agent", lambda **_: fake_agent)
+    monkeypatch.setattr(workflows, "run_agent", fail_run_agent)
+    monkeypatch.setattr(state, "get_latest_checkpoint", latest_checkpoint)
+    monkeypatch.setattr(state, "mark_waiting_for_review", mark_waiting)
 
     result = asyncio.run(
-        execution._run_pm_agent_workflow(
+        workflows.run_pm_agent_workflow(
             database=FakeDatabase(),
             task=task,
             on_progress=None,
-            settings=SimpleNamespace(),
+            settings=SimpleNamespace(github_feedback_batch_size=20),
             user_id="user-id",
             workspace_key="workspace",
             github_repo="owner/repo",
@@ -988,11 +988,11 @@ def test_mark_post_execution_wait_state_restores_waiting_for_review(monkeypatch)
         captured["task_id"] = requested_task_id
         captured["result"] = result
 
-    monkeypatch.setattr(execution.TaskRepository, "get", fake_get)
-    monkeypatch.setattr(execution.TaskRepository, "set_waiting_for_review", fake_waiting_for_review)
+    monkeypatch.setattr(TaskRepository, "get", fake_get)
+    monkeypatch.setattr(TaskRepository, "set_waiting_for_review", fake_waiting_for_review)
 
     asyncio.run(
-        execution._mark_post_execution_wait_state(
+        state.mark_post_execution_wait_state(
             FakeDatabase(),
             task_id,
             "done",
@@ -1019,11 +1019,11 @@ def test_release_workspace_keeps_binding_for_active_instance(monkeypatch):
         """Fail if set inactive is called."""
         raise AssertionError("inactive workspace release should not run for active instances")
 
-    monkeypatch.setattr(execution.AgentInstanceRepository, "get", fake_get)
-    monkeypatch.setattr(execution.WorkspaceRepository, "set_idle", fake_set_idle)
-    monkeypatch.setattr(execution.WorkspaceRepository, "set_inactive", fail_set_inactive)
+    monkeypatch.setattr(AgentInstanceRepository, "get", fake_get)
+    monkeypatch.setattr(WorkspaceRepository, "set_idle", fake_set_idle)
+    monkeypatch.setattr(WorkspaceRepository, "set_inactive", fail_set_inactive)
 
-    asyncio.run(execution._release_workspace(FakeDatabase(), "agent-id"))
+    asyncio.run(state.release_workspace(FakeDatabase(), "agent-id"))
 
     assert captured == {
         "agent_instance_id": "agent-id",
@@ -1047,11 +1047,11 @@ def test_release_workspace_keeps_binding_for_inactive_instance(monkeypatch):
         """Provide a fake set inactive."""
         captured["agent_instance_id"] = agent_instance_id
 
-    monkeypatch.setattr(execution.AgentInstanceRepository, "get", fake_get)
-    monkeypatch.setattr(execution.WorkspaceRepository, "set_idle", fail_set_idle)
-    monkeypatch.setattr(execution.WorkspaceRepository, "set_inactive", fake_set_inactive)
+    monkeypatch.setattr(AgentInstanceRepository, "get", fake_get)
+    monkeypatch.setattr(WorkspaceRepository, "set_idle", fail_set_idle)
+    monkeypatch.setattr(WorkspaceRepository, "set_inactive", fake_set_inactive)
 
-    asyncio.run(execution._release_workspace(FakeDatabase(), "agent-id"))
+    asyncio.run(state.release_workspace(FakeDatabase(), "agent-id"))
 
     assert captured == {
         "agent_instance_id": "agent-id",
@@ -1090,7 +1090,7 @@ def test_mark_waiting_for_review_completes_planning_run_when_plan_is_valid(monke
     monkeypatch.setattr(ProposalPlanningRunRepository, "set_completed", fake_set_completed)
     monkeypatch.setattr(ProductProposalRepository, "sync_status_from_features", fake_sync_status_from_features)
 
-    asyncio.run(execution._mark_waiting_for_review(FakeDatabase(), "task-id", "pm result"))
+    asyncio.run(state.mark_waiting_for_review(FakeDatabase(), "task-id", "pm result"))
 
     assert captured == {
         "waiting": ("task-id", "pm result"),
@@ -1141,7 +1141,7 @@ def test_mark_waiting_for_review_fails_planning_run_when_plan_is_invalid(monkeyp
     monkeypatch.setattr(ProposalPlanningRunRepository, "set_completed", fail_set_completed)
     monkeypatch.setattr(ProductProposalRepository, "sync_status_from_features", fail_sync_status)
 
-    asyncio.run(execution._mark_waiting_for_review(FakeDatabase(), "task-id", "pm result"))
+    asyncio.run(state.mark_waiting_for_review(FakeDatabase(), "task-id", "pm result"))
 
     assert captured == {
         "waiting": ("task-id", "pm result"),
