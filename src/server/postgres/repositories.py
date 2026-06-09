@@ -794,19 +794,21 @@ class FeatureItemRepository:
         item_id: uuid.UUID,
         *,
         task_id: uuid.UUID,
+        require_unassigned: bool = True,
     ) -> FeatureItemRecord | None:
         """Assign a task to a feature item."""
         now = utc_now()
+        conditions = [FeatureItemRecord.id == item_id]
+        if require_unassigned:
+            conditions.append(FeatureItemRecord.task_id.is_(None))
         stmt = (
             update(FeatureItemRecord)
-            .where(
-                FeatureItemRecord.id == item_id,
-                FeatureItemRecord.task_id.is_(None),
-            )
+            .where(*conditions)
             .values(
                 task_id=task_id,
                 status=FeatureItemStatus.in_progress,
                 started_at=now,
+                finished_at=None,
                 updated_at=now,
             )
             .returning(FeatureItemRecord)
