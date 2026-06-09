@@ -34,7 +34,40 @@ class AgentKind(str, Enum):
     marc = "marc"
 
 
-class ProductProposalCreateRequest(BaseModel):
+PROPOSAL_STRUCTURED_FIELD_NAMES = (
+    "problem_opportunity",
+    "user_business_impact",
+    "repository_evidence",
+    "external_evidence",
+    "proposed_scope",
+    "non_goals",
+    "risks_mitigations",
+    "suggested_small_feature_breakdown",
+    "open_questions",
+)
+
+
+class ProductProposalStructuredFields(BaseModel):
+    problem_opportunity: str | None = None
+    user_business_impact: str | None = None
+    repository_evidence: str | None = None
+    external_evidence: str | None = None
+    proposed_scope: str | None = None
+    non_goals: str | None = None
+    risks_mitigations: str | None = None
+    suggested_small_feature_breakdown: str | None = None
+    open_questions: str | None = None
+
+    @field_validator(*PROPOSAL_STRUCTURED_FIELD_NAMES)
+    @classmethod
+    def validate_optional_structured_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+
+class ProductProposalCreateRequest(ProductProposalStructuredFields):
     title: str = Field(min_length=1, max_length=255)
     plan_type: str = Field(min_length=1, max_length=32)
     summary: str = Field(min_length=1)
@@ -105,7 +138,7 @@ class ProposalPlanningRunResponse(BaseModel):
         )
 
 
-class ProductProposalResponse(BaseModel):
+class ProductProposalResponse(ProductProposalStructuredFields):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -136,6 +169,10 @@ class ProductProposalResponse(BaseModel):
             plan_type=proposal.plan_type,
             summary=proposal.summary,
             answer=proposal.answer,
+            **{
+                field_name: getattr(proposal, field_name, None)
+                for field_name in PROPOSAL_STRUCTURED_FIELD_NAMES
+            },
             project=proposal.project,
             repo=proposal.repo,
             status=proposal.status,

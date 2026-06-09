@@ -598,3 +598,32 @@ def test_feature_repository_sync_status_from_items_reopens_linked_proposal_when_
 
     assert updated.status == FeatureStatus.planned
     assert proposal.status == ProductProposalStatus.planned
+
+
+def test_proposal_create_and_response_allow_optional_structured_fields() -> None:
+    """Verify optional structured proposal fields do not break legacy persistence."""
+    from src.server.schemas import ProductProposalCreateRequest, ProductProposalResponse
+
+    payload = ProductProposalCreateRequest(
+        title=" Improve onboarding ",
+        plan_type="growth",
+        summary=" Help users reach value faster. ",
+        answer="Legacy answer remains available.",
+        problem_opportunity=" Users drop off. ",
+        open_questions="   ",
+    )
+
+    assert payload.title == "Improve onboarding"
+    assert payload.problem_opportunity == "Users drop off."
+    assert payload.open_questions is None
+
+    proposal = _proposal(
+        problem_opportunity="Users drop off.",
+        suggested_small_feature_breakdown="Ship the smallest walkthrough first.",
+    )
+    response = ProductProposalResponse.from_record(proposal)
+
+    assert response.answer == "Create a clearer onboarding flow."
+    assert response.problem_opportunity == "Users drop off."
+    assert response.open_questions is None
+    assert response.suggested_small_feature_breakdown == "Ship the smallest walkthrough first."
