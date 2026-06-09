@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 from src.server.product_discovery import (
     ProductDiscoveryPoller,
     ProductDiscoveryProposalMetrics,
+    build_product_discovery_prompt,
     build_product_discovery_question,
     decide_product_discovery_dispatch,
 )
@@ -115,9 +116,15 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
         return SimpleNamespace(github_repo="owner/repo", project="nexus")
 
     async def fake_proposals(session, **kwargs):
-        """Provide fake recent proposals."""
+        """Provide fake proposal metrics."""
         captured["proposal_kwargs"] = kwargs
-        return []
+        return [
+            SimpleNamespace(
+                title="Improve onboarding",
+                status=ProductProposalStatus.proposed,
+                summary="Guide new users through setup.",
+            )
+        ]
 
     monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
     monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
@@ -133,17 +140,56 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
 
     assert result == 1
     assert captured["limit"] == 20
-    runner.submit_task.assert_awaited_once()
-    payload = runner.submit_task.await_args.args[0]
-    assert payload.agent_instance_id == candidate.id
-    assert payload.agent == AgentName.marc
     assert captured["proposal_kwargs"] == {
         "user_id": candidate.user_id,
         "project": "nexus",
         "repo": "owner/repo",
-        "limit": 5,
+        "limit": 200,
     }
-    assert "- None" in payload.question
+    runner.submit_task.assert_awaited_once()
+    payload = runner.submit_task.await_args.args[0]
+    assert payload.agent_instance_id == candidate.id
+    assert payload.agent == AgentName.marc
+    assert "repo=owner/repo" in payload.question
+    assert "project=nexus" in payload.question
+    assert "pending(proposed)=1" in payload.question
+    assert "Improve onboarding / proposed / Guide new users through setup." in payload.question
+    assert "不要重复已有 proposal" in payload.question
+
+
+def test_build_product_discovery_prompt_falls_back_without_optional_metrics():
+    """Verify prompt builder still returns safe instructions without metrics."""
+    prompt = build_product_discovery_prompt(project="nexus")
+
+    assert "project=nexus" in prompt
+    assert "计数不可用" in prompt
+    assert "最近 proposal 信息不可用" in prompt
+    assert "优先发现不同且高价值" in prompt
+
+
+def test_build_product_discovery_prompt_includes_status_counts_and_recent_proposals():
+    """Verify prompt builder includes proposal metrics when available."""
+    prompt = build_product_discovery_prompt(
+        project="nexus",
+        repo="owner/repo",
+        proposal_counts={
+            ProductProposalStatus.proposed: 2,
+            ProductProposalStatus.approved: 1,
+            ProductProposalStatus.rejected: 3,
+        },
+        recent_proposals=[
+            SimpleNamespace(
+                title="Existing proposal",
+                status=ProductProposalStatus.rejected,
+                summary="Already considered.",
+            )
+        ],
+    )
+
+    assert "repo=owner/repo, project=nexus" in prompt
+    assert "pending(proposed)=2, approved=1, rejected=3" in prompt
+    assert "Existing proposal / rejected / Already considered." in prompt
+
 
 
 def test_product_discovery_prompt_limits_and_sanitizes_proposals() -> None:
@@ -156,7 +202,7 @@ def test_product_discovery_prompt_limits_and_sanitizes_proposals() -> None:
 
     question = build_product_discovery_question(proposals, proposal_limit=2)
 
-    assert question.count("- Title:") == 2
+    assert question.count("unknown / ") == 2
     assert "Drop me" not in question
     assert "SECRET_ANSWER" not in question
     assert "T" * 150 in question
@@ -168,7 +214,7 @@ def test_product_discovery_prompt_handles_empty_proposals() -> None:
     """Verify empty recent proposals render predictable context."""
     question = build_product_discovery_question([], proposal_limit=5)
 
-    assert question.endswith("- None")
+    assert "最近 proposal 信息不可用" in question
     assert "Answer:" not in question
 
 

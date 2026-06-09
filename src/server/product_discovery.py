@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +27,11 @@ from src.server.schemas import AgentKind, TaskCreateRequest
 
 
 PRODUCT_DISCOVERY_AGENT_NAMES = {AgentName.marc}
+DISCOVERY_PROPOSAL_STATUS_LABELS = {
+    ProductProposalStatus.proposed: "pending(proposed)",
+    ProductProposalStatus.approved: "approved",
+    ProductProposalStatus.rejected: "rejected",
+}
 
 ProductDiscoveryAction = Literal["dispatch", "skip"]
 
@@ -64,16 +69,7 @@ def decide_product_discovery_dispatch(
     workspace: WorkspaceRecord | None,
     metrics: ProductDiscoveryProposalMetrics,
 ) -> ProductDiscoveryDecision:
-    """Decide whether a product discovery candidate should be dispatched.
-
-    Args:
-        candidate: Agent instance being considered for product discovery.
-        workspace: Workspace context associated with the agent instance.
-        metrics: Proposal metrics used to avoid over-producing pending proposals.
-
-    Returns:
-        Dispatch decision with a structured reason for logging and tests.
-    """
+    """Decide whether a product discovery candidate should be dispatched."""
     candidate_id = candidate.id
     if workspace is None:
         return _skip(
@@ -113,20 +109,54 @@ def decide_product_discovery_dispatch(
     )
 
 
-def build_product_discovery_question(proposals: list[ProductProposalRecord], *, proposal_limit: int) -> str:
-    """Build a bounded product discovery prompt from recent proposals."""
+def build_product_discovery_prompt(
+    *,
+    project: str,
+    repo: str | None = None,
+    proposal_counts: dict[ProductProposalStatus, int] | None = None,
+    recent_proposals: list[Any] | None = None,
+    proposal_limit: int = 5,
+) -> str:
+    """Build a context-aware product discovery prompt."""
+    identity = f"project={project}"
+    if repo:
+        identity = f"repo={repo}, {identity}"
+
     lines = [
-        "优化产品并提出一个proposal",
-        "",
-        "Recent proposals context (title and summary only):",
+        "请为当前产品做一次上下文感知的 discovery，并提出一个新的 product proposal。",
+        f"目标上下文：{identity}。",
     ]
-    for proposal in proposals[:proposal_limit]:
-        title = (proposal.title or "").strip()
-        summary = (proposal.summary or "").strip()
-        lines.extend([f"- Title: {title}", f"  Summary: {summary}"])
-    if len(lines) == 3:
-        lines.append("- None")
+    if proposal_counts:
+        counts = ", ".join(
+            f"{label}={proposal_counts.get(status, 0)}" for status, label in DISCOVERY_PROPOSAL_STATUS_LABELS.items()
+        )
+        lines.append(f"当前 proposal 计数：{counts}。")
+    else:
+        lines.append("当前 proposal 计数不可用；请基于仓库和项目上下文谨慎判断。")
+
+    lines.append("最近已有 proposals（title / status / summary）：")
+    shown = 0
+    for proposal in (recent_proposals or [])[:proposal_limit]:
+        title = getattr(proposal, "title", "Untitled") or "Untitled"
+        status = getattr(getattr(proposal, "status", None), "value", getattr(proposal, "status", "unknown"))
+        summary = getattr(proposal, "summary", "") or "无摘要"
+        lines.append(f"- {title} / {status} / {summary}")
+        shown += 1
+    if shown == 0:
+        lines.append("- 最近 proposal 信息不可用；请避免提出泛泛而谈或明显重复的建议。")
+
+    lines.append("明确要求：不要重复已有 proposal，优先发现不同且高价值的产品机会。")
     return "\n".join(lines)
+
+
+def build_product_discovery_question(proposals: list[ProductProposalRecord], *, proposal_limit: int) -> str:
+    """Build a bounded fallback discovery prompt from recent proposals."""
+    return build_product_discovery_prompt(
+        project="unknown",
+        proposal_counts=None,
+        recent_proposals=proposals,
+        proposal_limit=proposal_limit,
+    )
 
 
 class ProductDiscoveryPoller:
@@ -198,24 +228,43 @@ class ProductDiscoveryPoller:
                         decision.reason,
                     )
                     continue
+
+                proposal_counts = None
+                recent_proposals = None
                 recent_limit = self._settings.product_discovery_recent_proposal_limit
-                async with self._database.session() as session:
-                    recent_proposals = await ProductProposalRepository.list(
-                        session,
-                        user_id=instance.user_id,
-                        project=workspace.project,
-                        repo=workspace.github_repo,
-                        limit=recent_limit,
+                try:
+                    async with self._database.session() as session:
+                        proposals = await ProductProposalRepository.list(
+                            session,
+                            user_id=instance.user_id,
+                            project=workspace.project,
+                            repo=workspace.github_repo,
+                            limit=max(recent_limit, 200),
+                        )
+                    proposal_counts = {
+                        status: sum(1 for proposal in proposals if proposal.status == status)
+                        for status in DISCOVERY_PROPOSAL_STATUS_LABELS
+                    }
+                    recent_proposals = proposals[:recent_limit]
+                except Exception as exc:
+                    logger.warning(
+                        "Build product discovery prompt without proposal metrics for agent instance %s: %s",
+                        instance.id,
+                        str(exc),
                     )
 
+                question = build_product_discovery_prompt(
+                    project=workspace.project,
+                    repo=workspace.github_repo,
+                    proposal_counts=proposal_counts,
+                    recent_proposals=recent_proposals,
+                    proposal_limit=recent_limit,
+                )
                 task_id = await self._runner.submit_task(
                     TaskCreateRequest(
                         agent_instance_id=instance.id,
                         agent=AgentKind(instance.agent.value),
-                        question=build_product_discovery_question(
-                            recent_proposals,
-                            proposal_limit=recent_limit,
-                        ),
+                        question=question,
                         external_issue_url=None,
                     )
                 )
