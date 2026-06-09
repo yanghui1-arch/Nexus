@@ -11,6 +11,7 @@ export const TASK_BOARD_STATUS_ORDER = [
   'running',
   'waiting_for_review',
   'merged',
+  'failed',
 ] as const satisfies readonly ApiTaskStatus[];
 
 export type TaskBoardStatus = (typeof TASK_BOARD_STATUS_ORDER)[number];
