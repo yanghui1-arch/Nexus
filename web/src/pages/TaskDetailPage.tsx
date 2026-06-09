@@ -7,6 +7,7 @@ import { getTask } from '@/api/tasks';
 import type { ApiTask } from '@/api/types';
 import { useAppLayout } from '@/components/layout/AppLayout';
 import { Badge } from '@/components/ui/badge';
+import { classifyFailureReason } from '@/lib/failure-reason-classifier';
 import { STATUS_META } from '@/lib/workspace-task-view';
 import {
   Card,
@@ -50,6 +51,8 @@ function MetadataRow({
 
 function LegacyTaskDetail({ task }: { task: LegacyTask }) {
   const { t } = useTranslation();
+  const failureReason = task.error ? classifyFailureReason(task.error) : null;
+
   return (
     <Card className="h-fit max-w-3xl">
       <CardHeader>
@@ -77,7 +80,12 @@ function LegacyTaskDetail({ task }: { task: LegacyTask }) {
         ) : null}
         {task.error ? (
           <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {task.error}
+            {failureReason ? (
+              <Badge variant="outline" className="mb-2 border-destructive/30 text-destructive">
+                {failureReason}
+              </Badge>
+            ) : null}
+            <p className="whitespace-pre-wrap break-words">{task.error}</p>
           </div>
         ) : null}
       </CardContent>
@@ -180,6 +188,8 @@ export default function TaskDetailPage() {
       </Card>
     );
   }
+
+  const failureReason = task.error ? classifyFailureReason(task.error) : null;
 
   return (
     <Card className="h-fit max-w-3xl">
