@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GitPullRequest, Loader2 } from 'lucide-react';
+import { AlertCircle, GitPullRequest, Loader2, RefreshCw } from 'lucide-react';
 import { FaGithub } from 'react-icons/fa';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { useAppLayout } from '@/components/layout/AppLayout';
@@ -20,10 +20,11 @@ const REVIEW_STATUSES = new Set<WorkspaceTaskView['status']>([
   'waiting_for_review',
   'merged',
   'closed',
+  'failed',
 ]);
 
 type QueueTab = {
-  id: 'review' | 'merge' | 'close';
+  id: 'review' | 'merge' | 'close' | 'failed';
   labelKey: string;
   statuses: WorkspaceTaskView['status'][];
 };
@@ -44,12 +45,18 @@ const QUEUE_TABS: QueueTab[] = [
     labelKey: 'codeReview.close',
     statuses: ['closed'],
   },
+  {
+    id: 'failed',
+    labelKey: 'codeReview.failed',
+    statuses: ['failed'],
+  },
 ];
 
 const CODE_REVIEW_BADGE_CLASS_NAMES: Partial<Record<WorkspaceTaskView['status'], string>> = {
   waiting_for_review: 'border-transparent bg-emerald-600 text-white hover:bg-emerald-600',
   merged: 'border-transparent bg-violet-100 text-violet-700 hover:bg-violet-100',
   closed: 'border-transparent bg-destructive text-destructive-foreground hover:bg-destructive',
+  failed: 'border-transparent bg-destructive text-destructive-foreground hover:bg-destructive',
 };
 
 function formatTimestamp(value: string | null): string {
@@ -96,7 +103,7 @@ export function NexusReviewPage() {
   });
 
   const { taskId } = useParams<{ taskId?: string }>();
-  const { taskViews, isLoading } = useWorkspaceRecords();
+  const { taskViews, isLoading, isRefreshing, tasksError, reload } = useWorkspaceRecords();
   const [repoFilter, setRepoFilter] = useState(ALL_REPOSITORIES);
   const [activeTab, setActiveTab] = useState<QueueTab['id']>('review');
 
@@ -252,12 +259,25 @@ export function NexusReviewPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="max-w-sm">
-        <TaskBoardRepoSelect
-          repoOptions={repoOptions}
-          value={repoFilter}
-          onChange={setRepoFilter}
-        />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="max-w-sm flex-1">
+          <TaskBoardRepoSelect
+            repoOptions={repoOptions}
+            value={repoFilter}
+            onChange={setRepoFilter}
+          />
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void reload()}
+          disabled={isLoading || isRefreshing}
+          className="gap-2"
+        >
+          <RefreshCw className={cn('size-4', isRefreshing && 'animate-spin')} />
+          {t('codeReview.refreshQueue')}
+        </Button>
       </div>
 
       <div className="border-b">
@@ -284,14 +304,43 @@ export function NexusReviewPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 rounded-xl border border-dashed px-5 py-8 text-sm text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
           {t('codeReview.loadingQueue')}
         </div>
+      ) : tasksError ? (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-5 py-6">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 size-5 text-destructive" />
+            <div className="space-y-3">
+              <div>
+                <h2 className="text-base font-medium">{t('codeReview.loadFailedTitle')}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{tasksError}</p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => void reload()} disabled={isRefreshing}>
+                {t('codeReview.tryAgain')}
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : visibleTasks.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {t('codeReview.emptyQueue', { queue: t(activeQueueTab.labelKey) })}
-        </p>
+        <div className="rounded-xl border border-dashed px-5 py-8 text-sm text-muted-foreground">
+          <p>
+            {activeTab === 'failed'
+              ? t('codeReview.emptyFailedQueue')
+              : t('codeReview.emptyQueue', { queue: t(activeQueueTab.labelKey) })}
+          </p>
+          {activeTab === 'failed' ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link to="/task-board">{t('codeReview.goToTaskBoard')}</Link>
+              </Button>
+              <Button asChild size="sm">
+                <Link to="/publish-task">{t('codeReview.createTask')}</Link>
+              </Button>
+            </div>
+          ) : null}
+        </div>
       ) : (
         <div className="grid gap-3">
           {visibleTasks.map(task => {

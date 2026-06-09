@@ -45,6 +45,8 @@ export type WorkspaceRecordsData = {
   taskViews: WorkspaceTaskView[];
   isLoadingAgents: boolean;
   isLoading: boolean;
+  isRefreshing: boolean;
+  tasksError: string | null;
   reload: () => Promise<void>;
 };
 
@@ -53,6 +55,8 @@ export function useWorkspaceRecords(): WorkspaceRecordsData {
   const [tasks, setTasks] = useState<ApiTask[]>([]);
   const [isLoadingAgents, setIsLoadingAgents] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [tasksError, setTasksError] = useState<string | null>(null);
 
   const agentOptions = useMemo(
     () => agentInstances.map(toWorkspaceAgentOption),
@@ -81,6 +85,7 @@ export function useWorkspaceRecords(): WorkspaceRecordsData {
       setAgentInstances(result.agents);
       setIsLoadingAgents(false);
       setTasks(result.tasks);
+      setTasksError(result.tasksError);
       setIsLoading(false);
     });
   };
@@ -90,8 +95,13 @@ export function useWorkspaceRecords(): WorkspaceRecordsData {
   }, []);
 
   const reload = async () => {
-    const result = await loadWorkspaceRecords();
-    applyResult(result);
+    setIsRefreshing(true);
+    try {
+      const result = await loadWorkspaceRecords();
+      applyResult(result);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   return {
@@ -101,6 +111,8 @@ export function useWorkspaceRecords(): WorkspaceRecordsData {
     taskViews,
     isLoadingAgents,
     isLoading,
+    isRefreshing,
+    tasksError,
     reload,
   };
 }
