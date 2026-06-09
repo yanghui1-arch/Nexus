@@ -591,3 +591,83 @@ def test_consult_task_returns_process_reply(monkeypatch: pytest.MonkeyPatch) -> 
         {'role': 'user', 'content': 'Original task request'},
         {'role': 'assistant', 'content': 'Checkpointed progress'},
     ]
+
+
+async def _post_retry(app: FastAPI, task_id: uuid.UUID) -> httpx.Response:
+    """Post to the retry route."""
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
+        return await client.post(f'/v1/tasks/{task_id}/retry')
+
+
+def test_retry_task_queues_and_dispatches_failed_coding_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify retry queues and dispatches a failed coding task."""
+    now = datetime.now(timezone.utc)
+    task = _make_task(question='retry task', status=TaskStatus.failed, created_at=now)
+    queued_task = _make_task(question='retry task', status=TaskStatus.queued, created_at=now)
+    queued_task.id = task.id
+    queued_task.agent_instance_id = task.agent_instance_id
+    runner = SimpleNamespace(dispatch_existing_task=AsyncMock(return_value=True))
+
+    set_queued = AsyncMock(return_value=queued_task)
+    monkeypatch.setattr(TaskRepository, 'get', AsyncMock(return_value=task))
+    monkeypatch.setattr(TaskRepository, 'set_queued', set_queued)
+    monkeypatch.setattr(AgentInstanceRepository, 'get', _fake_get_current_user_instance)
+    monkeypatch.setattr(WorkspaceRepository, 'get_by_agent_instance_id', AsyncMock(return_value=None))
+
+    response = asyncio.run(_post_retry(_build_app(runner_obj=runner), task.id))
+
+    assert response.status_code == 202
+    assert response.json()['status'] == 'queued'
+    assert set_queued.await_args.args[1] == task.id
+    runner.dispatch_existing_task.assert_awaited_once_with(
+        task.id,
+        recovered=False,
+        fail_task_on_dispatch_error=True,
+    )
+
+
+def test_retry_task_returns_not_found_for_missing_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify retry returns a clear missing task error."""
+    task_id = uuid.uuid4()
+    runner = SimpleNamespace(dispatch_existing_task=AsyncMock(return_value=True))
+    monkeypatch.setattr(TaskRepository, 'get', AsyncMock(return_value=None))
+
+    response = asyncio.run(_post_retry(_build_app(runner_obj=runner), task_id))
+
+    assert response.status_code == 404
+    assert response.json() == {'detail': 'Task not found'}
+    runner.dispatch_existing_task.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ('task_kwargs', 'instance_user_id', 'expected_status', 'expected_detail'),
+    [
+        ({'status': TaskStatus.failed}, uuid.uuid4(), 403, 'You do not have permission to retry this task'),
+        ({'status': TaskStatus.failed, 'category': TaskCategory.pm}, None, 409, 'Only coding tasks can be retried'),
+        ({'status': TaskStatus.running}, None, 409, 'Only failed tasks can be retried'),
+    ],
+)
+def test_retry_task_rejects_invalid_task_state_or_owner(
+    monkeypatch: pytest.MonkeyPatch,
+    task_kwargs: dict[str, Any],
+    instance_user_id: uuid.UUID | None,
+    expected_status: int,
+    expected_detail: str,
+) -> None:
+    """Verify retry rejects unowned, non-coding, and non-failed tasks."""
+    task = _make_task(question='invalid retry task', created_at=datetime.now(timezone.utc), **task_kwargs)
+    runner = SimpleNamespace(dispatch_existing_task=AsyncMock(return_value=True))
+    instance_get = _fake_get_current_user_instance
+    if instance_user_id is not None:
+        instance_get = AsyncMock(return_value=SimpleNamespace(id=task.agent_instance_id, user_id=instance_user_id))
+
+    monkeypatch.setattr(TaskRepository, 'get', AsyncMock(return_value=task))
+    monkeypatch.setattr(AgentInstanceRepository, 'get', instance_get)
+    monkeypatch.setattr(WorkspaceRepository, 'get_by_agent_instance_id', AsyncMock(return_value=None))
+
+    response = asyncio.run(_post_retry(_build_app(runner_obj=runner), task.id))
+
+    assert response.status_code == expected_status
+    assert response.json() == {'detail': expected_detail}
+    runner.dispatch_existing_task.assert_not_awaited()
