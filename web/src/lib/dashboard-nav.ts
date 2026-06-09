@@ -6,6 +6,10 @@ export const WORKSPACE_NAV_ITEMS = [
     to: '/task-board',
   },
   {
+    labelKey: 'nav.failedTaskQueue',
+    to: '/failed-task-queue',
+  },
+  {
     labelKey: 'nav.workspaceSettings',
     to: '/workspace-settings',
   },

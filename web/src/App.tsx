@@ -4,6 +4,7 @@ import { AuthProvider } from '@/components/AuthProvider';
 import { AppLayout } from '@/components/layout/AppLayout';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { Toaster } from '@/components/ui/toaster';
+import FailedTaskQueuePage from '@/pages/failed-task-queue';
 import LoginPage from '@/pages/login';
 import { NexusReviewPage } from '@/pages/nexus-review';
 import PricingPage from '@/pages/pricing';
@@ -36,6 +37,7 @@ function App() {
                 element={<Navigate to="/product-research/features" replace />}
               />
               <Route path="/task-board" element={<TaskBoardPage />} />
+              <Route path="/failed-task-queue" element={<FailedTaskQueuePage />} />
               <Route path="/code-review" element={<Navigate to="/code-review/nexus" replace />} />
               <Route path="/code-review/nexus" element={<NexusReviewPage />} />
               <Route path="/code-review/nexus/tasks/:taskId" element={<NexusReviewPage />} />
@@ -66,6 +68,10 @@ function App() {
                 element={<Navigate to="/product-research/features" replace />}
               />
               <Route path="/workspace/task-board" element={<Navigate to="/task-board" replace />} />
+              <Route
+                path="/workspace/failed-task-queue"
+                element={<Navigate to="/failed-task-queue" replace />}
+              />
               <Route path="/workspace/code-review" element={<Navigate to="/code-review" replace />} />
               <Route path="/workspace/code-review/nexus" element={<NexusReviewPage />} />
               <Route
