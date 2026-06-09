@@ -10,7 +10,10 @@ from src.server.postgres.models import (
     ProductProposalRecord,
     ProductProposalStatus,
     ProposalPlanningRunStatus,
+    FeatureItemStatus,
     FeatureStatus,
+    TaskCategory,
+    TaskStatus,
     UserRecord,
 )
 from src.server.postgres.repositories import (
@@ -28,11 +31,19 @@ from src.server.services.proposal_planning import (
     ProposalNotFoundAfterPlanningStartError,
     start_proposal_planning,
 )
+from src.server.services.product_workflow_publish import (
+    NoActiveTelaAgentInstanceError,
+    publish_feature_item_task,
+)
 from src.server.schemas import (
+    FeatureItemResponse,
+    FeatureItemRetryTaskRequest,
+    FeatureItemRetryTaskResponse,
+    FeatureResponse,
     ProductProposalCreateRequest,
     ProductProposalResponse,
     ProductProposalStatusUpdateRequest,
-    FeatureResponse,
+    TaskSubmitResponse,
 )
 
 router = APIRouter(prefix="/v1/product", tags=["product"])
@@ -299,3 +310,50 @@ async def get_feature(
             raise HTTPException(status_code=404, detail="Feature not found")
         items = await FeatureItemRepository.list_by_feature(session, feature_id)
     return FeatureResponse.from_record(feature, items=items)
+
+
+@router.post("/feature-items/{feature_item_id}/retry-task", response_model=FeatureItemRetryTaskResponse)
+async def retry_feature_item_task(
+    request: Request,
+    feature_item_id: uuid.UUID,
+    payload: FeatureItemRetryTaskRequest,
+    user: UserRecord = Depends(get_current_user),
+) -> FeatureItemRetryTaskResponse:
+    """Retry a failed feature item by submitting a fresh coding task."""
+    del payload
+    database: Database = request.app.state.database
+    runner: AgentTaskRunner = request.app.state.runner
+    async with database.session() as session:
+        feature = await FeatureItemRepository.get_feature(session, feature_item_id)
+        proposal = await FeatureItemRepository.get_proposal(session, feature_item_id)
+        if feature is None or proposal is None or not _proposal_owned_by_user(proposal, user.id):
+            raise HTTPException(status_code=404, detail="Feature item not found")
+        items = await FeatureItemRepository.list_by_feature(session, feature.id)
+        item = next((candidate for candidate in items if candidate.id == feature_item_id), None)
+        if item is None:
+            raise HTTPException(status_code=404, detail="Feature item not found")
+        if item.status != FeatureItemStatus.failed:
+            raise HTTPException(status_code=409, detail="Only failed feature items can be retried")
+        try:
+            assigned, task_id, agent_instance_id = await publish_feature_item_task(
+                session,
+                runner=runner,
+                item=item,
+                proposal=proposal,
+                require_unassigned=False,
+            )
+        except NoActiveTelaAgentInstanceError as exc:
+            raise HTTPException(status_code=409, detail="No active Tela agent instance is available") from exc
+        except TaskDispatchError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if assigned is None:
+        raise HTTPException(status_code=409, detail="Feature item was already assigned")
+    return FeatureItemRetryTaskResponse(
+        feature_item=FeatureItemResponse.from_record(assigned),
+        task=TaskSubmitResponse(
+            task_id=task_id,
+            agent_instance_id=agent_instance_id,
+            category=TaskCategory.coding,
+            status=TaskStatus.queued,
+        ),
+    )

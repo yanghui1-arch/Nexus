@@ -181,6 +181,18 @@ class FeatureItemResponse(BaseModel):
         )
 
 
+class FeatureItemRetryTaskRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=1024)
+
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+
 class FeatureResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -274,6 +286,11 @@ class TaskSubmitResponse(BaseModel):
     agent_instance_id: uuid.UUID
     category: TaskCategory
     status: TaskStatus
+
+
+class FeatureItemRetryTaskResponse(BaseModel):
+    feature_item: FeatureItemResponse
+    task: TaskSubmitResponse
 
 
 class TaskConsultResponse(BaseModel):
