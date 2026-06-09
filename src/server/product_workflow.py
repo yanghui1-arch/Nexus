@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
-
 from src.logger import logger
 from src.server.config import Settings
 from src.server.postgres.database import Database
-from src.server.postgres.models import AgentName
-from src.server.postgres.repositories import AgentInstanceRepository, FeatureItemRepository, TaskRepository
+from src.server.postgres.repositories import FeatureItemRepository
 from src.server.runner import AgentTaskRunner
 from src.server.services import product_workflow_dispatch
-from src.server.schemas import AgentKind, TaskCreateRequest
+from src.server.services.product_workflow_publish import (
+    NoActiveTelaAgentInstanceError,
+    publish_feature_item_task,
+)
 
 
 class ProductWorkflowPoller:
@@ -93,15 +93,15 @@ class ProductWorkflowPoller:
             if proposal is None:
                 logger.warning("Skip feature item %s because its proposal is missing.", item.id)
                 return False
-            tela_instances = await AgentInstanceRepository.list_by_active_task_load(
-                session,
-                agent=AgentName.tela,
-                user_id=proposal.user_id,
-                github_repo=proposal.repo,
-                project=proposal.project,
-                limit=1,
-            )
-            if not tela_instances:
+            try:
+                assigned, task_id, _ = await publish_feature_item_task(
+                    session,
+                    runner=self._runner,
+                    item=item,
+                    proposal=proposal,
+                    require_unassigned=True,
+                )
+            except NoActiveTelaAgentInstanceError:
                 logger.warning(
                     "Skip feature item %s because no active Tela agent instance is available for user=%s repo=%s project=%s.",
                     item.id,
@@ -110,20 +110,7 @@ class ProductWorkflowPoller:
                     proposal.project,
                 )
                 return False
-
-        task_id = await self._runner.submit_task(
-            TaskCreateRequest(
-                agent_instance_id=tela_instances[0].id,
-                agent=AgentKind.tela,
-                question=_build_feature_item_coding_question(item),
-                external_issue_url=None,
-            )
-        )
-        async with self._database.session() as session:
-            assigned = await FeatureItemRepository.assign_task(session, item.id, task_id=task_id)
         if assigned is None:
-            async with self._database.session() as session:
-                await TaskRepository.set_closed(session, task_id)
             logger.warning("Feature item %s was already assigned before publishing task %s.", item.id, task_id)
             return False
         return True
@@ -145,8 +132,3 @@ class ProductWorkflowPoller:
                 )
             except asyncio.TimeoutError:
                 continue
-
-
-def _build_feature_item_coding_question(item: Any) -> str:
-    """Build the coding prompt for a feature item."""
-    return f"Implement product feature item: {item.title}\n\n{item.description}"
