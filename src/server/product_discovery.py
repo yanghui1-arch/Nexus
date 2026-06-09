@@ -113,18 +113,35 @@ def decide_product_discovery_dispatch(
     )
 
 
-def build_product_discovery_question(proposals: list[ProductProposalRecord], *, proposal_limit: int) -> str:
-    """Build a bounded product discovery prompt from recent proposals."""
+def build_product_discovery_question(
+    proposals: list[ProductProposalRecord],
+    *,
+    proposal_limit: int,
+    project: str | None = None,
+    repo: str | None = None,
+    pending_proposal_count: int | None = None,
+) -> str:
+    """Build a bounded product discovery prompt from workspace and proposal context."""
+    project_context = project or "未配置"
+    repo_context = repo or "未配置"
+    pending_count = 0 if pending_proposal_count is None else pending_proposal_count
     lines = [
         "优化产品并提出一个proposal",
         "",
-        "Recent proposals context (title and summary only):",
+        "中文产品发现任务目标：结合当前项目上下文、代码库事实和用户价值，发现一个高价值产品改进机会，并创建清晰、可评审的 proposal。",
+        f"项目上下文：project={project_context}; repo={repo_context}",
+        f"待处理 proposal 数量：{pending_count}",
+        "避免重复：不要创建与近期 proposal 标题、目标或范围重复的 proposal；如主题相近，请明确差异化价值和边界。",
+        "",
+        "Recent proposals context (title, status, and summary only):",
     ]
     for proposal in proposals[:proposal_limit]:
         title = (proposal.title or "").strip()
         summary = (proposal.summary or "").strip()
-        lines.extend([f"- Title: {title}", f"  Summary: {summary}"])
-    if len(lines) == 3:
+        status = getattr(proposal, "status", "unknown")
+        status_value = getattr(status, "value", str(status))
+        lines.extend([f"- Title: {title}", f"  Status: {status_value}", f"  Summary: {summary}"])
+    if len(lines) == 8:
         lines.append("- None")
     return "\n".join(lines)
 
@@ -215,6 +232,9 @@ class ProductDiscoveryPoller:
                         question=build_product_discovery_question(
                             recent_proposals,
                             proposal_limit=recent_limit,
+                            project=workspace.project,
+                            repo=workspace.github_repo,
+                            pending_proposal_count=metrics.pending_proposal_count,
                         ),
                         external_issue_url=None,
                     )

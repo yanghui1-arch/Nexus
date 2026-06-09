@@ -21,6 +21,35 @@ from src.server.postgres.repositories import (
 )
 
 
+def test_product_discovery_prompt_includes_context_and_guardrails():
+    """Verify product discovery prompt keeps critical context and guardrails."""
+    recent_proposals = [
+        SimpleNamespace(
+            title="Reduce duplicate product proposals",
+            summary="Avoid repeated discovery output",
+            status=ProductProposalStatus.proposed,
+        ),
+        SimpleNamespace(title="Improve onboarding funnel", summary="Shorten setup", status=ProductProposalStatus.approved),
+    ]
+
+    prompt = build_product_discovery_question(
+        recent_proposals,
+        proposal_limit=5,
+        project="Nexus Growth",
+        repo="yanghui1-arch/Nexus",
+        pending_proposal_count=3,
+    )
+
+    assert "project=Nexus Growth" in prompt, "prompt should include project context"
+    assert "repo=yanghui1-arch/Nexus" in prompt, "prompt should include repo context"
+    assert "待处理 proposal 数量：3" in prompt, "prompt should include pending proposal count"
+    assert "Title: Reduce duplicate product proposals" in prompt, "prompt should include recent proposal title"
+    assert "Status: proposed" in prompt, "prompt should include recent proposal status"
+    assert "避免重复" in prompt, "prompt should tell Marc to avoid duplicate proposals"
+    assert "中文产品发现任务目标" in prompt, "prompt should preserve the Chinese discovery goal"
+    assert "优化产品并提出一个proposal" in prompt, "prompt should keep the original Chinese task objective"
+
+
 class FakeDatabase:
     @asynccontextmanager
     async def session(self):
@@ -103,7 +132,7 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
     """Verify poll once dispatches only dispatchable instances."""
     candidate = SimpleNamespace(id=uuid.uuid4(), agent=AgentName.marc, user_id=uuid.uuid4())
     runner = FakeRunner()
-    captured = {}
+    captured = {"proposal_calls": []}
 
     async def fake_list(session, *, limit):
         """Provide a fake list."""
@@ -115,9 +144,11 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
         return SimpleNamespace(github_repo="owner/repo", project="nexus")
 
     async def fake_proposals(session, **kwargs):
-        """Provide fake recent proposals."""
-        captured["proposal_kwargs"] = kwargs
-        return []
+        """Provide fake proposals for prompt context."""
+        captured["proposal_calls"].append(kwargs)
+        if kwargs.get("status") == ProductProposalStatus.proposed:
+            return [SimpleNamespace(title="Pending proposal", summary="Needs review", status=ProductProposalStatus.proposed)]
+        return [SimpleNamespace(title="Existing proposal", summary="Already known", status=ProductProposalStatus.approved)]
 
     monkeypatch.setattr(AgentInstanceRepository, "list_product_discovery_candidates", fake_list)
     monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", fake_workspace)
@@ -137,21 +168,20 @@ def test_poll_once_dispatches_only_dispatchable_instances(monkeypatch):
     payload = runner.submit_task.await_args.args[0]
     assert payload.agent_instance_id == candidate.id
     assert payload.agent == AgentName.marc
-    assert captured["proposal_kwargs"] == {
-        "user_id": candidate.user_id,
-        "project": "nexus",
-        "repo": "owner/repo",
-        "limit": 5,
-    }
-    assert "- None" in payload.question
+    assert captured["proposal_calls"] == [
+        {"user_id": candidate.user_id, "repo": "owner/repo", "project": "nexus", "status": ProductProposalStatus.proposed},
+        {"user_id": candidate.user_id, "project": "nexus", "repo": "owner/repo", "limit": 5},
+    ]
+    assert "Existing proposal" in payload.question
+    assert "待处理 proposal 数量：1" in payload.question
 
 
 def test_product_discovery_prompt_limits_and_sanitizes_proposals() -> None:
     """Verify product discovery prompt keeps recent proposal context bounded."""
     proposals = [
-        SimpleNamespace(title="T" * 150, summary="S" * 550, answer="SECRET_ANSWER_ONE"),
-        SimpleNamespace(title="Keep me", summary="Short summary", answer="SECRET_ANSWER_TWO"),
-        SimpleNamespace(title="Drop me", summary="Should not appear", answer="SECRET_ANSWER_THREE"),
+        SimpleNamespace(title="T" * 150, summary="S" * 550, answer="SECRET_ANSWER_ONE", status="proposed"),
+        SimpleNamespace(title="Keep me", summary="Short summary", answer="SECRET_ANSWER_TWO", status="approved"),
+        SimpleNamespace(title="Drop me", summary="Should not appear", answer="SECRET_ANSWER_THREE", status="rejected"),
     ]
 
     question = build_product_discovery_question(proposals, proposal_limit=2)
