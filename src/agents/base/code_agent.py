@@ -8,6 +8,7 @@ from pydantic import ConfigDict
 
 from src.agents.base.agent import Agent
 from src.logger import logger
+from src.utils.github import collect_github_response
 
 
 class CodeAgent(Agent):
@@ -125,7 +126,7 @@ class CodeAgent(Agent):
                     return
             elif response.status_code != 404:
                 raise RuntimeError(
-                    f"Failed to verify fork {fork_repo}: GitHub returned {response.status_code}."
+                    f"Failed to verify fork {fork_repo}: {collect_github_response(response)}."
                 )
 
             if asyncio.get_running_loop().time() >= deadline:
@@ -173,7 +174,7 @@ class CodeAgent(Agent):
                 )
                 if create_response.status_code not in {201, 202}:
                     raise RuntimeError(
-                        f"Failed to create fork {fork_repo}: {create_response.text}"
+                        f"Failed to create fork {fork_repo}: {collect_github_response(create_response)}."
                     )
                 logger.info(f"Fork {fork_repo} creation accepted by GitHub.")
             elif response.status_code == 200:
@@ -186,7 +187,7 @@ class CodeAgent(Agent):
                     return fork_repo
             else:
                 raise RuntimeError(
-                    f"Failed to query fork {fork_repo}: GitHub returned {response.status_code}."
+                    f"Failed to query fork {fork_repo}: {collect_github_response(response)}."
                 )
 
             await self._wait_for_fork_ready(
@@ -197,4 +198,3 @@ class CodeAgent(Agent):
             )
 
         return fork_repo
-
