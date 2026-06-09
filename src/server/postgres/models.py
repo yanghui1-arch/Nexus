@@ -119,6 +119,7 @@ class FeatureStatus(str, enum.Enum):
 class FeatureItemStatus(str, enum.Enum):
     pending = "pending"
     in_progress = "in_progress"
+    failed = "failed"
     completed = "completed"
     closed = "closed"
 
