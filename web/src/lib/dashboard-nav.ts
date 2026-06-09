@@ -2,6 +2,10 @@ export const DEFAULT_WORKSPACE_PATH = '/task-board';
 
 export const WORKSPACE_NAV_ITEMS = [
   {
+    labelKey: 'nav.account',
+    to: '/account',
+  },
+  {
     labelKey: 'nav.taskBoard',
     to: '/task-board',
   },

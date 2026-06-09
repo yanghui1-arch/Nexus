@@ -12,6 +12,7 @@
         "tagline": "SaaS 控制中心"
       },
       "nav": {
+        "account": "账户",
         "taskBoard": "任务看板",
         "workspaceSettings": "工作区配置",
         "publishTask": "发布任务",
@@ -388,6 +389,7 @@
         "tagline": "SaaS Control Center"
       },
       "nav": {
+        "account": "Account",
         "taskBoard": "Task Board",
         "workspaceSettings": "Workspace Settings",
         "publishTask": "Publish Task",
