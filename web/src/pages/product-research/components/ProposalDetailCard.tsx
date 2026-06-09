@@ -81,17 +81,21 @@ export function ProposalDetailCard({
   const canOpenPlanList =
     hasValidatedProposalPlan(proposal) && relatedFeatures.length > 0;
   const proposalAnswer = parseProposalAnswerSections(proposal.answer);
+  const fallbackBriefContent = proposalAnswer.status === 'unrecognized'
+    ? [proposal.summary, proposal.answer].filter(Boolean).join('\n\n')
+    : undefined;
   const [activeTab, setActiveTab] = useState<DetailTabKey>('decision-brief');
   const visibleTab = activeTab === 'plan-list' && !canOpenPlanList
     ? 'decision-brief'
     : activeTab;
-  const decisionContext = [
+  const decisionContext = fallbackBriefContent ?? [
     proposal.summary,
     proposalAnswer.sections.proposedScope,
     proposalAnswer.sections.problemOpportunity,
   ].filter(Boolean).join('\n\n');
-  const approachContent = proposalAnswer.sections.suggestedSmallFeatureBreakdown
-    || proposal.summary;
+  const approachContent = fallbackBriefContent
+    ? undefined
+    : proposalAnswer.sections.suggestedSmallFeatureBreakdown || proposal.summary;
   const showRetryPlanning = planningStatus === 'failed';
   const showRecoverPlanning =
     planningStatus === 'missing_run' || planningStatus === 'missing_task';
@@ -201,20 +205,26 @@ export function ProposalDetailCard({
 
         <TabsContent value="decision-brief" className="flex flex-col">
           <BriefDisclosure
-            title={t('productResearch.decisionBriefDecision')}
+            title={fallbackBriefContent
+              ? t('productResearch.decisionBriefOriginalContent')
+              : t('productResearch.decisionBriefDecision')}
             content={decisionContext}
             fallback={t('productResearch.decisionBriefUnavailable')}
           />
-          <BriefDisclosure
-            title={t('productResearch.decisionBriefApproach')}
-            content={approachContent}
-            fallback={t('productResearch.decisionBriefUnavailable')}
-          />
-          <BriefDisclosure
-            title={t('productResearch.decisionBriefValue')}
-            content={proposalAnswer.sections.userBusinessImpact}
-            fallback={t('productResearch.decisionBriefUnavailable')}
-          />
+          {fallbackBriefContent ? null : (
+            <>
+              <BriefDisclosure
+                title={t('productResearch.decisionBriefApproach')}
+                content={approachContent}
+                fallback={t('productResearch.decisionBriefUnavailable')}
+              />
+              <BriefDisclosure
+                title={t('productResearch.decisionBriefValue')}
+                content={proposalAnswer.sections.userBusinessImpact}
+                fallback={t('productResearch.decisionBriefUnavailable')}
+              />
+            </>
+          )}
         </TabsContent>
 
 
