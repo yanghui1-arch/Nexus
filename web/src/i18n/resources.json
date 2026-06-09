@@ -371,7 +371,21 @@
         "started": "开始时间",
         "finished": "结束时间",
         "result": "结果",
-        "failedToLoad": "加载任务失败。"
+        "failedToLoad": "加载任务失败。",
+        "category": "分类",
+        "categories": {
+          "coding": "编码",
+          "product discovery": "产品发现"
+        },
+        "recoveryTitle": "任务失败恢复",
+        "recoveryDescription": "重新提交相同任务，保留原始问题和外部 Issue 上下文。",
+        "retry": "重试任务",
+        "retrying": "正在重试…",
+        "retryConfirm": "确定要重试这个失败任务吗？",
+        "retryStarted": "任务重试已提交",
+        "retryStartedDescription": "已创建新的任务并跳转到详情页。",
+        "retryFailed": "重试任务失败",
+        "retryFailedDescription": "重试任务失败。"
       }
     }
   },
@@ -747,7 +761,21 @@
         "started": "Started",
         "finished": "Finished",
         "result": "Result",
-        "failedToLoad": "Failed to load task."
+        "failedToLoad": "Failed to load task.",
+        "category": "Category",
+        "categories": {
+          "coding": "Coding",
+          "product discovery": "Product discovery"
+        },
+        "recoveryTitle": "Failed task recovery",
+        "recoveryDescription": "Submit the same task again with the original question and external issue context.",
+        "retry": "Retry task",
+        "retrying": "Retrying...",
+        "retryConfirm": "Retry this failed task?",
+        "retryStarted": "Task retry submitted",
+        "retryStartedDescription": "A new task was created and opened.",
+        "retryFailed": "Failed to retry task",
+        "retryFailedDescription": "Failed to retry task."
       }
     }
   }

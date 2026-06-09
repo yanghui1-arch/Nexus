@@ -1,12 +1,14 @@
 import { startTransition, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { AlertCircle, GitBranch } from 'lucide-react';
 import { ApiError, getErrorDetail } from '@/api/client';
-import { getTask } from '@/api/tasks';
+import { createTask, getTask } from '@/api/tasks';
 import type { ApiTask } from '@/api/types';
 import { useAppLayout } from '@/components/layout/AppLayout';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { STATUS_META } from '@/lib/workspace-task-view';
 import {
   Card,
@@ -87,6 +89,7 @@ function LegacyTaskDetail({ task }: { task: LegacyTask }) {
 
 export default function TaskDetailPage() {
   const { taskId } = useParams<{ taskId: string }>();
+  const navigate = useNavigate();
   const { t } = useTranslation();
   const legacyTask = useMemo(() => (taskId ? getTaskById(taskId) : undefined), [taskId]);
 
@@ -96,6 +99,7 @@ export default function TaskDetailPage() {
   );
   const [taskError, setTaskError] = useState<string | null>(null);
   const [isLoadingTask, setIsLoadingTask] = useState(Boolean(taskId && isUuidLike(taskId)));
+  const [isRetrying, setIsRetrying] = useState(false);
 
   useEffect(() => {
     startTransition(() => {
@@ -135,6 +139,32 @@ export default function TaskDetailPage() {
         setTaskError(getErrorDetail(error, t('taskDetail.failedToLoad')));
         setIsLoadingTask(false);
       });
+    }
+  };
+
+  const retryTask = async () => {
+    if (!task || !window.confirm(t('taskDetail.retryConfirm'))) {
+      return;
+    }
+
+    setIsRetrying(true);
+    try {
+      const response = await createTask({
+        agent: task.agent,
+        agent_instance_id: task.agent_instance_id,
+        question: task.question,
+        external_issue_url: task.external_issue_url,
+      });
+      toast.success(t('taskDetail.retryStarted'), {
+        description: t('taskDetail.retryStartedDescription'),
+      });
+      navigate(`/task/${response.task_id}`);
+    } catch (error) {
+      toast.error(t('taskDetail.retryFailed'), {
+        description: getErrorDetail(error, t('taskDetail.retryFailedDescription')),
+      });
+    } finally {
+      setIsRetrying(false);
     }
   };
 
@@ -196,6 +226,23 @@ export default function TaskDetailPage() {
             {t(`status.${task.status}`)}
           </Badge>
         </div>
+        <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+          <span className="text-muted-foreground">{t('taskDetail.category')}</span>
+          <Badge variant="outline">{t(`taskDetail.categories.${task.category}`)}</Badge>
+        </div>
+        {task.status === 'failed' ? (
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-medium text-destructive">{t('taskDetail.recoveryTitle')}</p>
+                <p className="mt-1 text-muted-foreground">{t('taskDetail.recoveryDescription')}</p>
+              </div>
+              <Button onClick={retryTask} disabled={isRetrying}>
+                {isRetrying ? t('taskDetail.retrying') : t('taskDetail.retry')}
+              </Button>
+            </div>
+          </div>
+        ) : null}
         <MetadataRow label={t('taskDetail.repository')} value={detailValue(task.repo)} />
         <MetadataRow label={t('taskDetail.project')} value={detailValue(task.project)} />
         <MetadataRow label={t('taskDetail.created')} value={new Date(task.created_at).toLocaleString()} />
