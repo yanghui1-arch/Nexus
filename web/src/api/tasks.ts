@@ -27,6 +27,12 @@ export function getTask(taskId: string): Promise<ApiTask> {
   return apiRequest<ApiTask>(`/v1/tasks/${taskId}`);
 }
 
+export function retryTask(taskId: string): Promise<ApiTaskSubmitResponse> {
+  return apiRequest<ApiTaskSubmitResponse>(`/v1/tasks/${taskId}/retry`, {
+    method: 'POST',
+  });
+}
+
 export function createTask(
   payload: ApiTaskCreateRequest,
 ): Promise<ApiTaskSubmitResponse> {
