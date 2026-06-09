@@ -4,6 +4,7 @@ import { AuthProvider } from '@/components/AuthProvider';
 import { AppLayout } from '@/components/layout/AppLayout';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { Toaster } from '@/components/ui/toaster';
+import FailedTaskQueuePage from '@/pages/failed-task-queue';
 import LoginPage from '@/pages/login';
 import { NexusReviewPage } from '@/pages/nexus-review';
 import PricingPage from '@/pages/pricing';
@@ -28,6 +29,7 @@ function App() {
               <Route path="/workspace-settings" element={<WorkspaceSettingsPage />} />
               <Route path="/publish-task" element={<PublishTaskPage />} />
               <Route path="/process-tracking" element={<ProcessTrackingPage />} />
+              <Route path="/failed-task-queue" element={<FailedTaskQueuePage />} />
               <Route path="/product-research" element={<ProductResearchPage />} />
               <Route path="/product-research/proposals/:proposalId" element={<ProductResearchPage />} />
               <Route path="/product-research/features" element={<ProductResearchPage />} />
@@ -48,6 +50,10 @@ function App() {
               <Route
                 path="/workspace/process-tracking"
                 element={<Navigate to="/process-tracking" replace />}
+              />
+              <Route
+                path="/workspace/failed-task-queue"
+                element={<Navigate to="/failed-task-queue" replace />}
               />
               <Route
                 path="/workspace/product-research"
