@@ -42,7 +42,6 @@ import {
   getPageCount,
   getProjectOptions,
   getProposalEmptyMessage,
-  getProposalSummaryCounts,
   getVisiblePage,
   matchesProjectFilter,
 } from './utils';
@@ -70,7 +69,16 @@ export default function ProductResearchPage() {
 
   const isFeatureRoute = location.pathname.startsWith('/product-research/features');
   const viewMode = isFeatureRoute ? 'features' : 'proposals';
-  const proposalSummaryCounts = getProposalSummaryCounts(proposals);
+  const proposalCounts = {
+    all: proposals.length,
+    proposed: proposals.filter(proposal => proposal.status === 'proposed').length,
+    accepted: proposals.filter(proposal => (
+      proposal.status === 'approved' ||
+      proposal.status === 'planned' ||
+      proposal.status === 'completed'
+    )).length,
+    rejected: proposals.filter(proposal => proposal.status === 'rejected').length,
+  };
 
   function handleReviewPendingProposals(): void {
     setProposalFilter('proposed');
@@ -103,12 +111,6 @@ export default function ProductResearchPage() {
   const proposalPageCount = getPageCount(filteredProposals.length);
   const activeProposalPage = Math.min(proposalPage, proposalPageCount);
   const visibleProposals = getVisiblePage(filteredProposals, activeProposalPage);
-  const approvalInboxStats = [
-    { key: 'pending', value: proposalSummaryCounts.proposed, onClick: handleReviewPendingProposals },
-    { key: 'accepted', value: proposalSummaryCounts.accepted },
-    { key: 'rejected', value: proposalSummaryCounts.rejected },
-  ];
-
   const trackedFeatures = (() => {
     const activeFeatures = features.filter(feature => feature.status !== 'closed');
     return activeFeatures.length > 0 ? activeFeatures : features;
@@ -181,9 +183,10 @@ export default function ProductResearchPage() {
     try {
       await updateProductProposalStatus(currentProposalId, { status });
       toast.success(
+        status === 'approved' ? t('productResearch.requirementApproved') : t('productResearch.requirementRejected'),
         status === 'approved'
-          ? t('productResearch.requirementApprovedPlanningStarted')
-          : t('productResearch.requirementRejected'),
+          ? { description: t('productResearch.requirementApprovedDescription') }
+          : undefined,
       );
       await reloadSnapshot('mutation');
       if (status === 'approved') {
@@ -288,8 +291,25 @@ export default function ProductResearchPage() {
       {viewMode === 'proposals' ? (
         <div className="flex flex-col gap-4">
           <section className="border-y px-1 py-3">
+            <div className="mb-3 px-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                {t('productResearch.pendingReviewKicker')}
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+                {t('productResearch.pendingReviewTitle', {
+                  count: proposalCounts.proposed,
+                })}
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                {t('productResearch.pendingReviewDescription')}
+              </p>
+            </div>
             <dl className="grid gap-6 sm:grid-cols-3">
-              {approvalInboxStats.map(({ key, value, onClick }) => (
+              {[
+                { key: 'pending', value: proposalCounts.proposed, onClick: handleReviewPendingProposals },
+                { key: 'accepted', value: proposalCounts.accepted },
+                { key: 'rejected', value: proposalCounts.rejected },
+              ].map(({ key, value, onClick }) => (
                 <button
                   key={key}
                   type="button"
@@ -306,6 +326,7 @@ export default function ProductResearchPage() {
           </section>
 
           <ProposalFilters
+            proposalCounts={proposalCounts}
             proposalFilter={proposalFilter}
             projectFilter={activeProposalProjectFilter}
             projectOptions={proposalProjectOptions}

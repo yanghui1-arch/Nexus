@@ -2,8 +2,10 @@ import { useTranslation } from 'react-i18next';
 import { Select } from '@/components/ui/select';
 import { ALL_PROJECTS, PROPOSAL_FILTER_OPTIONS } from '../constants';
 import type { ProjectOption, ProposalFilter } from '../types';
+import type { ProposalReviewCounts } from '../view-model/proposalReviewCounts';
 
 type ProposalFiltersProps = {
+  proposalCounts: ProposalReviewCounts;
   proposalFilter: ProposalFilter;
   projectFilter: string;
   projectOptions: ProjectOption[];
@@ -12,6 +14,7 @@ type ProposalFiltersProps = {
 };
 
 export function ProposalFilters({
+  proposalCounts,
   proposalFilter,
   projectFilter,
   projectOptions,
@@ -32,7 +35,9 @@ export function ProposalFilters({
         >
           {PROPOSAL_FILTER_OPTIONS.map(option => (
             <option key={option.value} value={option.value}>
-              {t(`productResearch.proposalFilter.${option.value}`)}
+              {t(`productResearch.proposalFilter.${option.value}`, {
+                count: proposalCounts[option.value],
+              })}
             </option>
           ))}
         </Select>
