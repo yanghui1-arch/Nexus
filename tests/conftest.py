@@ -95,14 +95,37 @@ except ModuleNotFoundError:
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from src.server.postgres.models import AgentInstanceRecord, AgentPurchaseRecord, AssistantEventRecord, AuthSessionRecord, ExecutionEventRecord, TaskRecord, UserRecord, WorkspaceRecord
+from src.server.postgres.models import (
+    AgentInstanceRecord,
+    AgentPurchaseRecord,
+    AssistantEventRecord,
+    AuthSessionRecord,
+    ExecutionEventRecord,
+    TaskExecutionEventRecord,
+    TaskRecord,
+    UserRecord,
+    WorkspaceRecord,
+)
 
 
 @pytest.fixture
 async def db_session():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
-        await conn.run_sync(UserRecord.metadata.create_all, tables=[UserRecord.__table__, AuthSessionRecord.__table__, AgentInstanceRecord.__table__, WorkspaceRecord.__table__, AgentPurchaseRecord.__table__, TaskRecord.__table__, ExecutionEventRecord.__table__, AssistantEventRecord.__table__])
+        await conn.run_sync(
+            UserRecord.metadata.create_all,
+            tables=[
+                UserRecord.__table__,
+                AuthSessionRecord.__table__,
+                AgentInstanceRecord.__table__,
+                WorkspaceRecord.__table__,
+                AgentPurchaseRecord.__table__,
+                TaskRecord.__table__,
+                ExecutionEventRecord.__table__,
+                TaskExecutionEventRecord.__table__,
+                AssistantEventRecord.__table__,
+            ],
+        )
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session:
         yield session
