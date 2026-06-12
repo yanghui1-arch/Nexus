@@ -15,6 +15,7 @@ from src.server.postgres.models import (
     AgentName,
     AgentPurchaseRecord,
     AuthSessionRecord,
+    ExecutionEventRecord,
     FeatureItemRecord,
     FeatureItemStatus,
     FeatureRecord,
@@ -1300,6 +1301,84 @@ class TaskRepository:
         await session.commit()
         await session.refresh(task)
         return task
+
+
+class ExecutionEventWriteError(RuntimeError):
+    """Raised when an execution event cannot be persisted."""
+
+
+class ExecutionEventRepository:
+    @staticmethod
+    async def create(
+        session: AsyncSession,
+        *,
+        task_id: uuid.UUID,
+        event_type: str,
+        message: str | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> ExecutionEventRecord:
+        """Persist an execution event for a task."""
+        event = ExecutionEventRecord(
+            task_id=task_id,
+            event_type=event_type,
+            message=message,
+            payload=payload,
+        )
+        session.add(event)
+        try:
+            await session.commit()
+            await session.refresh(event)
+        except Exception as exc:
+            await session.rollback()
+            raise ExecutionEventWriteError("Failed to persist execution event") from exc
+        return event
+
+    @staticmethod
+    async def list_by_task(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[ExecutionEventRecord]:
+        """List events for a task in chronological order."""
+        query = (
+            select(ExecutionEventRecord)
+            .where(ExecutionEventRecord.task_id == task_id)
+            .order_by(ExecutionEventRecord.created_at.asc(), ExecutionEventRecord.id.asc())
+            .offset(max(offset, 0))
+            .limit(max(limit, 0))
+        )
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def get_task_aggregate_data(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+    ) -> dict[str, Any]:
+        """Return event data needed to compute task aggregate statistics."""
+        counts_query = (
+            select(ExecutionEventRecord.event_type, func.count(ExecutionEventRecord.id))
+            .where(ExecutionEventRecord.task_id == task_id)
+            .group_by(ExecutionEventRecord.event_type)
+        )
+        counts_result = await session.execute(counts_query)
+        total_query = select(func.count(ExecutionEventRecord.id)).where(ExecutionEventRecord.task_id == task_id)
+        total = int((await session.execute(total_query)).scalar_one())
+        latest_query = (
+            select(ExecutionEventRecord)
+            .where(ExecutionEventRecord.task_id == task_id)
+            .order_by(ExecutionEventRecord.created_at.desc(), ExecutionEventRecord.id.desc())
+            .limit(1)
+        )
+        latest = (await session.execute(latest_query)).scalar_one_or_none()
+        return {
+            "task_id": task_id,
+            "total_count": total,
+            "counts_by_type": {event_type: int(count) for event_type, count in counts_result.all()},
+            "latest_event": latest,
+        }
 
 
 class TaskWorkItemRepository:
