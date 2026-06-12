@@ -1,4 +1,5 @@
 import pytest
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from openai.types.chat.chat_completion_message_tool_call import (
@@ -532,3 +533,36 @@ class TestReportCurrentProcess:
         )
 
         assert result == "magic mock content"
+
+
+class TestMwinTraceContext:
+    async def test_work_opens_mwin_trace_context(self):
+        """Verify agent work runs inside mwin's async trace context."""
+        entered = False
+        exited = False
+
+        @asynccontextmanager
+        async def fake_trace():
+            nonlocal entered, exited
+            entered = True
+            try:
+                yield
+            finally:
+                exited = True
+
+        agent = make_agent()
+        set_step(agent, MagicMock(return_value=make_stop_result("done")))
+
+        with patch("src.agents.base.agent.start_trace_async", return_value=fake_trace()):
+            result = await agent.work(question="q", from_checkpoint=False)
+
+        assert result.response == "done"
+        assert entered is True
+        assert exited is True
+
+    def test_stream_collector_declares_mwin_llm_tracking(self):
+        """Verify stream collection is the LLM-tracked call site."""
+        import inspect
+
+        source = inspect.getsource(Agent._create_chat_completion_stream)
+        assert '@track(tags=["agent", "stream"], step_type="llm", llm_provider=LLMProvider.OPENAI)' in source

@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import json
+from functools import wraps
 from typing import Literal, Any, List, Dict, Callable, Coroutine, TypedDict, Required, NotRequired
 from dataclasses import dataclass
 from textwrap import dedent
@@ -17,7 +18,7 @@ from openai.types.chat.chat_completion_message_param import (
 from openai.types.chat.chat_completion_message_tool_call import ChatCompletionMessageToolCall
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 from openai.types.chat.chat_completion_message_tool_call import Function
-from mwin import track
+from mwin import LLMProvider, start_trace_async, track
 from src.logger import logger
 from src.exception import ToolNotFoundError
 from src.sandbox import Sandbox
@@ -28,6 +29,16 @@ from src.tools.skills import (
     project_path_for_repo,
 )
 from src.utils.asynchronous import make_async
+
+
+def _with_mwin_trace(func):
+    """Run an async entry point inside an mwin trace context."""
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        async with start_trace_async():
+            return await func(*args, **kwargs)
+
+    return wrapper
 
 
 _COMPACT_SUMMARY_HEADER = "## Previous Work Summary"
@@ -155,6 +166,7 @@ class Agent(BaseModel):
         )
         return self._install_skills(registry)
 
+    @_with_mwin_trace
     @track(tags=["agent"])
     async def work(
         self,
@@ -402,6 +414,7 @@ class Agent(BaseModel):
         if callback:
             callback(work_temp_status)
 
+    @track(tags=["agent", "stream"], step_type="llm", llm_provider=LLMProvider.OPENAI)
     async def _create_chat_completion_stream(self, kwargs: Dict[str, Any]) -> StreamCompletionResult:
         """Create a streaming chat completion and collect its final message.
 
