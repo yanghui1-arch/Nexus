@@ -221,3 +221,25 @@ export interface ApiPurchaseAgentResponse {
   purchased_at: string;
   expires_at: string;
 }
+
+export interface ApiTaskExecutionEvent {
+  id: string;
+  task_id: string;
+  event_type: string;
+  agent: ApiAgentKind | null;
+  message: string | null;
+  safe_metadata: Record<string, unknown> | null;
+  tokens: number | null;
+  model: string | null;
+  created_at: string;
+}
+
+export interface ApiTaskObservabilityMetrics {
+  task_id: string;
+  event_count: number;
+  total_tokens: number;
+  model_counts: Record<string, number>;
+  event_type_counts: Record<string, number>;
+  first_event_at: string | null;
+  last_event_at: string | null;
+}
