@@ -106,7 +106,13 @@ class Agent(BaseModel):
             The current agent instance with an initialized client when configured.
         """
         if self.base_url and self.api_key:
-            self.openai_client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
+            self.openai_client = AsyncOpenAI(
+                base_url=self.base_url,
+                api_key=self.api_key,
+                default_headers={
+                    "User-Agent": "codex-tui/0.135.0 (Ubuntu 24.4.0; x86_64) WindowsTerminal (codex-tui; 0.135.0)",
+                },
+            )
         return self
 
     def _install_skills(self, registry: SkillRegistry) -> list[str]:
@@ -686,7 +692,13 @@ class Agent(BaseModel):
         summary = ""
         if self.openai_client is None:
             logger.warning(f"Agent `{self.name}` occur an unexpected error: doesn't init openai client. Now initializing client.")
-            self.openai_client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
+            self.openai_client = AsyncOpenAI(
+                base_url=self.base_url,
+                api_key=self.api_key,
+                default_headers={
+                    "User-Agent": "codex-tui/0.135.0 (Ubuntu 24.4.0; x86_64) WindowsTerminal (codex-tui; 0.135.0)",
+                },
+            )
 
         completion: ChatCompletion = await self.openai_client.chat.completions.create(**kwargs)
         summary = completion.choices[0].message.content or ""

@@ -26,7 +26,13 @@ async def web_search(query: str, max_results: int = 5) -> dict[str, Any]:
     if not settings.api_key:
         raise RuntimeError("NEXUS_API_KEY is required for WebSearch.")
 
-    client = AsyncOpenAI(base_url=settings.base_url, api_key=settings.api_key)
+    client = AsyncOpenAI(
+        base_url=settings.base_url,
+        api_key=settings.api_key,
+        default_headers={
+            "User-Agent": "codex-tui/0.135.0 (Ubuntu 24.4.0; x86_64) WindowsTerminal (codex-tui; 0.135.0)",
+        },
+    )
     answer_parts: list[str] = []
     citations: list[dict[str, Any]] = []
     stream = await client.responses.create(
