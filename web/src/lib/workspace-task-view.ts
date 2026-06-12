@@ -30,6 +30,11 @@ export type WorkspaceTaskView = {
   status: ApiTask['status'];
   result: string | null;
   error: string | null;
+  totalTokens: number | null;
+  toolCallCount: number | null;
+  lastEventAt: string | null;
+  lastCheckpointAt: string | null;
+  latestErrorRetrySummary: string | null;
   createdAt: string;
   updatedAt: string;
   startedAt: string | null;
@@ -154,6 +159,11 @@ export function toWorkspaceTaskView(
     status: task.status,
     result: task.result,
     error: task.error,
+    totalTokens: task.total_tokens ?? null,
+    toolCallCount: task.tool_call_count ?? null,
+    lastEventAt: task.last_event_at ?? null,
+    lastCheckpointAt: task.last_checkpoint_at ?? null,
+    latestErrorRetrySummary: task.latest_error_retry_summary ?? null,
     createdAt: task.created_at,
     updatedAt: task.updated_at,
     startedAt: task.started_at,

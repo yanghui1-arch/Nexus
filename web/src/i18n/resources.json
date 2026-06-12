@@ -48,7 +48,8 @@
         "noProject": "无项目",
         "noRepository": "无仓库",
         "updatedAt": "更新于 {{time}}",
-        "updatedRelative": "{{time}}更新"
+        "updatedRelative": "{{time}}更新",
+        "unknown": "未知"
       },
       "login": {
         "title": "登录 Nexus",
@@ -220,7 +221,16 @@
         "inputPlaceholderEmpty": "请先选择任务。",
         "consultTask": "咨询所选任务",
         "consultFailed": "咨询智能体失败",
-        "consultFailedDescription": "咨询所选任务失败。"
+        "consultFailedDescription": "咨询所选任务失败。",
+        "metrics": {
+          "status": "状态",
+          "runtime": "运行时长",
+          "totalTokens": "Total tokens",
+          "toolCalls": "工具调用",
+          "lastEvent": "最后事件",
+          "lastCheckpoint": "最后 checkpoint",
+          "latestIssue": "最新错误/重试"
+        }
       },
       "productResearch": {
         "title": "产品研究",
@@ -433,7 +443,8 @@
         "noProject": "No project",
         "noRepository": "No repository",
         "updatedAt": "Updated {{time}}",
-        "updatedRelative": "Updated {{time}}"
+        "updatedRelative": "Updated {{time}}",
+        "unknown": "unknown"
       },
       "login": {
         "title": "Login to Nexus",
@@ -605,7 +616,16 @@
         "inputPlaceholderEmpty": "Select a task first.",
         "consultTask": "Consult selected task",
         "consultFailed": "Failed to consult agent",
-        "consultFailedDescription": "Failed to consult the selected task."
+        "consultFailedDescription": "Failed to consult the selected task.",
+        "metrics": {
+          "status": "Status",
+          "runtime": "Runtime",
+          "totalTokens": "Total tokens",
+          "toolCalls": "Tool calls",
+          "lastEvent": "Last event",
+          "lastCheckpoint": "Last checkpoint",
+          "latestIssue": "Latest error/retry"
+        }
       },
       "productResearch": {
         "title": "Product Research",

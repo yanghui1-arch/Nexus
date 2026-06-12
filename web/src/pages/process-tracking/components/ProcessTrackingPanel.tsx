@@ -43,6 +43,25 @@ function detailValue(value: string | null | undefined): string {
   return value || '-';
 }
 
+function formatRuntime(task: WorkspaceTaskView | undefined): string {
+  if (!task?.startedAt) return '-';
+  const endTime = task.finishedAt ? new Date(task.finishedAt).getTime() : Date.now();
+  const seconds = Math.max(1, Math.round((endTime - new Date(task.startedAt).getTime()) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return `${hours}h ${minutes}m`;
+}
+
+function formatCount(value: number | null | undefined, fallback = '0'): string {
+  return value == null ? fallback : value.toLocaleString();
+}
+
+function metricTime(value: string | null | undefined): string {
+  return value ? timeAgo(value) : '-';
+}
+
 export function ProcessTrackingPanel({
   agents,
   tasksForAgent,
@@ -65,6 +84,15 @@ export function ProcessTrackingPanel({
   const hasAgents = agents.length > 0;
   const hasTasks = tasksForAgent.length > 0;
   const canSubmit = Boolean(selectedTask) && input.trim().length > 0 && !isSending;
+  const latestIssueSummary = selectedTask?.latestErrorRetrySummary || selectedTask?.error || '-';
+  const metrics = [
+    [t('processTracking.metrics.status'), selectedTask ? t(`status.${selectedTask.status}`) : '-'],
+    [t('processTracking.metrics.runtime'), formatRuntime(selectedTask)],
+    [t('processTracking.metrics.totalTokens'), formatCount(selectedTask?.totalTokens, t('common.unknown'))],
+    [t('processTracking.metrics.toolCalls'), formatCount(selectedTask?.toolCallCount)],
+    [t('processTracking.metrics.lastEvent'), metricTime(selectedTask?.lastEventAt ?? selectedTask?.updatedAt)],
+    [t('processTracking.metrics.lastCheckpoint'), metricTime(selectedTask?.lastCheckpointAt)],
+  ];
 
   useEffect(() => {
     if (messages.length === 0 && !isSending) return;
@@ -173,6 +201,19 @@ export function ProcessTrackingPanel({
                 </div>
               ))}
             </dl>
+
+            <div className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-3">
+              {metrics.map(([label, value]) => (
+                <div key={label} className="rounded-lg border bg-background/70 px-3 py-2">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+                  <p className="mt-1 truncate text-sm font-semibold" title={value}>{value}</p>
+                </div>
+              ))}
+              <div className="col-span-2 rounded-lg border bg-background/70 px-3 py-2 xl:col-span-3">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('processTracking.metrics.latestIssue')}</p>
+                <p className="mt-1 line-clamp-2 text-sm" title={latestIssueSummary}>{latestIssueSummary}</p>
+              </div>
+            </div>
 
             {selectedTask?.error ? <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{selectedTask.error}</div> : null}
           </div>

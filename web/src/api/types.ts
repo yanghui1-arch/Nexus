@@ -50,6 +50,11 @@ export interface ApiTask {
   status: ApiTaskStatus;
   result: string | null;
   error: string | null;
+  total_tokens?: number | null;
+  tool_call_count?: number | null;
+  last_event_at?: string | null;
+  last_checkpoint_at?: string | null;
+  latest_error_retry_summary?: string | null;
   created_at: string;
   updated_at: string;
   started_at: string | null;
