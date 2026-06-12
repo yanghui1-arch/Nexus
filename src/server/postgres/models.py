@@ -338,6 +338,27 @@ class TaskRecord(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class ExecutionEventRecord(Base):
+    __tablename__ = "execution_event"
+    __table_args__ = (Index("ix_execution_event_task_created", "task_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("task.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payload: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        server_default=func.now(),
+    )
+
+
 class ProductProposalRecord(Base):
     __tablename__ = "product_proposal"
     __table_args__ = (
