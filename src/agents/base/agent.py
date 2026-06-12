@@ -28,9 +28,19 @@ from src.tools.skills import (
     project_path_for_repo,
 )
 from src.utils.asynchronous import make_async
+from src.utils.event_metadata import build_safe_event_metadata
 
 
 _COMPACT_SUMMARY_HEADER = "## Previous Work Summary"
+
+
+def _json_object(raw: str) -> dict[str, Any]:
+    """Parse tool arguments when they are a JSON object."""
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 @dataclass
@@ -254,7 +264,14 @@ class Agent(BaseModel):
             else:
                 if step_response.finish_reason == "tool_calls" and step_response.tool_calls is not None:
                     tool_names = [tc.function.name for tc in step_response.tool_calls]
-                    tool_args = [tc.function.arguments for tc in step_response.tool_calls]
+                    tool_args = [
+                        build_safe_event_metadata(
+                            _json_object(tc.function.arguments),
+                            tool_name=tc.function.name,
+                            summary=f"{tc.function.name} called",
+                        )
+                        for tc in step_response.tool_calls
+                    ]
                     self._process_callback(
                         update_process_callback,
                         work_temp_status=WorkTempStatus(

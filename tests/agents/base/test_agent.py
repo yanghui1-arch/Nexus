@@ -256,6 +256,33 @@ class TestWorkToolCalls:
         assert "PROCESS" in process_events
         process_status = next(e for e in events if e["process"] == "PROCESS")
         assert process_status["current_use_tool"] == ["t"]
+        assert process_status["current_use_tool_args"] == [{"tool_name": "t", "summary": "t called"}]
+
+    async def test_tool_call_event_metadata_redacts_sensitive_arguments(self):
+        """Verify progress metadata does not expose sensitive tool args."""
+        tool = MagicMock(return_value="out")
+        agent = make_agent(tool_kits={"create_issue": tool})
+        tc = make_tool_call(
+            "id1",
+            "create_issue",
+            '{"title":"bug","token":"secret","nested":{"password":"pw"}}',
+        )
+        set_step(agent, MagicMock(side_effect=[
+            make_tool_result([tc]),
+            make_stop_result("done"),
+        ]))
+        events: list[WorkTempStatus] = []
+
+        await agent.work(
+            question="q",
+            from_checkpoint=False,
+            update_process_callback=events.append,
+        )
+
+        process_status = next(e for e in events if e["process"] == "PROCESS")
+        assert process_status["current_use_tool_args"] == [
+            {"tool_name": "create_issue", "summary": "create_issue called"}
+        ]
 
     async def test_multiple_tool_calls_dispatched_in_parallel(self):
         """Verify multiple tool calls dispatched in parallel."""
