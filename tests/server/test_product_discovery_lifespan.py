@@ -2,77 +2,63 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 from src.server.api.main import lifespan
 
 
-class FakePoller:
-    def __init__(self):
-        """Initialize the test helper."""
-        self.started = False
-        self.stopped = False
-        self.stop = AsyncMock(side_effect=self._stop)
-
-    def start(self):
-        """Start a fake service."""
-        self.started = True
-
-    async def _stop(self):
-        """Stop a fake service."""
-        self.stopped = True
-
-
 class FakeRunner:
+    def __init__(self):
+        self.closed = False
+
     async def shutdown(self):
-        """Shut down a fake service."""
-        return None
+        self.closed = True
 
 
 class FakeDatabase:
+    def __init__(self):
+        self.connected = False
+        self.schema_created = False
+        self.disconnected = False
+
     async def connect(self):
-        """Connect a fake service."""
-        return None
+        self.connected = True
 
     async def create_schema(self):
-        """Create a fake schema."""
-        return None
+        self.schema_created = True
 
     async def disconnect(self):
-        """Disconnect a fake service."""
-        return None
+        self.disconnected = True
 
     async def ping(self):
-        """Return the fake service health status."""
         return True
 
 
 class FakeRedis:
+    def __init__(self):
+        self.connected = False
+        self.closed = False
+
     async def connect(self):
-        """Connect a fake service."""
-        return None
+        self.connected = True
 
     async def close(self):
-        """Close a fake service."""
-        return None
+        self.closed = True
 
     async def ping(self):
-        """Return the fake service health status."""
         return True
 
 
 class FakeApp:
     def __init__(self):
-        """Initialize the test helper."""
         self.state = SimpleNamespace()
 
 
 async def _run_lifespan_test():
-    """Run the application lifespan test harness."""
     app = FakeApp()
+    fake_database = FakeDatabase()
+    fake_redis = FakeRedis()
     fake_runner = FakeRunner()
-    fake_poller = FakePoller()
-    fake_workflow_poller = FakePoller()
     settings = SimpleNamespace(
         database_url="postgresql://example",
         redis_url="redis://example",
@@ -80,25 +66,24 @@ async def _run_lifespan_test():
     )
 
     with patch("src.server.api.main.get_settings", return_value=settings), patch(
-        "src.server.api.main.Database", return_value=FakeDatabase()
-    ), patch("src.server.api.main.RedisClient", return_value=FakeRedis()), patch(
+        "src.server.api.main.Database", return_value=fake_database
+    ), patch("src.server.api.main.RedisClient", return_value=fake_redis), patch(
         "src.server.api.main.AgentTaskRunner", return_value=fake_runner
-    ), patch(
-        "src.server.api.main.GithubFeedbackPoller",
-        return_value=SimpleNamespace(start=lambda: None, stop=AsyncMock()),
-    ), patch("src.server.api.main.ProductDiscoveryPoller", return_value=fake_poller), patch(
-        "src.server.api.main.ProductWorkflowPoller", return_value=fake_workflow_poller
     ):
         async with lifespan(app):
-            assert app.state.product_discovery_poller is fake_poller
-            assert app.state.product_workflow_poller is fake_workflow_poller
-            assert fake_poller.started is True
-            assert fake_workflow_poller.started is True
+            assert app.state.database is fake_database
+            assert app.state.redis_client is fake_redis
+            assert app.state.runner is fake_runner
+            assert not hasattr(app.state, "product_discovery_poller")
+            assert not hasattr(app.state, "product_workflow_poller")
 
-    assert fake_poller.stopped is True
-    assert fake_workflow_poller.stopped is True
+    assert fake_database.connected is True
+    assert fake_database.schema_created is True
+    assert fake_database.disconnected is True
+    assert fake_redis.connected is True
+    assert fake_redis.closed is True
+    assert fake_runner.closed is True
 
 
-def test_lifespan_attaches_product_discovery_poller():
-    """Verify lifespan attaches product discovery poller."""
+def test_lifespan_does_not_start_pollers():
     asyncio.run(_run_lifespan_test())
