@@ -5,7 +5,49 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from src.server.postgres.repositories import ExecutionEventRepository, ExecutionEventWriteError
+from src.server.postgres.models import AgentName
+from src.server.postgres.repositories import (
+    ExecutionEventRepository,
+    ExecutionEventWriteError,
+    TaskExecutionEventRepository,
+)
+
+
+@pytest.mark.asyncio
+async def test_task_execution_event_repository_persists_status_metadata():
+    task_id = uuid.uuid4()
+    refreshed = []
+    session = SimpleNamespace(
+        added=[],
+        add=lambda record: session.added.append(record),
+        commit=AsyncMock(),
+        refresh=AsyncMock(side_effect=lambda record: refreshed.append(record)),
+    )
+
+    record = await TaskExecutionEventRepository.create_from_status(
+        session,
+        task_id=task_id,
+        agent=AgentName.tela,
+        status={
+            "process": "PROCESS",
+            "agent_content": "Using tools",
+            "current_use_tool": ["RunCommand"],
+        },
+    )
+
+    assert session.added == [record]
+    assert record.task_id == task_id
+    assert record.agent == AgentName.tela
+    assert record.event_type == "PROCESS"
+    assert record.message == "Using tools"
+    assert record.safe_metadata == {
+        "summary": "Using tools",
+        "tool_names": ["RunCommand"],
+        "tool_summary": "RunCommand",
+    }
+    session.commit.assert_awaited_once()
+    session.refresh.assert_awaited_once_with(record)
+    assert refreshed == [record]
 
 
 @pytest.mark.asyncio
