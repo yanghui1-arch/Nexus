@@ -7,6 +7,12 @@ const apiOrigin = process.env.NEXUS_API_ORIGIN ?? 'http://localhost:8000';
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './src/test/setup.ts',
+    maxWorkers: 1,
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
