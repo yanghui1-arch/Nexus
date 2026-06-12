@@ -1101,6 +1101,33 @@ class TaskRepository:
         return task
 
     @staticmethod
+    async def create_execution_event(
+        session: AsyncSession,
+        *,
+        task_id: uuid.UUID,
+        event_type: str,
+        agent: AgentName | None,
+        message: str | None = None,
+        safe_metadata: dict[str, object] | None = None,
+        tokens: int | None = None,
+        model: str | None = None,
+    ) -> TaskExecutionEventRecord:
+        """Create a structured task execution event."""
+        event = TaskExecutionEventRecord(
+            task_id=task_id,
+            event_type=event_type,
+            agent=agent,
+            message=message,
+            safe_metadata=safe_metadata,
+            tokens=tokens,
+            model=model,
+        )
+        session.add(event)
+        await session.commit()
+        await session.refresh(event)
+        return event
+
+    @staticmethod
     async def update_checkpoint(
         session: AsyncSession,
         task_id: uuid.UUID,
