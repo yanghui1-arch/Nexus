@@ -9,7 +9,8 @@ from src.logger import logger
 from src.server.config import Settings, get_settings
 from src.server.postgres.database import Database
 from src.server.postgres.models import TaskCategory, TaskRecord, TaskStatus
-from src.server.postgres.repositories import TaskRepository
+from src.server.postgres.repositories import TaskExecutionEventRepository, TaskRepository
+from src.utils.event_metadata import build_status_event_metadata
 
 from .state import ExecutionBinding
 from . import state, workflows
@@ -114,6 +115,13 @@ async def execute_agent_task(
                     session,
                     task_id,
                     checkpoint=checkpoint_payload,
+                )
+                await TaskExecutionEventRepository.create_from_status(
+                    session,
+                    task_id=task_id,
+                    agent=task.agent,
+                    status=status,
+                    checkpoint_saved=True,
                 )
             logger.info(
                 "Agent %s saves checkpoints when executing task %s.",
