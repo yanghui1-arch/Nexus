@@ -22,6 +22,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { STATUS_META, timeAgo } from '@/lib/workspace-task-view';
+import { ProcessTrackingMetricsCards } from './ProcessTrackingMetricsCards';
+import { ProcessTrackingTimeline } from './ProcessTrackingTimeline';
 
 type ProcessTrackingPanelProps = {
   agents: WorkspaceAgentOption[];
@@ -176,6 +178,11 @@ export function ProcessTrackingPanel({
 
             {selectedTask?.error ? <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{selectedTask.error}</div> : null}
           </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_320px]">
+          <ProcessTrackingMetricsCards selectedTask={selectedTask} />
+          <ProcessTrackingTimeline selectedTask={selectedTask} />
         </div>
       </div>
 

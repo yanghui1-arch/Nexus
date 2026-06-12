@@ -37,6 +37,8 @@ export type WorkspaceTaskView = {
   agent: ApiTask['agent'];
   agentInstanceId: string;
   agentLabel: string;
+  modelName?: string | null;
+  tokenCount?: number | null;
 };
 
 export type WorkspaceConsultMessageView = {
