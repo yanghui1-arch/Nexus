@@ -1231,3 +1231,26 @@ def test_execute_agent_task_writes_lifecycle_events(monkeypatch):
     }
     assert events[2]["safe_metadata"]["checkpoint_message_count"] == 1
 
+
+
+def test_execute_agent_task_logs_lifecycle_event_failures(monkeypatch):
+    """Verify lifecycle event failures do not fail task execution."""
+    task_id = uuid.uuid4()
+
+    async def fake_run_agent_workflow(**kwargs):
+        kwargs["on_progress"]({"process": "START", "agent_content": "started", "current_use_tool": None, "current_use_tool_args": None})
+
+    async def fail_create_execution_event(*args, **kwargs):
+        raise RuntimeError("event store unavailable")
+
+    mark_failed = AsyncMock()
+    logged_exceptions = []
+    _patch_execute_agent_task_happy_path(monkeypatch, task_id, fake_run_agent_workflow)
+    monkeypatch.setattr(state, "mark_failed", mark_failed)
+    monkeypatch.setattr(TaskRepository, "create_execution_event", fail_create_execution_event)
+    monkeypatch.setattr(execution_task.logger, "exception", lambda *args, **kwargs: logged_exceptions.append(args))
+
+    asyncio.run(execution_task.execute_agent_task(task_id=task_id, settings=SimpleNamespace(database_url="test")))
+
+    mark_failed.assert_not_awaited()
+    assert any("Lifecycle event persistence failed" in args[0] for args in logged_exceptions)
