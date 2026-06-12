@@ -1527,7 +1527,66 @@ class ExecutionEventRepository:
         }
 
 
+SENSITIVE_METADATA_KEYS = {"authorization", "cookie", "password", "secret", "token"}
+MAX_METADATA_STRING_LENGTH = 256
+
+
 class TaskExecutionEventRepository:
+    @staticmethod
+    def sanitize_metadata(metadata: dict[str, object] | None) -> dict[str, object] | None:
+        """Return JSON-safe task event metadata without secrets or large values."""
+        if metadata is None:
+            return None
+        return {
+            key: TaskExecutionEventRepository._sanitize_value(key, value)
+            for key, value in metadata.items()
+        }
+
+    @staticmethod
+    def _sanitize_value(key: str, value: object) -> object:
+        if any(sensitive in key.lower() for sensitive in SENSITIVE_METADATA_KEYS):
+            return "[REDACTED]"
+        if isinstance(value, str):
+            if len(value) <= MAX_METADATA_STRING_LENGTH:
+                return value
+            return f"{value[:MAX_METADATA_STRING_LENGTH]}...[truncated]"
+        if isinstance(value, (int, float, bool)) or value is None:
+            return value
+        if isinstance(value, dict):
+            return {
+                str(nested_key): TaskExecutionEventRepository._sanitize_value(str(nested_key), nested_value)
+                for nested_key, nested_value in value.items()
+            }
+        if isinstance(value, list):
+            return [TaskExecutionEventRepository._sanitize_value(key, item) for item in value]
+        return str(value)
+
+    @staticmethod
+    async def create(
+        session: AsyncSession,
+        *,
+        task_id: uuid.UUID,
+        event_type: str,
+        agent: AgentName | None = None,
+        message: str | None = None,
+        safe_metadata: dict[str, object] | None = None,
+        tokens: int | None = None,
+        model: str | None = None,
+    ) -> TaskExecutionEventRecord:
+        event = TaskExecutionEventRecord(
+            task_id=task_id,
+            event_type=event_type,
+            agent=agent,
+            message=message,
+            safe_metadata=TaskExecutionEventRepository.sanitize_metadata(safe_metadata),
+            tokens=tokens,
+            model=model,
+        )
+        session.add(event)
+        await session.commit()
+        await session.refresh(event)
+        return event
+
     @staticmethod
     async def list_by_task(
         session: AsyncSession,
@@ -1544,6 +1603,26 @@ class TaskExecutionEventRepository:
         )
         result = await session.execute(query)
         return list(result.scalars().all())
+
+    @staticmethod
+    async def aggregate_metrics(session: AsyncSession, task_id: uuid.UUID) -> dict[str, object]:
+        totals = await session.execute(
+            select(
+                func.count(TaskExecutionEventRecord.id),
+                func.coalesce(func.sum(TaskExecutionEventRecord.tokens), 0),
+            ).where(TaskExecutionEventRecord.task_id == task_id)
+        )
+        event_count, total_tokens = totals.one()
+        by_type = await session.execute(
+            select(TaskExecutionEventRecord.event_type, func.count(TaskExecutionEventRecord.id))
+            .where(TaskExecutionEventRecord.task_id == task_id)
+            .group_by(TaskExecutionEventRecord.event_type)
+        )
+        return {
+            "event_count": int(event_count),
+            "total_tokens": int(total_tokens),
+            "event_counts_by_type": {event_type: int(count) for event_type, count in by_type.all()},
+        }
 
 
 class TaskWorkItemRepository:
