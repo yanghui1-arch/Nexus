@@ -510,6 +510,38 @@ class FeatureItemRecord(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class TaskExecutionEventRecord(Base):
+    __tablename__ = "task_execution_event"
+    __table_args__ = (
+        Index("ix_task_execution_event_task_created_at", "task_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("task.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    agent: Mapped[AgentName | None] = mapped_column(
+        Enum(AgentName, native_enum=False),
+        nullable=True,
+        index=True,
+    )
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Store only scrubbed, allow-listed context here. Do not persist raw prompts,
+    # tool arguments, credentials, environment variables, or other sensitive inputs.
+    safe_metadata: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        server_default=func.now(),
+    )
+
+
 class TaskWorkItemRecord(Base):
     __tablename__ = "task_work_item"
     __table_args__ = (

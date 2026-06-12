@@ -24,6 +24,7 @@ from src.server.postgres.models import (
     ProposalPlanningRunRecord,
     ProposalPlanningRunStatus,
     TaskCategory,
+    TaskExecutionEventRecord,
     GithubPullRequestFeedbackKind,
     GithubPullRequestFeedbackRecord,
     GithubPullRequestFeedbackStatus,
