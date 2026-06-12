@@ -19,6 +19,7 @@ from src.server.postgres.models import (
 )
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
+    TaskExecutionEventRepository,
     TaskRepository,
     TaskWorkItemRepository,
     WorkspaceRepository,
@@ -28,6 +29,7 @@ from src.server.schemas import (
     TaskConsultRequest,
     TaskConsultResponse,
     TaskCreateRequest,
+    TaskExecutionEventResponse,
     TaskResponse,
     TaskStatusUpdateRequest,
     TaskSubmitResponse,
@@ -146,6 +148,26 @@ async def get_task(
         raise HTTPException(status_code=404, detail="Task not found")
     repo, project = _resolved_task_repo_project(task, workspace)
     return TaskResponse.from_record(task, repo=repo, project=project)
+
+
+@router.get("/{task_id}/events", response_model=list[TaskExecutionEventResponse])
+async def list_task_events(
+    request: Request,
+    task_id: uuid.UUID,
+    limit: int = Query(default=200, ge=1, le=1000),
+    user: UserRecord = Depends(get_current_user),
+) -> list[TaskExecutionEventResponse]:
+    """List execution events for a task owned by the current user."""
+    database: Database = request.app.state.database
+    async with database.session() as session:
+        task = await TaskRepository.get(session, task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
+        if instance is None or instance.user_id != user.id:
+            raise HTTPException(status_code=404, detail="Task not found")
+        events = await TaskExecutionEventRepository.list_by_task(session, task_id, limit=limit)
+    return [TaskExecutionEventResponse.from_record(event) for event in events]
 
 
 @router.get("/{task_id}/work-items", response_model=list[TaskWorkItemResponse])

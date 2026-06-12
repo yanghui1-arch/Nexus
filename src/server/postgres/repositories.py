@@ -1407,6 +1407,25 @@ class ExecutionEventRepository:
         }
 
 
+class TaskExecutionEventRepository:
+    @staticmethod
+    async def list_by_task(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+        *,
+        limit: int = 200,
+    ) -> list[TaskExecutionEventRecord]:
+        """List execution events for a task in timeline order."""
+        query = (
+            select(TaskExecutionEventRecord)
+            .where(TaskExecutionEventRecord.task_id == task_id)
+            .order_by(TaskExecutionEventRecord.created_at.asc(), TaskExecutionEventRecord.id.asc())
+            .limit(limit)
+        )
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+
 class TaskWorkItemRepository:
     @staticmethod
     async def create_many(
