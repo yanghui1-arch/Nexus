@@ -7,7 +7,12 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
-from src.server.postgres.models import Base, TASK_CATEGORY_VARCHAR_LENGTH, TASK_STATUS_VARCHAR_LENGTH
+from src.server.postgres.models import (
+    Base,
+    ExecutionEventRecord,
+    TASK_CATEGORY_VARCHAR_LENGTH,
+    TASK_STATUS_VARCHAR_LENGTH,
+)
 
 
 _REQUIRED_SCHEMA: dict[str, set[str]] = {
@@ -135,6 +140,7 @@ class Database:
 
         async with self._engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            await conn.run_sync(self._ensure_execution_event_table)
             if conn.dialect.name == "postgresql":
                 # Older deployments stored GitHub feedback source ids as BIGINT.
                 # Merge-conflict feedback now uses hashed episode ids, so migrate
@@ -311,6 +317,15 @@ class Database:
                 )
             )
             await conn.run_sync(self._assert_schema_compatible)
+
+    @staticmethod
+    def _ensure_execution_event_table(sync_conn) -> None:
+        """Create the execution event table for databases initialized before it existed."""
+        inspector = inspect(sync_conn)
+        if inspector.has_table(ExecutionEventRecord.__tablename__):
+            return
+
+        ExecutionEventRecord.__table__.create(sync_conn, checkfirst=True)
 
     @staticmethod
     def _assert_schema_compatible(sync_conn) -> None:
