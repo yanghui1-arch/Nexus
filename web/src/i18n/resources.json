@@ -387,6 +387,13 @@
         "started": "开始时间",
         "finished": "结束时间",
         "result": "结果",
+        "observation": "观测",
+        "observationDescription": "任务执行事件和用量状态。",
+        "tokenUsage": "Token 用量",
+        "tokenUnavailable": "Token 暂不可用",
+        "loadingObservations": "正在加载观测信息…",
+        "noExecutionEvents": "暂无执行事件",
+        "observationFailed": "加载观测信息失败。",
         "failedToLoad": "加载任务失败。"
       }
     }
@@ -779,6 +786,13 @@
         "started": "Started",
         "finished": "Finished",
         "result": "Result",
+        "observation": "Observation",
+        "observationDescription": "Task execution events and usage status.",
+        "tokenUsage": "Token usage",
+        "tokenUnavailable": "Token unavailable",
+        "loadingObservations": "Loading observation data...",
+        "noExecutionEvents": "No execution events yet",
+        "observationFailed": "Failed to load observation data.",
         "failedToLoad": "Failed to load task."
       }
     }

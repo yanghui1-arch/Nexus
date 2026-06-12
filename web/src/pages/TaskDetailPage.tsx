@@ -1,7 +1,7 @@
 import { startTransition, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, GitBranch } from 'lucide-react';
+import { AlertCircle, GitBranch, Loader2 } from 'lucide-react';
 import { ApiError, getErrorDetail } from '@/api/client';
 import { getTask, getTaskEvents } from '@/api/tasks';
 import type { ApiTask, ApiTaskExecutionEvent } from '@/api/types';
@@ -98,6 +98,7 @@ export default function TaskDetailPage() {
   const [taskError, setTaskError] = useState<string | null>(null);
   const [isLoadingTask, setIsLoadingTask] = useState(Boolean(taskId && isUuidLike(taskId)));
   const [timelineEvents, setTimelineEvents] = useState<ApiTaskExecutionEvent[]>([]);
+  const [timelineError, setTimelineError] = useState<string | null>(null);
   const [isLoadingTimeline, setIsLoadingTimeline] = useState(false);
 
   useEffect(() => {
@@ -107,6 +108,7 @@ export default function TaskDetailPage() {
       setUseLegacyFallback(Boolean(taskId && legacyTask && !isUuidLike(taskId)));
       setIsLoadingTask(Boolean(taskId && isUuidLike(taskId)));
       setTimelineEvents([]);
+      setTimelineError(null);
       setIsLoadingTimeline(false);
     });
   }, [legacyTask, taskId]);
@@ -148,12 +150,16 @@ export default function TaskDetailPage() {
 
     let cancelled = false;
     setIsLoadingTimeline(true);
+    setTimelineError(null);
     getTaskEvents(task.id)
       .then(events => {
         if (!cancelled) setTimelineEvents(events);
       })
-      .catch(() => {
-        if (!cancelled) setTimelineEvents([]);
+      .catch(error => {
+        if (!cancelled) {
+          setTimelineEvents([]);
+          setTimelineError(getErrorDetail(error, t('taskDetail.observationFailed')));
+        }
       })
       .finally(() => {
         if (!cancelled) setIsLoadingTimeline(false);
@@ -162,7 +168,7 @@ export default function TaskDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [task?.id, task?.updated_at]);
+  }, [task?.id, task?.updated_at, t]);
 
   usePolling(refreshTask, 5_000, {
     enabled: Boolean(taskId && isUuidLike(taskId) && !useLegacyFallback),
@@ -207,6 +213,9 @@ export default function TaskDetailPage() {
     );
   }
 
+  const hasKnownUsage = timelineEvents.some(event => event.tokens !== null);
+  const tokenTotal = timelineEvents.reduce((total, event) => total + (event.tokens ?? 0), 0);
+
   return (
     <div className="space-y-4">
       <Card className="h-fit max-w-3xl">
@@ -250,9 +259,29 @@ export default function TaskDetailPage() {
         ) : null}
       </CardContent>
       </Card>
-      <div className="min-h-[420px] max-w-3xl">
-        <ExecutionTimeline events={timelineEvents} isLoading={isLoadingTimeline} />
-      </div>
+      <Card className="h-fit max-w-3xl">
+        <CardHeader>
+          <CardTitle>{t('taskDetail.observation')}</CardTitle>
+          <CardDescription>{t('taskDetail.observationDescription')}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 text-sm">
+          <MetadataRow label={t('taskDetail.tokenUsage')} value={hasKnownUsage ? tokenTotal.toLocaleString() : t('taskDetail.tokenUnavailable')} />
+          {isLoadingTimeline ? (
+            <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-4 text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              {t('taskDetail.loadingObservations')}
+            </div>
+          ) : timelineError ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-3 text-destructive">{timelineError}</div>
+          ) : timelineEvents.length === 0 ? (
+            <div className="rounded-md border border-dashed px-3 py-6 text-center text-muted-foreground">{t('taskDetail.noExecutionEvents')}</div>
+          ) : (
+            <div className="min-h-[420px]">
+              <ExecutionTimeline events={timelineEvents} isLoading={false} />
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
