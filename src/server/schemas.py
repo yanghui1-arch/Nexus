@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 from typing import Any
@@ -19,6 +19,7 @@ from src.server.postgres.models import (
     FeatureRecord,
     FeatureStatus,
     TaskCategory,
+    TaskExecutionEventRecord,
     TaskRecord,
     TaskStatus,
     TaskWorkItemRecord,
@@ -292,6 +293,62 @@ class TaskStatusUpdateRequest(BaseModel):
         if value not in {TaskStatus.waiting_for_review, TaskStatus.merged, TaskStatus.closed}:
             raise ValueError("status must be waiting_for_review, merged, or closed")
         return value
+
+
+class TaskExecutionEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    task_id: uuid.UUID
+    event_type: str
+    agent: str | None
+    message: str | None
+    safe_metadata: dict[str, Any] | None
+    tokens: int | None
+    model: str | None
+    created_at: datetime
+
+    @classmethod
+    def from_record(cls, event: TaskExecutionEventRecord) -> "TaskExecutionEventResponse":
+        return cls(
+            id=event.id,
+            task_id=event.task_id,
+            event_type=event.event_type,
+            agent=event.agent.value if event.agent else None,
+            message=event.message,
+            safe_metadata=event.safe_metadata,
+            tokens=event.tokens,
+            model=event.model,
+            created_at=event.created_at,
+        )
+
+
+class TaskMetricsResponse(BaseModel):
+    task_id: uuid.UUID
+    total_tokens: int
+    event_count: int
+    tool_call_count: int
+    duration: float | None
+    last_event_at: datetime | None
+    last_checkpoint_at: datetime | None
+    latest_error: str | None
+
+    @classmethod
+    def from_task(cls, task: TaskRecord, *, event_metrics: dict[str, Any]) -> "TaskMetricsResponse":
+        duration = None
+        if task.started_at is not None:
+            duration_end = task.finished_at or datetime.now(timezone.utc)
+            duration = max((duration_end - task.started_at).total_seconds(), 0.0)
+        return cls(
+            task_id=task.id,
+            total_tokens=int(event_metrics.get("total_tokens") or 0),
+            event_count=int(event_metrics.get("event_count") or 0),
+            tool_call_count=int(event_metrics.get("tool_call_count") or 0),
+            duration=duration,
+            last_event_at=event_metrics.get("last_event_at"),
+            last_checkpoint_at=task.updated_at if task.checkpoint else None,
+            latest_error=event_metrics.get("latest_error") or task.error,
+        )
 
 
 class TaskResponse(BaseModel):
