@@ -796,7 +796,13 @@ class FeatureItemRepository:
         task_id: uuid.UUID,
         require_unassigned: bool = True,
     ) -> FeatureItemRecord | None:
-        """Assign a task to a feature item."""
+        """Assign a task to a feature item.
+
+        ``require_unassigned`` keeps the normal product workflow poller atomic: it
+        only claims pending items that still have no task. Retry paths pass
+        ``False`` because a failed item already points at the failed task and must
+        be re-attached to the newly submitted replacement task.
+        """
         now = utc_now()
         conditions = [FeatureItemRecord.id == item_id]
         if require_unassigned:

@@ -340,6 +340,8 @@ async def retry_feature_item_task(
                 runner=runner,
                 item=item,
                 proposal=proposal,
+                # Retrying a failed item intentionally replaces its old failed
+                # task_id with the newly submitted task.
                 require_unassigned=False,
             )
         except NoActiveTelaAgentInstanceError as exc:

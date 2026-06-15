@@ -24,6 +24,12 @@ async def publish_feature_item_task(
     proposal: ProductProposalRecord,
     require_unassigned: bool,
 ) -> tuple[FeatureItemRecord | None, uuid.UUID, uuid.UUID]:
+    """Publish a coding task and attach it to a feature item.
+
+    ``require_unassigned`` is intentionally caller-controlled: background
+    publishing should only claim unassigned pending items, while retry must
+    replace the failed task id already stored on the item.
+    """
     tela_instances = await AgentInstanceRepository.list_by_active_task_load(
         session,
         agent=AgentName.tela,

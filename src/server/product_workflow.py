@@ -99,6 +99,8 @@ class ProductWorkflowPoller:
                     runner=self._runner,
                     item=item,
                     proposal=proposal,
+                    # Polling claims only still-unassigned pending items so a
+                    # concurrent publisher cannot overwrite an existing task.
                     require_unassigned=True,
                 )
             except NoActiveTelaAgentInstanceError:
