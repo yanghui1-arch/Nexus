@@ -10,6 +10,7 @@ from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.exception.execution_event import ExecutionEventWriteError
 from src.server.postgres.models import (
     AgentInstanceRecord,
     AgentName,
@@ -1303,10 +1304,6 @@ class TaskRepository:
         return task
 
 
-class ExecutionEventWriteError(RuntimeError):
-    """Raised when an execution event cannot be persisted."""
-
-
 class ExecutionEventAggregateData(TypedDict):
     """Precomputed task execution-event summary for dashboards and API responses."""
 
@@ -1326,7 +1323,12 @@ class ExecutionEventRepository:
         message: str | None = None,
         payload: dict[str, Any] | None = None,
     ) -> ExecutionEventRecord:
-        """Persist an execution event for a task."""
+        """Persist an execution event for a task.
+
+        ``event_type`` is a caller-defined stable category such as
+        ``agent_started`` or ``tool_call``. The repository stores the value as-is
+        and later aggregate queries group events by the exact string written.
+        """
         event = ExecutionEventRecord(
             task_id=task_id,
             event_type=event_type,
