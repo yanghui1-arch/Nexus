@@ -23,8 +23,9 @@ class CreateProductProposal(BaseModel):
     )
     answer: str = Field(
         description=(
-            "Concise decision brief with the evidence, scope, non-goals, risks, "
-            "and small-feature breakdown needed for human review; include open questions only if real ones exist"
+            "Concise, frontend-parseable decision brief using relevant ## markdown headings "
+            "for evidence, scope, non-goals, risks, and small-feature breakdown; "
+            "include open questions only if real ones exist"
         )
     )
     repo: str | None = Field(default=None, description="Optional repository, such as owner/repo")
