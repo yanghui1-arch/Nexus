@@ -1311,7 +1311,8 @@ ExecutionEventType: TypeAlias = Literal[
     "agent_message",
     "tool_call",
     "tool_result",
-    "checkpoint",
+    # Latest resumable agent checkpoint was persisted on the task record.
+    "checkpoint_saved",
 ]
 
 
