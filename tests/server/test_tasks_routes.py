@@ -392,6 +392,50 @@ def test_list_task_events_returns_404_for_missing_task(monkeypatch: pytest.Monke
     list_mock.assert_not_awaited()
 
 
+def test_get_task_metrics_returns_failure_event_details(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify metrics include failure event aggregates."""
+    now = datetime.now(timezone.utc)
+    task = _make_task(question="metrics", status=TaskStatus.failed, created_at=now, checkpoint=[{"ok": True}])
+    task.started_at = now - timedelta(minutes=7)
+    task.finished_at = now - timedelta(minutes=2)
+    task.updated_at = now - timedelta(minutes=3)
+    metrics = {"total_tokens": 123, "event_count": 5, "tool_call_count": 2, "latest_error": "tool failed"}
+
+    monkeypatch.setattr(TaskRepository, "get", AsyncMock(return_value=task))
+    monkeypatch.setattr(AgentInstanceRepository, "get", _fake_get_current_user_instance)
+    monkeypatch.setattr(TaskExecutionEventRepository, "metrics_by_task", AsyncMock(return_value=metrics))
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app())
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.get(f"/v1/tasks/{task.id}/metrics")
+
+    response = asyncio.run(run_request())
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["event_count"] == 5
+    assert payload["total_tokens"] == 123
+    assert payload["duration"] == 300.0
+    assert payload["latest_error"] == "tool failed"
+
+
+def test_observability_routes_require_auth_token() -> None:
+    """Verify observability endpoints reject requests without a session token."""
+    app = FastAPI()
+    app.state.database = FakeDatabase()
+    app.include_router(tasks_router)
+
+    async def run_requests() -> tuple[httpx.Response, httpx.Response]:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            task_id = uuid.uuid4()
+            return await client.get(f"/v1/tasks/{task_id}/events"), await client.get(f"/v1/tasks/{task_id}/metrics")
+
+    events_response, metrics_response = asyncio.run(run_requests())
+    assert events_response.status_code == 401
+    assert metrics_response.status_code == 401
+
+
 def test_list_task_work_items(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify list task work items."""
     now = datetime.now(timezone.utc)
