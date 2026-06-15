@@ -951,6 +951,21 @@ class TaskRepository:
         return await session.get(TaskRecord, task_id)
 
     @staticmethod
+    async def get_for_user(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+        *,
+        user_id: uuid.UUID,
+    ) -> TaskRecord | None:
+        """Return a task only when it belongs to the given user."""
+        result = await session.execute(
+            select(TaskRecord)
+            .join(AgentInstanceRecord, AgentInstanceRecord.id == TaskRecord.agent_instance_id)
+            .where(TaskRecord.id == task_id, AgentInstanceRecord.user_id == user_id)
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
     async def list_existing_ids(
         session: AsyncSession,
         task_ids: list[uuid.UUID],

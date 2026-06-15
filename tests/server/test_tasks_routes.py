@@ -345,7 +345,7 @@ def test_list_task_events_returns_timeline(monkeypatch: pytest.MonkeyPatch) -> N
     ]
     captured: dict[str, Any] = {}
 
-    async def fake_get(session, task_id, **kwargs):
+    async def fake_get_for_user(session, task_id, **kwargs):
         assert task_id == task.id
         return task
 
@@ -354,8 +354,7 @@ def test_list_task_events_returns_timeline(monkeypatch: pytest.MonkeyPatch) -> N
         captured.update(kwargs)
         return events
 
-    monkeypatch.setattr(TaskRepository, "get", fake_get)
-    monkeypatch.setattr(AgentInstanceRepository, "get", _fake_get_current_user_instance)
+    monkeypatch.setattr(TaskRepository, "get_for_user", fake_get_for_user)
     monkeypatch.setattr(TaskExecutionEventRepository, "list_by_task", fake_list_by_task)
 
     async def run_request() -> httpx.Response:
@@ -380,15 +379,11 @@ def test_list_task_events_hides_unowned_task(monkeypatch: pytest.MonkeyPatch) ->
     now = datetime.now(timezone.utc)
     task = _make_task(question="foreign events", status=TaskStatus.running, created_at=now)
 
-    async def fake_get(session, task_id, **kwargs):
-        return task
-
-    async def fake_get_other_user_instance(session, agent_instance_id):
-        return SimpleNamespace(id=agent_instance_id, user_id=uuid.uuid4())
+    async def fake_get_for_user(session, task_id, **kwargs):
+        return None
 
     list_mock = AsyncMock(return_value=[])
-    monkeypatch.setattr(TaskRepository, "get", fake_get)
-    monkeypatch.setattr(AgentInstanceRepository, "get", fake_get_other_user_instance)
+    monkeypatch.setattr(TaskRepository, "get_for_user", fake_get_for_user)
     monkeypatch.setattr(TaskExecutionEventRepository, "list_by_task", list_mock)
 
     async def run_request() -> httpx.Response:
