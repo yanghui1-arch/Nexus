@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from src.server.postgres.repositories import ExecutionEventRepository, ExecutionEventWriteError
 
@@ -18,7 +19,7 @@ async def test_execution_event_repository_creates_and_lists_by_task(db_session):
         message="started",
         payload={"step": 1},
     )
-    await ExecutionEventRepository.create(db_session, task_id=other_task_id, event_type="ignored")
+    await ExecutionEventRepository.create(db_session, task_id=other_task_id, event_type="agent_failed")
     second = await ExecutionEventRepository.create(
         db_session,
         task_id=task_id,
@@ -63,3 +64,15 @@ async def test_execution_event_repository_wraps_write_failure():
             session, task_id=uuid.uuid4(), event_type="agent_started"
         )
     session.rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_execution_event_repository_rejects_unknown_event_type(db_session):
+    with pytest.raises(ExecutionEventWriteError) as exc_info:
+        await ExecutionEventRepository.create(
+            db_session,
+            task_id=uuid.uuid4(),
+            event_type="checkpoint_saved",  # type: ignore[arg-type]
+        )
+
+    assert isinstance(exc_info.value.__cause__, IntegrityError)

@@ -7,6 +7,7 @@ from decimal import Decimal
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Enum,
     ForeignKey,
@@ -340,7 +341,16 @@ class TaskRecord(Base):
 
 class ExecutionEventRecord(Base):
     __tablename__ = "execution_event"
-    __table_args__ = (Index("ix_execution_event_task_created", "task_id", "created_at"),)
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ("
+            "'agent_started', 'agent_finished', 'agent_failed', "
+            "'agent_message', 'tool_call', 'tool_result'"
+            ")",
+            name="ck_execution_event_event_type",
+        ),
+        Index("ix_execution_event_task_created", "task_id", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     task_id: Mapped[uuid.UUID] = mapped_column(
