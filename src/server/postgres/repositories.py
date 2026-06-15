@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from decimal import Decimal
 from datetime import datetime, timezone
-from typing import Any, TypedDict
+from typing import Any, Literal, TypeAlias, TypedDict
 
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 from sqlalchemy import and_, func, or_, select, update
@@ -1304,6 +1304,17 @@ class TaskRepository:
         return task
 
 
+ExecutionEventType: TypeAlias = Literal[
+    "agent_started",
+    "agent_finished",
+    "agent_failed",
+    "agent_message",
+    "tool_call",
+    "tool_result",
+    "checkpoint",
+]
+
+
 class ExecutionEventAggregateData(TypedDict):
     """Precomputed task execution-event summary for dashboards and API responses."""
 
@@ -1319,15 +1330,15 @@ class ExecutionEventRepository:
         session: AsyncSession,
         *,
         task_id: uuid.UUID,
-        event_type: str,
+        event_type: ExecutionEventType,
         message: str | None = None,
         payload: dict[str, Any] | None = None,
     ) -> ExecutionEventRecord:
         """Persist an execution event for a task.
 
-        ``event_type`` is a caller-defined stable category such as
-        ``agent_started`` or ``tool_call``. The repository stores the value as-is
-        and later aggregate queries group events by the exact string written.
+        ``event_type`` is a stable category constrained by ``ExecutionEventType``.
+        Add a new literal value there before introducing a new event category.
+        Aggregate queries group events by the exact string written.
         """
         event = ExecutionEventRecord(
             task_id=task_id,
