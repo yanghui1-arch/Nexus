@@ -37,7 +37,6 @@ from src.server.services.product_workflow_publish import (
 )
 from src.server.schemas import (
     FeatureItemResponse,
-    FeatureItemRetryTaskRequest,
     FeatureItemRetryTaskResponse,
     FeatureResponse,
     ProductProposalCreateRequest,
@@ -316,11 +315,9 @@ async def get_feature(
 async def retry_feature_item_task(
     request: Request,
     feature_item_id: uuid.UUID,
-    payload: FeatureItemRetryTaskRequest,
     user: UserRecord = Depends(get_current_user),
 ) -> FeatureItemRetryTaskResponse:
     """Retry a failed feature item by submitting a fresh coding task."""
-    del payload
     database: Database = request.app.state.database
     runner: AgentTaskRunner = request.app.state.runner
     async with database.session() as session:
