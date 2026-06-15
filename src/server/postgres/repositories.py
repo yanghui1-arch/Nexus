@@ -717,15 +717,11 @@ class FeatureRepository:
         if not item_statuses:
             return feature
 
-        active_item_statuses = {FeatureItemStatus.in_progress, FeatureItemStatus.failed}
         next_status = (
             FeatureStatus.completed
             if all(status in {FeatureItemStatus.completed, FeatureItemStatus.closed} for status in item_statuses)
             else FeatureStatus.in_progress
-            # A failed item still represents started work that needs human action
-            # or retry. Keep the parent feature active so proposal completion
-            # checks do not treat it as unstarted or completed.
-            if any(status in active_item_statuses for status in item_statuses)
+            if any(status == FeatureItemStatus.in_progress for status in item_statuses)
             else FeatureStatus.planned
         )
         if feature.status != next_status:
