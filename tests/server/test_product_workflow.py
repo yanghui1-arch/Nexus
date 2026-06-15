@@ -80,7 +80,7 @@ def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
         captured["proposal_item_id"] = item_id
         return proposal
 
-    async def fake_assign(session, item_id, *, task_id):
+    async def fake_assign(session, item_id, *, task_id, require_unassigned=True):
         """Provide a fake assign."""
         captured["assign"] = (item_id, task_id)
         return item
@@ -194,7 +194,7 @@ def test_poll_once_skips_blocked_group_and_continues_with_other_workspaces(monke
             return ready_proposal
         return None
 
-    async def fake_assign(session, item_id, *, task_id):
+    async def fake_assign(session, item_id, *, task_id, require_unassigned=True):
         """Assign only the dispatchable item."""
         captured["assign"] = (item_id, task_id)
         return ready_item
