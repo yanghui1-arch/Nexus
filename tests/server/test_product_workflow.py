@@ -249,3 +249,43 @@ def test_product_workflow_poller_start_and_stop(monkeypatch):
         assert poller._task is None
 
     asyncio.run(run())
+
+
+def test_sync_status_from_items_treats_failed_items_as_active(monkeypatch):
+    """Verify failed items keep their feature active for completion checks."""
+    from src.server.postgres.models import FeatureItemStatus, FeatureStatus
+    from src.server.postgres.repositories import FeatureRepository, ProductProposalRepository
+
+    feature_id = uuid.uuid4()
+    proposal_id = uuid.uuid4()
+    feature = SimpleNamespace(id=feature_id, proposal_id=proposal_id, status=FeatureStatus.planned)
+    captured = {}
+
+    class FakeScalarResult:
+        def all(self):
+            return [FeatureItemStatus.failed]
+
+    class FakeResult:
+        def scalars(self):
+            return FakeScalarResult()
+
+    class FakeSession:
+        async def get(self, model, record_id):
+            captured["get"] = (model, record_id)
+            return feature
+
+        async def execute(self, query):
+            captured["query"] = query
+            return FakeResult()
+
+    async def fake_sync_proposal(session, proposal_id_arg):
+        captured["proposal_id"] = proposal_id_arg
+        return None
+
+    monkeypatch.setattr(ProductProposalRepository, "sync_status_from_features", fake_sync_proposal)
+
+    result = asyncio.run(FeatureRepository.sync_status_from_items(FakeSession(), feature_id))
+
+    assert result is feature
+    assert feature.status == FeatureStatus.in_progress
+    assert captured["proposal_id"] == proposal_id
