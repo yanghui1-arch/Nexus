@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from decimal import Decimal
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, TypedDict
 
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 from sqlalchemy import and_, func, or_, select, update
@@ -1307,6 +1307,15 @@ class ExecutionEventWriteError(RuntimeError):
     """Raised when an execution event cannot be persisted."""
 
 
+class ExecutionEventAggregateData(TypedDict):
+    """Precomputed task execution-event summary for dashboards and API responses."""
+
+    task_id: uuid.UUID
+    total_count: int
+    counts_by_type: dict[str, int]
+    latest_event: ExecutionEventRecord | None
+
+
 class ExecutionEventRepository:
     @staticmethod
     async def create(
@@ -1356,8 +1365,13 @@ class ExecutionEventRepository:
     async def get_task_aggregate_data(
         session: AsyncSession,
         task_id: uuid.UUID,
-    ) -> dict[str, Any]:
-        """Return event data needed to compute task aggregate statistics."""
+    ) -> ExecutionEventAggregateData:
+        """Return precomputed event summary data for task aggregate statistics.
+
+        Consumers use this to render task-level execution metrics without loading
+        the whole event timeline: total event count, counts grouped by event type,
+        and the latest event for status/last-activity displays.
+        """
         counts_query = (
             select(ExecutionEventRecord.event_type, func.count(ExecutionEventRecord.id))
             .where(ExecutionEventRecord.task_id == task_id)
