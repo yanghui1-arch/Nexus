@@ -40,6 +40,7 @@ from src.server.postgres.models import (
 )
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
+    TaskExecutionEventRepository,
     TaskRepository,
     TaskWorkItemRepository,
     WorkspaceRepository,
@@ -312,6 +313,83 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
         'user_id': uuid.UUID('00000000-0000-0000-0000-000000000001'),
         'limit': 10,
     }
+
+
+def test_list_task_events_returns_timeline(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify an owned task returns execution events in API shape."""
+    now = datetime.now(timezone.utc)
+    task = _make_task(question="events", status=TaskStatus.running, created_at=now)
+    event = SimpleNamespace(
+        id=uuid.uuid4(),
+        task_id=task.id,
+        event_type="task_started",
+        agent=AgentName.sophie,
+        message="started",
+        safe_metadata={"phase": "setup"},
+        tokens=42,
+        model="gpt-test",
+        created_at=now,
+    )
+
+    async def fake_get(session, task_id, **kwargs):
+        assert task_id == task.id
+        return task
+
+    async def fake_list_by_task(session, task_id, **kwargs):
+        assert task_id == task.id
+        assert kwargs == {"limit": 2}
+        return [event]
+
+    monkeypatch.setattr(TaskRepository, "get", fake_get)
+    monkeypatch.setattr(AgentInstanceRepository, "get", _fake_get_current_user_instance)
+    monkeypatch.setattr(TaskExecutionEventRepository, "list_by_task", fake_list_by_task)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app())
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.get(f"/v1/tasks/{task.id}/events", params={"limit": "2"})
+
+    response = asyncio.run(run_request())
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload[0]["event_type"] == "task_started"
+    assert payload[0]["agent"] == "sophie"
+    assert payload[0]["safe_metadata"] == {"phase": "setup"}
+    assert payload[0]["tokens"] == 42
+
+
+def test_list_task_events_returns_empty_for_task_without_events(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify an existing task with no events returns an empty timeline."""
+    task = _make_task(question="no events", status=TaskStatus.queued, created_at=datetime.now(timezone.utc))
+
+    monkeypatch.setattr(TaskRepository, "get", AsyncMock(return_value=task))
+    monkeypatch.setattr(AgentInstanceRepository, "get", _fake_get_current_user_instance)
+    monkeypatch.setattr(TaskExecutionEventRepository, "list_by_task", AsyncMock(return_value=[]))
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app())
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.get(f"/v1/tasks/{task.id}/events")
+
+    response = asyncio.run(run_request())
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_task_events_returns_404_for_missing_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify event access preserves missing task semantics."""
+    list_mock = AsyncMock(return_value=[])
+    monkeypatch.setattr(TaskRepository, "get", AsyncMock(return_value=None))
+    monkeypatch.setattr(TaskExecutionEventRepository, "list_by_task", list_mock)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app())
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.get(f"/v1/tasks/{uuid.uuid4()}/events")
+
+    response = asyncio.run(run_request())
+    assert response.status_code == 404
+    list_mock.assert_not_awaited()
 
 
 def test_list_task_work_items(monkeypatch: pytest.MonkeyPatch) -> None:
