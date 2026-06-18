@@ -215,12 +215,12 @@ export function ProcessTrackingPanel({
             <div className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-3">
               {metrics.map(([label, value]) => (
                 <div key={label} className="rounded-lg border bg-background/70 px-3 py-2">
-                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-                  <p className="mt-1 truncate text-sm font-semibold" title={value}>{value}</p>
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                  <p className="mt-1 truncate text-sm" title={value}>{value}</p>
                 </div>
               ))}
               <div className="col-span-2 rounded-lg border bg-background/70 px-3 py-2 xl:col-span-3">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t('processTracking.metrics.latestIssue')}</p>
+                <p className="text-xs text-muted-foreground">{t('processTracking.metrics.latestIssue')}</p>
                 <p className="mt-1 line-clamp-2 text-sm" title={latestIssueSummary}>{latestIssueSummary}</p>
               </div>
             </div>
