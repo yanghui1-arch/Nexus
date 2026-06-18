@@ -959,6 +959,21 @@ class TaskRepository:
         return await session.get(TaskRecord, task_id)
 
     @staticmethod
+    async def get_for_user(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+        *,
+        user_id: uuid.UUID,
+    ) -> TaskRecord | None:
+        """Return a task owned by the user, even if its agent instance is inactive/expired."""
+        result = await session.execute(
+            select(TaskRecord)
+            .join(AgentInstanceRecord, AgentInstanceRecord.id == TaskRecord.agent_instance_id)
+            .where(TaskRecord.id == task_id, AgentInstanceRecord.user_id == user_id)
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
     async def list_existing_ids(
         session: AsyncSession,
         task_ids: list[uuid.UUID],
@@ -1413,6 +1428,25 @@ class ExecutionEventRepository:
             "counts_by_type": {event_type: int(count) for event_type, count in counts_result.all()},
             "latest_event": latest,
         }
+
+
+class TaskExecutionEventRepository:
+    @staticmethod
+    async def list_by_task(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+        *,
+        limit: int = 200,
+    ) -> list[TaskExecutionEventRecord]:
+        """List execution events for a task in timeline order."""
+        query = (
+            select(TaskExecutionEventRecord)
+            .where(TaskExecutionEventRecord.task_id == task_id)
+            .order_by(TaskExecutionEventRecord.created_at.asc(), TaskExecutionEventRecord.id.asc())
+            .limit(limit)
+        )
+        result = await session.execute(query)
+        return list(result.scalars().all())
 
 
 class TaskWorkItemRepository:
