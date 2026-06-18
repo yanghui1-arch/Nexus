@@ -1126,6 +1126,24 @@ class TaskRepository:
         return task
 
     @staticmethod
+    async def get_running_for_agent_instance(
+        session: AsyncSession,
+        agent_instance_id: uuid.UUID,
+        *,
+        exclude_task_id: uuid.UUID | None = None,
+    ) -> TaskRecord | None:
+        """Return the running task currently occupying an agent instance."""
+        query = select(TaskRecord).where(
+            TaskRecord.agent_instance_id == agent_instance_id,
+            TaskRecord.status == TaskStatus.running,
+        )
+        if exclude_task_id is not None:
+            query = query.where(TaskRecord.id != exclude_task_id)
+
+        result = await session.execute(query.order_by(TaskRecord.updated_at.desc()).limit(1))
+        return result.scalar_one_or_none()
+
+    @staticmethod
     async def update_checkpoint(
         session: AsyncSession,
         task_id: uuid.UUID,
@@ -1427,54 +1445,6 @@ class ExecutionEventRepository:
             "total_count": total,
             "counts_by_type": {event_type: int(count) for event_type, count in counts_result.all()},
             "latest_event": latest,
-        }
-
-
-class TaskExecutionEventRepository:
-    @staticmethod
-    async def list_by_task(
-        session: AsyncSession,
-        task_id: uuid.UUID,
-        *,
-        limit: int = 200,
-    ) -> list[TaskExecutionEventRecord]:
-        """List execution events for a task in timeline order."""
-        query = (
-            select(TaskExecutionEventRecord)
-            .where(TaskExecutionEventRecord.task_id == task_id)
-            .order_by(TaskExecutionEventRecord.created_at.asc(), TaskExecutionEventRecord.id.asc())
-            .limit(limit)
-        )
-        result = await session.execute(query)
-        return list(result.scalars().all())
-
-
-    @staticmethod
-    async def metrics_by_task(session: AsyncSession, task_id: uuid.UUID) -> dict[str, Any]:
-        """Return aggregate execution metrics for one task."""
-        event_type_lower = func.lower(TaskExecutionEventRecord.event_type)
-        metrics_result = await session.execute(
-            select(
-                func.coalesce(func.sum(TaskExecutionEventRecord.tokens), 0),
-                func.count(TaskExecutionEventRecord.id),
-                func.count(TaskExecutionEventRecord.id).filter(event_type_lower.like("%tool%")),
-                func.max(TaskExecutionEventRecord.created_at),
-            ).where(TaskExecutionEventRecord.task_id == task_id)
-        )
-        total_tokens, event_count, tool_call_count, last_event_at = metrics_result.one()
-
-        error_result = await session.execute(
-            select(TaskExecutionEventRecord.message)
-            .where(TaskExecutionEventRecord.task_id == task_id, event_type_lower.like("%error%"))
-            .order_by(TaskExecutionEventRecord.created_at.desc())
-            .limit(1)
-        )
-        return {
-            "total_tokens": total_tokens,
-            "event_count": event_count,
-            "tool_call_count": tool_call_count,
-            "last_event_at": last_event_at,
-            "latest_error": error_result.scalar_one_or_none(),
         }
 
 
@@ -1926,6 +1896,55 @@ class GithubPullRequestFeedbackRepository:
             record.processed_at = None
             record.updated_at = now
         await session.commit()
+
+
+class TaskExecutionEventRepository:
+    @staticmethod
+    async def list_by_task(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+        *,
+        limit: int | None = None,
+    ) -> list[TaskExecutionEventRecord]:
+        """List execution events for a task timeline."""
+        query = (
+            select(TaskExecutionEventRecord)
+            .where(TaskExecutionEventRecord.task_id == task_id)
+            .order_by(TaskExecutionEventRecord.created_at.asc(), TaskExecutionEventRecord.id.asc())
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+
+    @staticmethod
+    async def metrics_by_task(session: AsyncSession, task_id: uuid.UUID) -> dict[str, Any]:
+        """Return aggregate execution metrics for one task."""
+        event_type_lower = func.lower(TaskExecutionEventRecord.event_type)
+        metrics_result = await session.execute(
+            select(
+                func.coalesce(func.sum(TaskExecutionEventRecord.tokens), 0),
+                func.count(TaskExecutionEventRecord.id),
+                func.count(TaskExecutionEventRecord.id).filter(event_type_lower.like("%tool%")),
+                func.max(TaskExecutionEventRecord.created_at),
+            ).where(TaskExecutionEventRecord.task_id == task_id)
+        )
+        total_tokens, event_count, tool_call_count, last_event_at = metrics_result.one()
+
+        error_result = await session.execute(
+            select(TaskExecutionEventRecord.message)
+            .where(TaskExecutionEventRecord.task_id == task_id, event_type_lower.like("%error%"))
+            .order_by(TaskExecutionEventRecord.created_at.desc())
+            .limit(1)
+        )
+        return {
+            "total_tokens": total_tokens,
+            "event_count": event_count,
+            "tool_call_count": tool_call_count,
+            "last_event_at": last_event_at,
+            "latest_error": error_result.scalar_one_or_none(),
+        }
 
 
 class UserRepository:
