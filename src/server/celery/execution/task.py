@@ -54,7 +54,7 @@ async def execute_agent_task(
             return
 
         event_type = status["process"]
-        safe_metadata: dict[str, object] = {"process": event_type}
+        safe_metadata: dict[str, str | list[str] | bool | int] = {"process": event_type}
         current_tools = status.get("current_use_tool")
         if current_tools is not None:
             safe_metadata["current_use_tool"] = list(current_tools)
