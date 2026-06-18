@@ -11,6 +11,7 @@ from src.server.postgres.database import Database
 from src.server.product_discovery import ProductDiscoveryPoller
 from src.server.product_workflow import ProductWorkflowPoller
 from src.server.runner import AgentTaskRunner
+from src.server.secretary import SecretaryPoller
 
 
 async def run_pollers() -> None:
@@ -24,6 +25,7 @@ async def run_pollers() -> None:
         GithubFeedbackPoller(settings=settings, database=database, runner=runner),
         ProductDiscoveryPoller(settings=settings, database=database, runner=runner),
         ProductWorkflowPoller(settings=settings, database=database, runner=runner),
+        SecretaryPoller(settings=settings, database=database, runner=runner),
     ]
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()

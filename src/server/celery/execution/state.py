@@ -285,6 +285,12 @@ async def mark_waiting_for_review(database: Database, task_id: uuid.UUID, result
         await session.commit()
 
 
+async def mark_review_completed(database: Database, task_id: uuid.UUID, result: str | None) -> None:
+    """Mark a review task as closed after Assistant finishes its PR work."""
+    async with database.session() as session:
+        await TaskRepository.set_closed(session, task_id, result=result)
+
+
 async def mark_post_execution_wait_state(
     database: Database,
     task_id: uuid.UUID,

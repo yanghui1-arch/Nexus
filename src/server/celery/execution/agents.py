@@ -1,18 +1,20 @@
 from __future__ import annotations
 
-from src.agents import Jules, Marc, Sophie, Tela
+from src.agents import Assistant, Jules, Marc, Sophie, Tela
 from src.agents.base.agent import Agent
 from src.server.config import Settings
 from src.server.postgres.models import TaskRecord
 
 
 AGENT_BUILDERS: dict[str, Agent] = {
+    "assistant": Assistant,
     "tela": Tela,
     "sophie": Sophie,
     "jules": Jules,
     "marc": Marc,
 }
 CODING_AGENTS = {"tela", "sophie", "jules"}
+GITHUB_REQUIRED_AGENTS = {"assistant", *CODING_AGENTS}
 
 
 def build_agent(
@@ -65,14 +67,27 @@ def build_agent(
         )
 
     github_token = settings.github_tokens.get(agent_name)
-    if agent_name in CODING_AGENTS:
+    if agent_name in GITHUB_REQUIRED_AGENTS:
         if not github_token:
-            raise RuntimeError(f"Task {task.id} failed to create coding agent `{agent_name}` without github token.")
+            raise RuntimeError(f"Task {task.id} failed to create agent `{agent_name}` without github token.")
+
+    if agent_name in CODING_AGENTS:
         return agent_builder.create(
             **shared,
             github_repo=resolved_repo,
             sandbox_workspace_key=workspace_key,
             github_token=github_token,
+        )
+
+    if agent_name == "assistant":
+        return agent_builder.create(
+            **shared,
+            github_repo=resolved_repo,
+            sandbox_workspace_key=workspace_key,
+            github_token=github_token,
+            discord_bot_token=getattr(settings, "secretary_discord_bot_token", None),
+            discord_user_id=getattr(settings, "secretary_discord_user_id", None),
+            review_test_commands=getattr(settings, "secretary_test_commands", {}),
         )
 
     return agent_builder.create(

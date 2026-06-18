@@ -54,7 +54,7 @@ class AutoStopEvent:
 async def _run_pollers_test():
     fake_database = FakeDatabase()
     fake_runner = FakeRunner()
-    fake_pollers = [FakePoller(), FakePoller(), FakePoller()]
+    fake_pollers = [FakePoller(), FakePoller(), FakePoller(), FakePoller()]
     settings = SimpleNamespace(database_url="postgresql://example")
 
     with patch("src.server.pollers.get_settings", return_value=settings), patch(
@@ -63,6 +63,8 @@ async def _run_pollers_test():
         "src.server.pollers.GithubFeedbackPoller", return_value=fake_pollers[0]
     ), patch("src.server.pollers.ProductDiscoveryPoller", return_value=fake_pollers[1]), patch(
         "src.server.pollers.ProductWorkflowPoller", return_value=fake_pollers[2]
+    ), patch(
+        "src.server.pollers.SecretaryPoller", return_value=fake_pollers[3]
     ), patch("src.server.pollers.asyncio.Event", AutoStopEvent):
         await pollers.run_pollers()
 
@@ -70,8 +72,8 @@ async def _run_pollers_test():
     assert fake_database.schema_created is True
     assert fake_database.disconnected is True
     assert fake_runner.closed is True
-    assert [poller.started for poller in fake_pollers] == [True, True, True]
-    assert [poller.stopped for poller in fake_pollers] == [True, True, True]
+    assert [poller.started for poller in fake_pollers] == [True, True, True, True]
+    assert [poller.stopped for poller in fake_pollers] == [True, True, True, True]
 
 
 def test_run_pollers_owns_poller_lifecycle():

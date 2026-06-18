@@ -35,6 +35,7 @@ AGENT_PRICES = {
     AgentName.tela: Decimal("5500.00"),
     AgentName.sophie: Decimal("6000.00"),
     AgentName.jules: Decimal("6200.00"),
+    AgentName.assistant: Decimal("0.00"),
 }
 
 

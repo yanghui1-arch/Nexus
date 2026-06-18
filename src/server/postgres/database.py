@@ -108,6 +108,7 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
         "processed_at",
         "payload",
     },
+    "secretary_state": {"key", "value"},
 }
 
 

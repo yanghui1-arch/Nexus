@@ -42,6 +42,7 @@ class TaskStatus(str, enum.Enum):
 class TaskCategory(str, enum.Enum):
     coding = "coding"
     pm = "product discovery"
+    review = "review"
 
 
 TASK_STATUS_VARCHAR_LENGTH = 32
@@ -53,6 +54,7 @@ class AgentName(str, enum.Enum):
     sophie = "sophie"
     jules = "jules"
     marc = "marc"
+    assistant = "assistant"
 
 
 class WorkspaceStatus(str, enum.Enum):
@@ -670,6 +672,26 @@ class GithubPullRequestFeedbackRecord(Base):
     ignored_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+        server_default=func.now(),
+    )
+
+
+class SecretaryStateRecord(Base):
+    __tablename__ = "secretary_state"
+
+    key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    value: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

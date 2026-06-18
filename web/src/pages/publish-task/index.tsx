@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppLayout } from '@/components/layout/AppLayout';
 import { useWorkspaceRecords } from '@/lib/useWorkspaceRecords';
@@ -14,13 +15,25 @@ export default function PublishTaskPage() {
   });
 
   const data = useWorkspaceRecords();
-  const publisher = usePublishTask(data);
+  const codingAgentOptions = useMemo(
+    () => data.agentOptions.filter(agent => agent.agent !== 'assistant'),
+    [data.agentOptions],
+  );
+  const codingAgentInstances = useMemo(
+    () => data.agentInstances.filter(instance => instance.agent !== 'assistant'),
+    [data.agentInstances],
+  );
+  const publisher = usePublishTask({
+    ...data,
+    agentInstances: codingAgentInstances,
+    agentOptions: codingAgentOptions,
+  });
 
   return (
     <section className="w-full max-w-5xl">
       <PublishTaskComposerCard
         value={publisher.composerValues}
-        agents={data.agentOptions}
+        agents={codingAgentOptions}
         selectedAgent={publisher.selectedAgent}
         hasWorkspaceContext={publisher.hasWorkspaceContext}
         isSubmitting={publisher.isSubmitting}

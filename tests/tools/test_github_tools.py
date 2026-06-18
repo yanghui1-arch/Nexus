@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import anyio
 import httpx
 import pytest
 
@@ -14,11 +15,17 @@ from src.tools.code.github.issue import (
 )
 from src.tools.code.github.pr import (
     PR_TO_GITHUB,
+    GET_PULL_REQUEST,
+    LIST_OPEN_PULL_REQUESTS,
+    GET_PR_FILES,
+    GET_PR_CHECK_SUMMARY,
     GET_PR_REVIEWS,
     GET_PR_REVIEW_COMMENTS,
     REPLY_TO_PR_REVIEW_COMMENT,
     GET_PR_COMMENTS,
     REPLY_TO_PR,
+    CREATE_PR_REVIEW,
+    MERGE_PR,
     GET_MY_OPEN_PRS,
 )
 from src.tools.code.github.notification import GET_NOTIFICATIONS
@@ -176,6 +183,72 @@ class TestGetPRReviews:
         assert result["review_count"] == 2
         assert result["reviews"][0]["state"] == "CHANGES_REQUESTED"
         assert result["reviews"][1]["state"] == "APPROVED"
+
+
+class TestFormalPRReviewAndMerge:
+    """Tests for formal PR review and merge tools."""
+
+    def test_create_pr_review_success(self, github_kit):
+        """Test formal review creation with inline comments."""
+        async def run():
+            mock_response = MagicMock()
+            mock_response.json.return_value = {
+                "id": 1234,
+                "state": "APPROVED",
+                "html_url": "https://github.com/test/repo/pull/1#pullrequestreview-1234",
+            }
+            mock_response.raise_for_status = MagicMock()
+
+            with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+                mock_post.return_value = mock_response
+                result = await github_kit.create_pr_review(
+                    token="test-token",
+                    repo="test/repo",
+                    pull_number=1,
+                    event="APPROVE",
+                    body="Looks good.",
+                    commit_id="abc123",
+                    comments=[{"path": "src/app.py", "line": 12, "side": "RIGHT", "body": "Nice cleanup."}],
+                )
+
+            assert result["success"] is True
+            assert result["review_id"] == 1234
+            call_kwargs = mock_post.await_args.kwargs
+            assert call_kwargs["json"]["event"] == "APPROVE"
+            assert call_kwargs["json"]["commit_id"] == "abc123"
+            assert call_kwargs["json"]["comments"][0]["path"] == "src/app.py"
+
+        anyio.run(run)
+
+    def test_merge_pr_sends_expected_sha(self, github_kit):
+        """Test merge uses GitHub's expected SHA guard."""
+        async def run():
+            mock_response = MagicMock()
+            mock_response.json.return_value = {
+                "merged": True,
+                "sha": "merge-sha",
+                "message": "Pull Request successfully merged",
+            }
+            mock_response.raise_for_status = MagicMock()
+
+            with patch("httpx.AsyncClient.put", new_callable=AsyncMock) as mock_put:
+                mock_put.return_value = mock_response
+                result = await github_kit.merge_pr(
+                    token="test-token",
+                    repo="test/repo",
+                    pull_number=1,
+                    sha="head-sha",
+                    merge_method="squash",
+                )
+
+            assert result["success"] is True
+            assert result["sha"] == "merge-sha"
+            assert mock_put.await_args.kwargs["json"] == {
+                "sha": "head-sha",
+                "merge_method": "squash",
+            }
+
+        anyio.run(run)
 
 
 class TestGetPRReviewComments:
@@ -413,11 +486,17 @@ class TestToolDefinitions:
             GET_ISSUE_COMMENTS,
             REPLY_TO_ISSUE,
             PR_TO_GITHUB,
+            GET_PULL_REQUEST,
+            LIST_OPEN_PULL_REQUESTS,
+            GET_PR_FILES,
+            GET_PR_CHECK_SUMMARY,
             GET_PR_REVIEWS,
             GET_PR_REVIEW_COMMENTS,
             REPLY_TO_PR_REVIEW_COMMENT,
             GET_PR_COMMENTS,
             REPLY_TO_PR,
+            CREATE_PR_REVIEW,
+            MERGE_PR,
             GET_MY_OPEN_PRS,
             GET_MY_ISSUES,
             GET_NOTIFICATIONS,
@@ -429,6 +508,8 @@ class TestToolDefinitions:
         """Verify bind_pr_to_task is not part of the GitHub toolkit."""
         tools = GithubTools(mock_sandbox).all_tools
         assert "bind_pr_to_task" not in tools
+        assert "create_pr_review" in tools
+        assert "merge_pr" in tools
 
     def test_tool_definitions_have_required_fields(self):
         """Verify tool definitions have required structure."""

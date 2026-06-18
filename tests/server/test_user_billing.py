@@ -26,6 +26,7 @@ AGENT_PRICES = {
     "tela": Decimal("5500.00"),
     "sophie": Decimal("6000.00"),
     "jules": Decimal("6200.00"),
+    "assistant": Decimal("0.00"),
 }
 
 
@@ -139,6 +140,31 @@ async def test_purchase_can_create_jules_instance(db_session):
     instance = await db_session.get(AgentInstanceRecord, purchase.agent_instance_id)
     assert instance is not None
     assert instance.agent == AgentName.jules
+
+
+@pytest.mark.asyncio
+async def test_purchase_can_create_assistant_instance(db_session):
+    """Verify purchase can create an Assistant instance."""
+    user = await UserRepository.upsert_github_user(
+        db_session,
+        github_id="987",
+        github_login="assistant-user",
+        email=None,
+    )
+
+    purchase = await AgentPurchaseRepository.create_purchase(
+        db_session,
+        user_id=user.id,
+        agent=AgentName.assistant,
+        price=AGENT_PRICES["assistant"],
+        expires_at=utc_now() + timedelta(days=30),
+    )
+
+    assert purchase.price == Decimal("0.00")
+    assert purchase.agent_instance_id is not None
+    instance = await db_session.get(AgentInstanceRecord, purchase.agent_instance_id)
+    assert instance is not None
+    assert instance.agent == AgentName.assistant
 
 
 class _AsyncSessionContext:

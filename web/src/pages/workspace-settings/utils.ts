@@ -2,6 +2,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Coffee,
+  Bot,
   Hammer,
   Lightbulb,
   Loader2,
@@ -94,6 +95,13 @@ export function getAgentMeta(t: Translator, agent: ApiAgentKind): AgentMeta {
         icon: Coffee,
         chipClassName: 'border-emerald-200 bg-emerald-50 text-emerald-700',
         iconClassName: 'text-emerald-500',
+      };
+    case 'assistant':
+      return {
+        label: t('workspaceSettings.agentAssistant'),
+        icon: Bot,
+        chipClassName: 'border-cyan-200 bg-cyan-50 text-cyan-700',
+        iconClassName: 'text-cyan-500',
       };
     case 'tela':
     default:

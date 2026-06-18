@@ -33,6 +33,7 @@ class AgentKind(str, Enum):
     sophie = "sophie"
     jules = "jules"
     marc = "marc"
+    assistant = "assistant"
 
 
 class ProductProposalCreateRequest(BaseModel):
@@ -219,6 +220,7 @@ class TaskCreateRequest(BaseModel):
     agent: AgentKind
     question: str = Field(min_length=1)
     external_issue_url: str | None = Field(default=None, max_length=1024)
+    external_pull_request_url: str | None = Field(default=None, max_length=1024)
 
     @field_validator("question")
     @classmethod
@@ -231,6 +233,14 @@ class TaskCreateRequest(BaseModel):
     @field_validator("external_issue_url")
     @classmethod
     def validate_external_issue_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+    @field_validator("external_pull_request_url")
+    @classmethod
+    def validate_external_pull_request_url(cls, value: str | None) -> str | None:
         if value is None:
             return None
         stripped = value.strip()

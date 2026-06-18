@@ -29,6 +29,8 @@ class TaskDispatchError(RuntimeError):
 
 def _task_category_for_agent(agent: AgentName) -> TaskCategory:
     """Return the task category used for an agent."""
+    if agent == AgentName.assistant:
+        return TaskCategory.review
     if agent == AgentName.marc:
         return TaskCategory.pm
     return TaskCategory.coding
@@ -180,6 +182,7 @@ class AgentTaskRunner:
             repo=workspace.github_repo,
             project=workspace.project,
             external_issue_url=request.external_issue_url,
+            external_pull_request_url=getattr(request, "external_pull_request_url", None),
         )
         logger.info(f"Agent `{instance.agent.name}` has workspace `{workspace.workspace_key}`")
         return task

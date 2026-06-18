@@ -106,6 +106,58 @@ def test_create_task_record_snapshots_workspace_repo_project(monkeypatch) -> Non
     assert captured["repo"] == "owner/repo"
     assert captured["project"] == "nexus"
     assert captured["external_issue_url"] == "https://github.com/owner/repo/issues/1"
+    assert captured["external_pull_request_url"] is None
+
+
+def test_create_task_record_uses_review_category_for_assistant(monkeypatch) -> None:
+    """Verify assistant tasks are persisted as review tasks."""
+    agent_instance_id = uuid.uuid4()
+    instance = SimpleNamespace(
+        id=agent_instance_id,
+        is_active=True,
+        agent=AgentName.assistant,
+    )
+    workspace = SimpleNamespace(
+        workspace_key=f"agent-instance:{agent_instance_id}",
+        github_repo="owner/repo",
+        project="nexus",
+    )
+    captured: dict[str, object] = {}
+
+    async def fake_get(session, requested_agent_instance_id):
+        assert requested_agent_instance_id == agent_instance_id
+        return instance
+
+    async def fake_ensure(session, agent_instance):
+        assert agent_instance is instance
+        return workspace
+
+    async def fake_create_pending(session, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(id=uuid.uuid4())
+
+    monkeypatch.setattr(AgentInstanceRepository, "get", fake_get)
+    monkeypatch.setattr(WorkspaceRepository, "ensure_for_agent_instance", fake_ensure)
+    monkeypatch.setattr(TaskRepository, "create_pending", fake_create_pending)
+
+    runner = AgentTaskRunner(
+        settings=SimpleNamespace(),
+        database=SimpleNamespace(),
+    )
+    request = SimpleNamespace(
+        agent_instance_id=agent_instance_id,
+        agent=SimpleNamespace(value="assistant"),
+        question="review owner/repo#12",
+        external_issue_url=None,
+        external_pull_request_url="https://github.com/owner/repo/pull/12",
+    )
+
+    task = asyncio.run(runner._create_task_record(object(), request))
+
+    assert task.id is not None
+    assert captured["agent"] == AgentName.assistant
+    assert captured["category"] == TaskCategory.review
+    assert captured["external_pull_request_url"] == "https://github.com/owner/repo/pull/12"
 
 
 @pytest.mark.parametrize(

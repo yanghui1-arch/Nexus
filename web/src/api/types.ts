@@ -1,6 +1,6 @@
-export type ApiAgentKind = 'tela' | 'sophie' | 'jules' | 'marc';
+export type ApiAgentKind = 'tela' | 'sophie' | 'jules' | 'marc' | 'assistant';
 
-export type ApiTaskCategory = 'coding' | 'product discovery';
+export type ApiTaskCategory = 'coding' | 'product discovery' | 'review';
 
 export type ApiTaskStatus =
   | 'queued'

@@ -8,6 +8,28 @@ from src.sandbox import Sandbox
 from src.tools.nexus import NexusTaskContext
 
 
+def _github_error_detail(response: httpx.Response) -> str:
+    """Extract a readable GitHub error message."""
+    try:
+        payload = response.json()
+    except Exception:
+        return response.text
+    if isinstance(payload, dict):
+        message = payload.get("message")
+        if isinstance(message, str):
+            return message
+    return response.text
+
+
+def _github_headers(token: str) -> dict[str, str]:
+    """Return standard GitHub API headers."""
+    return {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+
 class GithubTools:
     """GitHub/git operations bound to a sandbox container."""
 
@@ -231,6 +253,213 @@ class GithubTools:
     # ==========================================================================
     # Issue and PR Comment/Review Interaction Methods
     # ==========================================================================
+
+    @track(step_type="tool")
+    async def list_open_pull_requests(
+        self,
+        token: str,
+        repo: str,
+        per_page: int = 30,
+    ) -> dict:
+        """List open pull requests in a repository."""
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(
+                    f"https://api.github.com/repos/{repo}/pulls",
+                    headers=_github_headers(token),
+                    params={"state": "open", "per_page": per_page},
+                )
+                response.raise_for_status()
+                pulls = response.json()
+                formatted = []
+                for pull in pulls:
+                    formatted.append({
+                        "number": pull["number"],
+                        "title": pull["title"],
+                        "state": pull["state"],
+                        "draft": pull.get("draft", False),
+                        "html_url": pull["html_url"],
+                        "created_at": pull["created_at"],
+                        "updated_at": pull["updated_at"],
+                        "user": pull.get("user", {}).get("login"),
+                        "head_ref": pull.get("head", {}).get("ref"),
+                        "head_sha": pull.get("head", {}).get("sha"),
+                        "base_ref": pull.get("base", {}).get("ref"),
+                    })
+                return {
+                    "success": True,
+                    "repo": repo,
+                    "pr_count": len(formatted),
+                    "pull_requests": formatted,
+                    "message": f"Found {len(formatted)} open PRs in {repo}",
+                }
+            except httpx.HTTPStatusError as e:
+                return {
+                    "success": False,
+                    "pull_requests": [],
+                    "message": f"GitHub API error {e.response.status_code}: {_github_error_detail(e.response)}",
+                }
+
+    @track(step_type="tool")
+    async def get_pull_request(
+        self,
+        token: str,
+        repo: str,
+        pull_number: int,
+    ) -> dict:
+        """Fetch pull request metadata."""
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(
+                    f"https://api.github.com/repos/{repo}/pulls/{pull_number}",
+                    headers=_github_headers(token),
+                )
+                response.raise_for_status()
+                pull = response.json()
+                return {
+                    "success": True,
+                    "pull_request": {
+                        "number": pull["number"],
+                        "title": pull["title"],
+                        "body": pull.get("body") or "",
+                        "state": pull["state"],
+                        "draft": pull.get("draft", False),
+                        "html_url": pull["html_url"],
+                        "user": pull.get("user", {}).get("login"),
+                        "head_ref": pull.get("head", {}).get("ref"),
+                        "head_sha": pull.get("head", {}).get("sha"),
+                        "head_repo": pull.get("head", {}).get("repo", {}).get("full_name")
+                        if pull.get("head", {}).get("repo")
+                        else None,
+                        "base_ref": pull.get("base", {}).get("ref"),
+                        "base_sha": pull.get("base", {}).get("sha"),
+                        "mergeable": pull.get("mergeable"),
+                        "mergeable_state": pull.get("mergeable_state"),
+                        "commits": pull.get("commits"),
+                        "additions": pull.get("additions"),
+                        "deletions": pull.get("deletions"),
+                        "changed_files": pull.get("changed_files"),
+                    },
+                    "message": f"Retrieved PR #{pull_number}",
+                }
+            except httpx.HTTPStatusError as e:
+                return {
+                    "success": False,
+                    "pull_request": None,
+                    "message": f"GitHub API error {e.response.status_code}: {_github_error_detail(e.response)}",
+                }
+
+    @track(step_type="tool")
+    async def get_pr_files(
+        self,
+        token: str,
+        repo: str,
+        pull_number: int,
+        per_page: int = 100,
+    ) -> dict:
+        """Fetch changed files for a pull request."""
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(
+                    f"https://api.github.com/repos/{repo}/pulls/{pull_number}/files",
+                    headers=_github_headers(token),
+                    params={"per_page": per_page},
+                )
+                response.raise_for_status()
+                files = response.json()
+                formatted = []
+                for file in files:
+                    formatted.append({
+                        "filename": file["filename"],
+                        "status": file["status"],
+                        "additions": file.get("additions", 0),
+                        "deletions": file.get("deletions", 0),
+                        "changes": file.get("changes", 0),
+                        "patch": file.get("patch"),
+                        "raw_url": file.get("raw_url"),
+                    })
+                return {
+                    "success": True,
+                    "pull_number": pull_number,
+                    "file_count": len(formatted),
+                    "files": formatted,
+                    "message": f"Retrieved {len(formatted)} changed files on PR #{pull_number}",
+                }
+            except httpx.HTTPStatusError as e:
+                return {
+                    "success": False,
+                    "files": [],
+                    "message": f"GitHub API error {e.response.status_code}: {_github_error_detail(e.response)}",
+                }
+
+    @track(step_type="tool")
+    async def get_pr_check_summary(
+        self,
+        token: str,
+        repo: str,
+        ref: str,
+    ) -> dict:
+        """Fetch check runs and commit statuses for a PR head ref."""
+        async with httpx.AsyncClient() as client:
+            try:
+                check_response = await client.get(
+                    f"https://api.github.com/repos/{repo}/commits/{ref}/check-runs",
+                    headers=_github_headers(token),
+                    params={"per_page": 100},
+                )
+                check_response.raise_for_status()
+                status_response = await client.get(
+                    f"https://api.github.com/repos/{repo}/commits/{ref}/status",
+                    headers=_github_headers(token),
+                )
+                status_response.raise_for_status()
+                checks_payload = check_response.json()
+                status_payload = status_response.json()
+            except httpx.HTTPStatusError as e:
+                return {
+                    "success": False,
+                    "available": False,
+                    "all_successful": False,
+                    "pending": [],
+                    "failed": [],
+                    "successful": [],
+                    "message": f"GitHub API error {e.response.status_code}: {_github_error_detail(e.response)}",
+                }
+
+        pending: list[str] = []
+        failed: list[str] = []
+        successful: list[str] = []
+        for check in checks_payload.get("check_runs", []):
+            name = check.get("name") or "check"
+            status = check.get("status")
+            conclusion = check.get("conclusion")
+            if status != "completed":
+                pending.append(name)
+            elif conclusion in {"success", "neutral", "skipped"}:
+                successful.append(name)
+            else:
+                failed.append(name)
+
+        for status in status_payload.get("statuses", []):
+            context = status.get("context") or "status"
+            state = status.get("state")
+            if state == "success":
+                successful.append(context)
+            elif state in {"pending", "expected"}:
+                pending.append(context)
+            else:
+                failed.append(context)
+
+        available = bool(pending or failed or successful)
+        return {
+            "success": True,
+            "available": available,
+            "all_successful": available and not pending and not failed,
+            "pending": pending,
+            "failed": failed,
+            "successful": successful,
+            "message": f"Found {len(successful)} successful, {len(pending)} pending, {len(failed)} failed checks/statuses",
+        }
 
     @track(step_type="tool")
     async def get_issue_comments(
@@ -514,6 +743,103 @@ class GithubTools:
 
 
     @track(step_type="tool")
+    async def create_pr_review(
+        self,
+        token: str,
+        repo: str,
+        pull_number: int,
+        event: str,
+        body: str,
+        commit_id: str | None = None,
+        comments: list[dict] | None = None,
+    ) -> dict:
+        """Submit a formal GitHub pull request review."""
+        payload: dict = {
+            "event": event,
+            "body": body,
+        }
+        if commit_id:
+            payload["commit_id"] = commit_id
+        normalized_comments: list[dict] = []
+        for comment in comments or []:
+            normalized = {
+                key: value
+                for key, value in comment.items()
+                if value is not None and key in {"path", "body", "line", "side", "start_line", "start_side"}
+            }
+            if normalized:
+                normalized_comments.append(normalized)
+        if normalized_comments:
+            payload["comments"] = normalized_comments
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(
+                    f"https://api.github.com/repos/{repo}/pulls/{pull_number}/reviews",
+                    headers=_github_headers(token),
+                    json=payload,
+                )
+                response.raise_for_status()
+                data = response.json()
+                return {
+                    "success": True,
+                    "review_id": data.get("id"),
+                    "html_url": data.get("html_url"),
+                    "state": data.get("state"),
+                    "message": f"Review submitted on PR #{pull_number}: {data.get('html_url')}",
+                }
+            except httpx.HTTPStatusError as e:
+                return {
+                    "success": False,
+                    "review_id": None,
+                    "html_url": "",
+                    "message": f"GitHub API error {e.response.status_code}: {_github_error_detail(e.response)}",
+                }
+
+    @track(step_type="tool")
+    async def merge_pr(
+        self,
+        token: str,
+        repo: str,
+        pull_number: int,
+        sha: str,
+        merge_method: str = "squash",
+        commit_title: str | None = None,
+        commit_message: str | None = None,
+    ) -> dict:
+        """Merge a pull request with an expected head SHA."""
+        payload: dict = {
+            "sha": sha,
+            "merge_method": merge_method,
+        }
+        if commit_title:
+            payload["commit_title"] = commit_title
+        if commit_message:
+            payload["commit_message"] = commit_message
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.put(
+                    f"https://api.github.com/repos/{repo}/pulls/{pull_number}/merge",
+                    headers=_github_headers(token),
+                    json=payload,
+                )
+                response.raise_for_status()
+                data = response.json()
+                return {
+                    "success": bool(data.get("merged", False)),
+                    "sha": data.get("sha"),
+                    "message": data.get("message") or f"Merged PR #{pull_number}",
+                }
+            except httpx.HTTPStatusError as e:
+                return {
+                    "success": False,
+                    "sha": None,
+                    "message": f"GitHub API error {e.response.status_code}: {_github_error_detail(e.response)}",
+                }
+
+
+    @track(step_type="tool")
     async def get_my_open_prs(
         self,
         token: str,
@@ -692,11 +1018,17 @@ class GithubTools:
         """Return pull request-related GitHub tools."""
         return {
             "pr_to_github": self.pr_to_github,
+            "list_open_pull_requests": self.list_open_pull_requests,
+            "get_pull_request": self.get_pull_request,
+            "get_pr_files": self.get_pr_files,
+            "get_pr_check_summary": self.get_pr_check_summary,
             "get_pr_reviews": self.get_pr_reviews,
             "get_pr_review_comments": self.get_pr_review_comments,
             "reply_to_pr_review_comment": self.reply_to_pr_review_comment,
             "get_pr_comments": self.get_pr_comments,
             "reply_to_pr": self.reply_to_pr,
+            "create_pr_review": self.create_pr_review,
+            "merge_pr": self.merge_pr,
             "get_my_open_prs": self.get_my_open_prs,
         }
 

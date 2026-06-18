@@ -34,6 +34,13 @@ const PLANS = [
     descriptionKey: 'pricing.plans.jules.description',
     featureKeys: ['pricing.plans.common.access', 'pricing.plans.jules.springBootDelivery', 'pricing.plans.jules.persistenceAndApi'],
   },
+  {
+    agent: 'assistant' as const,
+    name: 'Assistant',
+    price: '¥0',
+    descriptionKey: 'pricing.plans.assistant.description',
+    featureKeys: ['pricing.plans.common.access', 'pricing.plans.assistant.discordCommands', 'pricing.plans.assistant.prReview'],
+  },
 ];
 
 function formatCny(amount: string): string {

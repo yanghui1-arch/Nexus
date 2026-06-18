@@ -118,3 +118,35 @@ def test_product_workflow_poll_interval_is_loaded(monkeypatch):
         get_settings.cache_clear()
 
     assert settings.product_workflow_poll_interval_seconds == 15
+
+
+def test_secretary_settings_are_loaded(monkeypatch):
+    """Verify secretary settings are loaded from env."""
+    get_settings.cache_clear()
+    monkeypatch.setenv("NEXUS_SECRETARY_ENABLED", "true")
+    monkeypatch.setenv("NEXUS_ASSISTANT_GITHUB_TOKEN", "assistant-token")
+    monkeypatch.setenv("NEXUS_SECRETARY_DISCORD_BOT_TOKEN", "discord-token")
+    monkeypatch.setenv("NEXUS_SECRETARY_DISCORD_USER_ID", "123")
+    monkeypatch.setenv("NEXUS_SECRETARY_POLL_INTERVAL_SECONDS", "30")
+    monkeypatch.setenv("NEXUS_SECRETARY_MERGE_METHOD", "merge")
+    monkeypatch.setenv(
+        "NEXUS_SECRETARY_TEST_COMMANDS_JSON",
+        '{"owner/repo":["pytest"],"*":"uv run pytest"}',
+    )
+
+    try:
+        settings = get_settings()
+    finally:
+        get_settings.cache_clear()
+
+    assert settings.secretary_enabled is True
+    assert settings.secretary_github_token == "assistant-token"
+    assert settings.github_tokens["assistant"] == "assistant-token"
+    assert settings.secretary_discord_bot_token == "discord-token"
+    assert settings.secretary_discord_user_id == "123"
+    assert settings.secretary_poll_interval_seconds == 30
+    assert settings.secretary_merge_method == "merge"
+    assert settings.secretary_test_commands == {
+        "owner/repo": ["pytest"],
+        "*": ["uv run pytest"],
+    }

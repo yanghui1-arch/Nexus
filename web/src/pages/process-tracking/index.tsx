@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppLayout } from '@/components/layout/AppLayout';
 import { useWorkspaceRecords } from '@/lib/useWorkspaceRecords';
@@ -14,12 +15,28 @@ export default function ProcessTrackingPage() {
   });
 
   const data = useWorkspaceRecords();
-  const tracking = useProcessTracking(data);
+  const codingAgentOptions = useMemo(
+    () => data.agentOptions.filter(agent => agent.agent !== 'assistant'),
+    [data.agentOptions],
+  );
+  const codingAgentIds = useMemo(
+    () => new Set(codingAgentOptions.map(agent => agent.id)),
+    [codingAgentOptions],
+  );
+  const codingTaskViews = useMemo(
+    () => data.taskViews.filter(task => codingAgentIds.has(task.agentInstanceId)),
+    [codingAgentIds, data.taskViews],
+  );
+  const tracking = useProcessTracking({
+    ...data,
+    agentOptions: codingAgentOptions,
+    taskViews: codingTaskViews,
+  });
 
   return (
     <section className="flex min-h-0 flex-1 flex-col px-6 py-6">
       <ProcessTrackingPanel
-        agents={data.agentOptions}
+        agents={codingAgentOptions}
         tasksForAgent={tracking.tasksForSelectedAgent}
         messages={tracking.activeConsultMessages}
         selectedAgentId={tracking.selectedAgentId}

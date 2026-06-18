@@ -12,7 +12,7 @@ from src.logger import logger
 from src.sandbox import Sandbox
 
 
-AGENT_SKILL_DIRECTORIES = {"tela", "sophie", "jules", "marc"}
+AGENT_SKILL_DIRECTORIES = {"tela", "sophie", "jules", "marc", "assistant"}
 
 
 class ReadSkill(BaseModel):

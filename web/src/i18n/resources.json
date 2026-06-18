@@ -88,6 +88,11 @@
             "description": "Java Spring Boot 后端、API 和持久化交付。",
             "springBootDelivery": "Spring Boot 实现",
             "persistenceAndApi": "持久化与 API 设计"
+          },
+          "assistant": {
+            "description": "Discord 秘书、PR review、测试和低噪音自动合并。",
+            "discordCommands": "Discord 私信命令",
+            "prReview": "PR review 与测试"
           }
         }
       },
@@ -169,6 +174,7 @@
         "agentTela": "Tela",
         "agentJules": "Jules",
         "agentMarc": "Marc",
+        "agentAssistant": "Assistant",
         "statusReady": "已就绪",
         "statusRunning": "运行中",
         "statusIdle": "空闲",
@@ -473,6 +479,11 @@
             "description": "Java Spring Boot backend, API, and persistence delivery.",
             "springBootDelivery": "Spring Boot implementation",
             "persistenceAndApi": "Persistence and API design"
+          },
+          "assistant": {
+            "description": "Discord secretary for PR review, testing, and low-noise auto-merge.",
+            "discordCommands": "Discord DM commands",
+            "prReview": "PR review and tests"
           }
         }
       },
@@ -554,6 +565,7 @@
         "agentTela": "Tela",
         "agentJules": "Jules",
         "agentMarc": "Marc",
+        "agentAssistant": "Assistant",
         "statusReady": "Ready",
         "statusRunning": "Running",
         "statusIdle": "Idle",

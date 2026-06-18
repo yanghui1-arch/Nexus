@@ -25,6 +25,7 @@ from src.server.postgres.models import (
     ProductProposalStatus,
     ProposalPlanningRunRecord,
     ProposalPlanningRunStatus,
+    SecretaryStateRecord,
     TaskCategory,
     TaskExecutionEventRecord,
     GithubPullRequestFeedbackKind,
@@ -245,6 +246,28 @@ class WorkspaceRepository:
             select(WorkspaceRecord)
             .join(AgentInstanceRecord, AgentInstanceRecord.id == WorkspaceRecord.agent_instance_id)
             .where(AgentInstanceRecord.user_id == user_id)
+        )
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_active_for_agent(
+        session: AsyncSession,
+        *,
+        agent: AgentName,
+        limit: int = 200,
+    ) -> list[WorkspaceRecord]:
+        """List workspaces for active instances of an agent."""
+        query = (
+            select(WorkspaceRecord)
+            .join(AgentInstanceRecord, AgentInstanceRecord.id == WorkspaceRecord.agent_instance_id)
+            .where(
+                AgentInstanceRecord.agent == agent,
+                AgentInstanceRecord.is_active.is_(True),
+                WorkspaceRecord.github_repo.is_not(None),
+            )
+            .order_by(WorkspaceRecord.updated_at.asc(), WorkspaceRecord.created_at.asc())
+            .limit(limit)
         )
         result = await session.execute(query)
         return list(result.scalars().all())
@@ -910,6 +933,7 @@ class TaskRepository:
         repo: str | None,
         project: str | None,
         external_issue_url: str | None,
+        external_pull_request_url: str | None = None,
     ) -> TaskRecord:
         """Create a pending tracking record."""
         task = TaskRecord(
@@ -920,6 +944,7 @@ class TaskRepository:
             repo=repo,
             project=project,
             external_issue_url=external_issue_url,
+            external_pull_request_url=external_pull_request_url,
             status=TaskStatus.queued,
         )
         session.add(task)
@@ -937,6 +962,7 @@ class TaskRepository:
         repo: str | None,
         project: str | None,
         external_issue_url: str | None,
+        external_pull_request_url: str | None = None,
     ) -> TaskRecord:
         """Create a new database record."""
         task = await TaskRepository.create_pending(
@@ -948,6 +974,7 @@ class TaskRepository:
             repo=repo,
             project=project,
             external_issue_url=external_issue_url,
+            external_pull_request_url=external_pull_request_url,
         )
         await session.commit()
         await session.refresh(task)
@@ -1041,6 +1068,27 @@ class TaskRepository:
         )
         result = await session.execute(query)
         return list(result.scalars().all())
+
+    @staticmethod
+    async def get_latest_by_external_pull_request_url(
+        session: AsyncSession,
+        *,
+        agent_instance_id: uuid.UUID | None = None,
+        external_pull_request_url: str,
+        category: TaskCategory | None = None,
+    ) -> TaskRecord | None:
+        """Return the newest task bound to a pull request URL."""
+        query = select(TaskRecord).where(
+            TaskRecord.external_pull_request_url == external_pull_request_url,
+        )
+        if agent_instance_id is not None:
+            query = query.where(TaskRecord.agent_instance_id == agent_instance_id)
+        if category is not None:
+            query = query.where(TaskRecord.category == category)
+        result = await session.execute(
+            query.order_by(TaskRecord.created_at.desc()).limit(1)
+        )
+        return result.scalar_one_or_none()
 
     @staticmethod
     async def list_review_queue(
@@ -1284,6 +1332,8 @@ class TaskRepository:
     async def set_closed(
         session: AsyncSession,
         task_id: uuid.UUID,
+        *,
+        result: str | None = None,
     ) -> TaskRecord | None:
         """Mark a task as closed."""
         task = await session.get(TaskRecord, task_id)
@@ -1292,6 +1342,8 @@ class TaskRepository:
 
         now = utc_now()
         task.status = TaskStatus.closed
+        if result is not None:
+            task.result = result
         task.error = None
         task.finished_at = now
         task.resume_status = None
@@ -1915,6 +1967,37 @@ class GithubPullRequestFeedbackRepository:
             record.processed_at = None
             record.updated_at = now
         await session.commit()
+
+
+class SecretaryStateRepository:
+    @staticmethod
+    async def get(
+        session: AsyncSession,
+        key: str,
+    ) -> str | None:
+        """Return a persisted secretary state value."""
+        record = await session.get(SecretaryStateRecord, key)
+        return record.value if record is not None else None
+
+    @staticmethod
+    async def set(
+        session: AsyncSession,
+        *,
+        key: str,
+        value: str | None,
+    ) -> SecretaryStateRecord:
+        """Persist a secretary state value."""
+        record = await session.get(SecretaryStateRecord, key)
+        now = utc_now()
+        if record is None:
+            record = SecretaryStateRecord(key=key, value=value)
+            session.add(record)
+        else:
+            record.value = value
+            record.updated_at = now
+        await session.commit()
+        await session.refresh(record)
+        return record
 
 
 class UserRepository:

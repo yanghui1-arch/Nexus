@@ -239,6 +239,57 @@ def test_create_task_returns_category_from_persisted_task(monkeypatch: pytest.Mo
     runner.submit_task.assert_awaited_once()
 
 
+def test_create_task_accepts_assistant_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify assistant instances can enter the normal review task runner."""
+    now = datetime.now(timezone.utc)
+    created_task = _make_task(
+        question='review owner/repo#12',
+        status=TaskStatus.queued,
+        category=TaskCategory.review,
+        created_at=now,
+        agent=AgentName.assistant,
+    )
+    runner = SimpleNamespace(submit_task=AsyncMock(return_value=created_task.id))
+
+    async def fake_get(session, task_id, **kwargs):
+        """Provide fake repository lookups for instance and task records."""
+        if task_id == created_task.id:
+            return created_task
+        return SimpleNamespace(
+            id=created_task.agent_instance_id,
+            user_id=uuid.UUID('00000000-0000-0000-0000-000000000001'),
+        )
+
+    monkeypatch.setattr(TaskRepository, 'get', fake_get)
+    monkeypatch.setattr(AgentInstanceRepository, 'get', fake_get)
+
+    async def run_request() -> httpx.Response:
+        """Run the request test body."""
+        transport = httpx.ASGITransport(app=_build_app(runner_obj=runner))
+        async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
+            return await client.post(
+                '/v1/tasks',
+                json={
+                    'agent_instance_id': str(created_task.agent_instance_id),
+                    'agent': 'assistant',
+                    'question': created_task.question,
+                    'external_issue_url': None,
+                    'external_pull_request_url': 'https://github.com/owner/repo/pull/12',
+                },
+            )
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 202
+    assert response.json() == {
+        'task_id': str(created_task.id),
+        'agent_instance_id': str(created_task.agent_instance_id),
+        'category': TaskCategory.review.value,
+        'status': TaskStatus.queued.value,
+    }
+    runner.submit_task.assert_awaited_once()
+
+
 def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify list tasks passes filters to repository."""
     session_obj = object()
