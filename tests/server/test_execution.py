@@ -1328,9 +1328,10 @@ def test_execute_agent_task_writes_lifecycle_events(monkeypatch):
         "EXCEED_ATTEMPTS",
     ]
     assert events[1]["safe_metadata"] == {
-        "process": "PROCESS",
-        "current_use_tool": ["shell"],
-        "has_tool_args": True,
+        "summary": "PROCESS message",
+        "tool_names": ["shell"],
+        "tool_summary": "shell",
+        "tool_call_summaries": [{"cmd": "secret"}],
     }
     update_checkpoint.assert_awaited_once()
     assert update_checkpoint.await_args.kwargs["checkpoint"] == [{"role": "assistant", "content": "safe point"}]
