@@ -38,7 +38,6 @@ from src.server.postgres.models import (
     WorkspaceRecord,
     WorkspaceStatus,
 )
-from src.utils.event_metadata import build_status_event_metadata
 
 def utc_now() -> datetime:
     """Return the current UTC timestamp."""
@@ -896,31 +895,6 @@ class FeatureItemRepository:
             await FeatureRepository.sync_status_from_items(session, feature_id)
         await session.commit()
         return items
-
-
-class TaskExecutionEventRepository:
-    @staticmethod
-    async def create_from_status(
-        session: AsyncSession,
-        *,
-        task_id: uuid.UUID,
-        agent: AgentName | None,
-        status: dict[str, Any],
-        checkpoint_saved: bool | None = None,
-    ) -> TaskExecutionEventRecord:
-        """Persist a scrubbed execution event from an agent status payload."""
-        safe_metadata = build_status_event_metadata(status, checkpoint_saved=checkpoint_saved)
-        record = TaskExecutionEventRecord(
-            task_id=task_id,
-            event_type=str(status.get("process") or status.get("status") or status.get("event") or "PROCESS"),
-            agent=agent,
-            message=safe_metadata["summary"],
-            safe_metadata=safe_metadata,
-        )
-        session.add(record)
-        await session.commit()
-        await session.refresh(record)
-        return record
 
 
 class TaskRepository:

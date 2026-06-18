@@ -9,7 +9,7 @@ from src.logger import logger
 from src.server.config import Settings, get_settings
 from src.server.postgres.database import Database
 from src.server.postgres.models import TaskCategory, TaskRecord, TaskStatus
-from src.server.postgres.repositories import TaskExecutionEventRepository, TaskRepository
+from src.server.postgres.repositories import TaskRepository
 from src.utils.event_metadata import build_status_event_metadata
 
 from .state import ExecutionBinding
@@ -54,14 +54,7 @@ async def execute_agent_task(
             logger.warning("Skipping lifecycle event for missing task %s", task_id)
             return
 
-        safe_metadata = {"process": status["process"]}
-        current_tools = status.get("current_use_tool")
-        if current_tools is not None:
-            safe_metadata["current_use_tool"] = list(current_tools)
-        if status.get("current_use_tool_args") is not None:
-            safe_metadata["has_tool_args"] = True
-        if "context" in status:
-            safe_metadata["checkpoint_message_count"] = len(status["context"])
+        safe_metadata = build_status_event_metadata(status)
 
         async def _persist_lifecycle_event() -> None:
             """Persist one structured lifecycle event."""
@@ -115,13 +108,6 @@ async def execute_agent_task(
                     session,
                     task_id,
                     checkpoint=checkpoint_payload,
-                )
-                await TaskExecutionEventRepository.create_from_status(
-                    session,
-                    task_id=task_id,
-                    agent=task.agent,
-                    status=status,
-                    checkpoint_saved=True,
                 )
             logger.info(
                 "Agent %s saves checkpoints when executing task %s.",

@@ -13,7 +13,6 @@ REDACTED_VALUE = "[REDACTED]"
 def build_status_event_metadata(
     status: Mapping[str, Any],
     *,
-    checkpoint_saved: bool | None = None,
     max_string_length: int = DEFAULT_MAX_STRING_LENGTH,
 ) -> dict[str, Any]:
     """Build scrubbed metadata for an agent status payload.
@@ -38,9 +37,9 @@ def build_status_event_metadata(
         ]
 
     checkpoint_result = status.get("checkpoint_result")
-    if checkpoint_result is not None or checkpoint_saved is not None:
-        metadata["checkpoint"] = _sanitize_value(
-            checkpoint_result if checkpoint_result is not None else {"saved": checkpoint_saved},
+    if checkpoint_result is not None:
+        metadata["checkpoint_result"] = _sanitize_value(
+            checkpoint_result,
             max_string_length=max_string_length,
         )
 
