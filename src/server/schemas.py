@@ -355,7 +355,7 @@ class TaskMessage(BaseModel):
     meta: dict[str, Any] | None = None
 
 
-class TaskExecutionMetricsResponse(BaseModel):
+class TaskExecutionStatsResponse(BaseModel):
     event_count: int = 0
     total_tokens: int = 0
     first_event_at: datetime | None = None
@@ -364,8 +364,8 @@ class TaskExecutionMetricsResponse(BaseModel):
     model: str = "unknown"
 
     @classmethod
-    def from_events(cls, events: list[Any]) -> "TaskExecutionMetricsResponse":
-        """Build task execution metrics, preserving an explicit empty state."""
+    def from_events(cls, events: list[Any]) -> "TaskExecutionStatsResponse":
+        """Build task execution statistics, preserving an explicit empty state."""
         if not events:
             return cls()
         first_event_at = min(event.created_at for event in events)

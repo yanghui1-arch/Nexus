@@ -628,12 +628,12 @@ def test_list_task_messages_returns_empty_list_for_existing_task_without_events(
     assert response.json() == []
 
 
-def test_task_metrics_return_unknown_empty_state_for_existing_task_without_events(
+def test_task_stats_return_unknown_empty_state_for_existing_task_without_events(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Verify tasks with no execution events return zero/unknown metrics."""
+    """Verify tasks with no execution events return zero/unknown statistics."""
     now = datetime.now(timezone.utc)
-    task = _make_task(question='empty metrics', status=TaskStatus.queued, created_at=now)
+    task = _make_task(question='empty stats', status=TaskStatus.queued, created_at=now)
 
     async def fake_get(session, task_id, **kwargs):
         """Provide a fake get."""
@@ -653,7 +653,7 @@ def test_task_metrics_return_unknown_empty_state_for_existing_task_without_event
         """Run the request test body."""
         transport = httpx.ASGITransport(app=_build_app())
         async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
-            return await client.get(f'/v1/tasks/{task.id}/metrics')
+            return await client.get(f'/v1/tasks/{task.id}/stats')
 
     response = asyncio.run(run_request())
 

@@ -14,7 +14,6 @@ from src.server.config import get_settings
 from src.server.postgres.database import Database
 from src.server.postgres.models import (
     TaskCategory,
-    TaskExecutionEventRecord,
     TaskStatus,
     UserRecord,
 )
@@ -30,7 +29,7 @@ from src.server.schemas import (
     TaskConsultRequest,
     TaskConsultResponse,
     TaskCreateRequest,
-    TaskExecutionMetricsResponse,
+    TaskExecutionStatsResponse,
     TaskMessage,
     TaskResponse,
     TaskStatusUpdateRequest,
@@ -67,17 +66,6 @@ async def _require_owned_task(session, task_id: uuid.UUID, user: UserRecord):
     if instance is None or instance.user_id != user.id:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
-
-
-def _message_from_event(event: TaskExecutionEventRecord) -> TaskMessage:
-    """Convert a persisted execution event into the public task message shape."""
-    return TaskMessage(
-        timestamp=event.created_at.isoformat(),
-        status=event.event_type,
-        description=event.message,
-        data=None,
-        meta=event.safe_metadata,
-    )
 
 
 @router.post("", response_model=TaskSubmitResponse, status_code=202)
@@ -166,21 +154,30 @@ async def list_task_messages(
     async with database.session() as session:
         await _require_owned_task(session, task_id, user)
         events = await TaskExecutionEventRepository.list_by_task(session, task_id, limit=limit)
-    return [_message_from_event(event) for event in events]
+    return [
+        TaskMessage(
+            timestamp=event.created_at.isoformat(),
+            status=event.event_type,
+            description=event.message,
+            data=None,
+            meta=event.safe_metadata,
+        )
+        for event in events
+    ]
 
 
-@router.get("/{task_id}/metrics", response_model=TaskExecutionMetricsResponse)
-async def get_task_metrics(
+@router.get("/{task_id}/stats", response_model=TaskExecutionStatsResponse)
+async def get_task_stats(
     request: Request,
     task_id: uuid.UUID,
     user: UserRecord = Depends(get_current_user),
-) -> TaskExecutionMetricsResponse:
-    """Return aggregate execution metrics for a task owned by the current user."""
+) -> TaskExecutionStatsResponse:
+    """Return aggregate execution statistics for a task owned by the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
         await _require_owned_task(session, task_id, user)
         events = await TaskExecutionEventRepository.list_by_task(session, task_id)
-    return TaskExecutionMetricsResponse.from_events(events)
+    return TaskExecutionStatsResponse.from_events(events)
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
