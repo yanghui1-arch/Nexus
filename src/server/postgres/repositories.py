@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from decimal import Decimal
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal, TypeAlias
 
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 from sqlalchemy import and_, func, or_, select, update
@@ -36,6 +36,8 @@ from src.server.postgres.models import (
     WorkspaceRecord,
     WorkspaceStatus,
 )
+
+LifecycleEventType: TypeAlias = Literal["START", "PROCESS", "SAVE_CHECKPOINT", "COMPLETED", "FAILED", "EXCEED_ATTEMPTS"]
 
 
 def utc_now() -> datetime:
@@ -1105,7 +1107,7 @@ class TaskRepository:
         session: AsyncSession,
         *,
         task_id: uuid.UUID,
-        event_type: str,
+        event_type: LifecycleEventType,
         agent: AgentName | None,
         message: str | None = None,
         safe_metadata: dict[str, object] | None = None,
