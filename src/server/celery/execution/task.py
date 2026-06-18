@@ -43,6 +43,9 @@ async def execute_agent_task(
     pending_event_tasks: set[asyncio.Task[Any]] = set()
     binding: ExecutionBinding | None = None
     task: TaskRecord | None = None
+    # Only release a workspace that this delivery actually claimed. A failed
+    # task claim must not make an unrelated/stale running task look idle.
+    workspace_marked_running = False
 
     def _schedule_lifecycle_event(status: WorkTempStatus) -> None:
         """Persist agent lifecycle progress without affecting execution flow."""
@@ -157,8 +160,9 @@ async def execute_agent_task(
         # resolved repo/project, including legacy rows that still used workspace fallback.
         task.repo = binding.github_repo
         task.project = binding.project
-        await state.mark_workspace_running(database, task.agent_instance_id)
 
+        # Claim the DB task before touching workspace state. The task table is
+        # the concurrency gate; marking workspace first can hide a blocked claim.
         running_task = await state.mark_task_running(
             database,
             task_id,
@@ -166,12 +170,44 @@ async def execute_agent_task(
             allow_running=allow_running,
         )
         if running_task is None:
-            logger.warning(
-                "Task %s could not enter running state; stale delivery will be skipped.",
-                task_id,
-            )
+            try:
+                # Diagnostics are best-effort and read-only. They make the skip
+                # actionable without turning a logging failure into task failure.
+                claim_snapshot = await state.load_task_claim_failure_snapshot(
+                    database,
+                    task_id,
+                    expected_agent_instance_id=task.agent_instance_id,
+                )
+            except Exception:
+                logger.exception("Failed to load task claim failure snapshot for task %s.", task_id)
+                logger.warning(
+                    "Task %s could not enter running state; stale delivery will be skipped.",
+                    task_id,
+                )
+            else:
+                logger.warning(
+                    "Task %s could not enter running state; stale delivery will be skipped. "
+                    "current_status=%s current_agent_instance_id=%s expected_agent_instance_id=%s "
+                    "allow_running=%s conflicting_running_task_id=%s conflicting_running_task_started_at=%s "
+                    "conflicting_running_task_updated_at=%s workspace_status=%s workspace_updated_at=%s",
+                    task_id,
+                    claim_snapshot.task_status,
+                    claim_snapshot.task_agent_instance_id,
+                    task.agent_instance_id,
+                    allow_running,
+                    claim_snapshot.conflicting_running_task_id,
+                    claim_snapshot.conflicting_running_task_started_at,
+                    claim_snapshot.conflicting_running_task_updated_at,
+                    claim_snapshot.workspace_status,
+                    claim_snapshot.workspace_updated_at,
+                )
             return
         task = running_task
+
+        # From this point on, this delivery owns the workspace lifecycle for the
+        # duration of workflow execution and may release it in the finally block.
+        await state.mark_workspace_running(database, task.agent_instance_id)
+        workspace_marked_running = True
 
         logger.info(
             "Task %s accepted for execution in workspace %s.",
@@ -202,7 +238,7 @@ async def execute_agent_task(
         if pending_tasks:
             await asyncio.gather(*pending_tasks, return_exceptions=True)
 
-        if binding is not None and task is not None:
+        if binding is not None and task is not None and workspace_marked_running:
             await state.release_workspace(database, task.agent_instance_id)
 
         await database.disconnect()

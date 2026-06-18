@@ -1152,6 +1152,24 @@ class TaskRepository:
         return event
 
     @staticmethod
+    async def get_running_for_agent_instance(
+        session: AsyncSession,
+        agent_instance_id: uuid.UUID,
+        *,
+        exclude_task_id: uuid.UUID | None = None,
+    ) -> TaskRecord | None:
+        """Return the running task currently occupying an agent instance."""
+        query = select(TaskRecord).where(
+            TaskRecord.agent_instance_id == agent_instance_id,
+            TaskRecord.status == TaskStatus.running,
+        )
+        if exclude_task_id is not None:
+            query = query.where(TaskRecord.id != exclude_task_id)
+
+        result = await session.execute(query.order_by(TaskRecord.updated_at.desc()).limit(1))
+        return result.scalar_one_or_none()
+
+    @staticmethod
     async def update_checkpoint(
         session: AsyncSession,
         task_id: uuid.UUID,

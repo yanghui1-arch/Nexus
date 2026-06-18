@@ -193,6 +193,109 @@ def test_execute_agent_task_skips_non_redelivered_running_duplicate(monkeypatch)
     assert databases[0].disconnected is True
 
 
+def test_execute_agent_task_logs_claim_failure_without_releasing_workspace(monkeypatch):
+    """Verify failed task claims explain the blocker and do not release a workspace."""
+    task_id = uuid.uuid4()
+    agent_instance_id = uuid.uuid4()
+    conflicting_task_id = uuid.uuid4()
+    databases = []
+    warnings = []
+
+    class RuntimeDatabase(FakeDatabase):
+        def __init__(self, database_url):
+            """Initialize runtime database test helper."""
+            super().__init__()
+            self.database_url = database_url
+            self.connected = False
+            self.disconnected = False
+            databases.append(self)
+
+        async def connect(self):
+            """Track database connection."""
+            self.connected = True
+
+        async def disconnect(self):
+            """Track database disconnection."""
+            self.disconnected = True
+
+    async def fake_load_task(database, requested_task_id):
+        """Return a queued task that will fail to claim."""
+        assert requested_task_id == task_id
+        return make_task(
+            id=task_id,
+            status=TaskStatus.queued,
+            agent_instance_id=agent_instance_id,
+        )
+
+    async def fake_load_binding(database, task):
+        """Return an execution binding."""
+        assert task.id == task_id
+        return state.ExecutionBinding(
+            user_id=uuid.uuid4(),
+            github_repo="owner/repo",
+            project="workspace",
+            workspace_key="workspace-key",
+        )
+
+    async def fake_mark_task_running(database, requested_task_id, *, expected_agent_instance_id, allow_running):
+        """Simulate a claim failure."""
+        assert requested_task_id == task_id
+        assert expected_agent_instance_id == agent_instance_id
+        assert allow_running is False
+        return None
+
+    async def fake_claim_snapshot(database, requested_task_id, *, expected_agent_instance_id):
+        """Return a useful claim failure snapshot."""
+        assert requested_task_id == task_id
+        assert expected_agent_instance_id == agent_instance_id
+        return state.TaskClaimFailureSnapshot(
+            task_status=TaskStatus.queued.value,
+            task_agent_instance_id=agent_instance_id,
+            conflicting_running_task_id=conflicting_task_id,
+            conflicting_running_task_started_at=None,
+            conflicting_running_task_updated_at=None,
+            workspace_status="idle",
+            workspace_updated_at=None,
+        )
+
+    async def fail_if_called(*args, **kwargs):
+        """Fail if execution continues after the failed claim."""
+        raise AssertionError("failed claim should stop execution")
+
+    def capture_warning(*args, **kwargs):
+        """Capture warning call arguments."""
+        warnings.append(args)
+
+    monkeypatch.setattr(execution_task, "Database", RuntimeDatabase)
+    monkeypatch.setattr(state, "load_task", fake_load_task)
+    monkeypatch.setattr(state, "load_binding", fake_load_binding)
+    monkeypatch.setattr(state, "mark_task_running", fake_mark_task_running)
+    monkeypatch.setattr(state, "load_task_claim_failure_snapshot", fake_claim_snapshot)
+    monkeypatch.setattr(state, "mark_workspace_running", fail_if_called)
+    monkeypatch.setattr(state, "release_workspace", fail_if_called)
+    monkeypatch.setattr(workflows, "run_agent_workflow", fail_if_called)
+    monkeypatch.setattr(state, "mark_failed", fail_if_called)
+    monkeypatch.setattr(execution_task.logger, "warning", capture_warning)
+
+    asyncio.run(
+        execution_task.execute_agent_task(
+            task_id=task_id,
+            settings=SimpleNamespace(database_url="postgresql://test"),
+            allow_running=False,
+        )
+    )
+
+    assert len(databases) == 1
+    assert databases[0].connected is True
+    assert databases[0].disconnected is True
+    assert len(warnings) == 1
+    warning_message, *warning_args = warnings[0]
+    assert "conflicting_running_task_id=%s" in warning_message
+    assert conflicting_task_id in warning_args
+    assert TaskStatus.queued.value in warning_args
+    assert "idle" in warning_args
+
+
 def test_load_binding_prefers_task_snapshot_over_workspace_context(monkeypatch):
     """Verify binding uses the task snapshot before current workspace context."""
     agent_instance_id = "agent-instance-id"

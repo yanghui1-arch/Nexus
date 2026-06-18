@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 
@@ -41,6 +42,19 @@ class ExecutionBinding:
     github_repo: str | None
     project: str | None
     workspace_key: str
+
+
+@dataclass(frozen=True)
+class TaskClaimFailureSnapshot:
+    """Database state useful for explaining why a task claim failed."""
+
+    task_status: str | None
+    task_agent_instance_id: uuid.UUID | None
+    conflicting_running_task_id: uuid.UUID | None
+    conflicting_running_task_started_at: datetime | None
+    conflicting_running_task_updated_at: datetime | None
+    workspace_status: str | None
+    workspace_updated_at: datetime | None
 
 
 async def load_task(database: Database, task_id: uuid.UUID) -> TaskRecord:
@@ -144,6 +158,42 @@ async def mark_task_running(
             if planning_run is not None:
                 await ProposalPlanningRunRepository.set_running(session, planning_run.id)
         return task
+
+
+async def load_task_claim_failure_snapshot(
+    database: Database,
+    task_id: uuid.UUID,
+    *,
+    expected_agent_instance_id: uuid.UUID,
+) -> TaskClaimFailureSnapshot:
+    """Return current DB state for a failed task claim."""
+    # Keep this helper on the failed-claim path only; it trades a few extra
+    # reads for actionable logs and should not add overhead to normal execution.
+    async with database.session() as session:
+        task = await TaskRepository.get(session, task_id)
+        conflicting_running_task = await TaskRepository.get_running_for_agent_instance(
+            session,
+            expected_agent_instance_id,
+            exclude_task_id=task_id,
+        )
+        workspace = await WorkspaceRepository.get_by_agent_instance_id(
+            session,
+            expected_agent_instance_id,
+        )
+
+    return TaskClaimFailureSnapshot(
+        task_status=task.status.value if task is not None else None,
+        task_agent_instance_id=task.agent_instance_id if task is not None else None,
+        conflicting_running_task_id=conflicting_running_task.id if conflicting_running_task is not None else None,
+        conflicting_running_task_started_at=(
+            conflicting_running_task.started_at if conflicting_running_task is not None else None
+        ),
+        conflicting_running_task_updated_at=(
+            conflicting_running_task.updated_at if conflicting_running_task is not None else None
+        ),
+        workspace_status=workspace.status.value if workspace is not None else None,
+        workspace_updated_at=workspace.updated_at if workspace is not None else None,
+    )
 
 
 async def mark_workspace_running(
