@@ -13,8 +13,10 @@ from src.server.postgres.models import (
     TaskStatus,
     TaskWorkItemRecord,
 )
+from src.server.postgres.models import FeatureItemStatus
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
+    FeatureItemRepository,
     GithubPullRequestFeedbackRepository,
     ProductProposalRepository,
     ProposalPlanningRunRepository,
@@ -357,7 +359,17 @@ async def mark_failed(database: Database, task_id: uuid.UUID, error: str) -> Non
     """
     async with database.session() as session:
         task = await TaskRepository.set_failed(session, task_id, error=error)
-        if task is None or task.category != TaskCategory.pm:
+        if task is None:
+            return
+        if task.category == TaskCategory.coding:
+            await FeatureItemRepository.set_status_by_task_id(
+                session,
+                task_id,
+                status=FeatureItemStatus.failed,
+                updated_at=task.finished_at,
+            )
+            return
+        if task.category != TaskCategory.pm:
             return
 
         planning_run = await ProposalPlanningRunRepository.get_by_task_id(session, task_id)

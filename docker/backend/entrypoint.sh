@@ -13,6 +13,9 @@ case "$role" in
       --loglevel "${NEXUS_CELERY_LOG_LEVEL:-INFO}" \
       --queues "${NEXUS_CELERY_QUEUE:-nexus_agent_tasks}" "$@"
     ;;
+  poller)
+    exec python -m src.server.pollers "$@"
+    ;;
   *)
     exec "$role" "$@"
     ;;

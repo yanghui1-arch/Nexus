@@ -16,6 +16,7 @@ from src.server.api.routes.product import router as product_router
 from src.server.postgres.models import AgentName, ProductProposalStatus
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
+    FeatureItemRepository,
     ProductProposalRepository,
     ProposalPlanningRunRepository,
     TaskRepository,
@@ -576,3 +577,132 @@ def test_retry_planning_dispatches_new_task_when_planning_task_is_missing(monkey
 
     assert response.status_code == 200
     runner.dispatch_planning_task.assert_awaited_once_with(new_task_id)
+
+
+def _feature_item(**overrides: Any) -> Any:
+    """Create a feature item record."""
+    now = datetime.now(timezone.utc)
+    values = {
+        "id": uuid.uuid4(),
+        "feature_id": uuid.uuid4(),
+        "order_index": 1,
+        "title": "Render failed items",
+        "description": "Show failed proposal plan items.",
+        "status": "failed",
+        "task_id": uuid.uuid4(),
+        "created_at": now,
+        "updated_at": now,
+        "started_at": now,
+        "finished_at": now,
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def test_retry_feature_item_task_dispatches_new_task(monkeypatch) -> None:
+    user_id = uuid.uuid4()
+    feature_id = uuid.uuid4()
+    feature_item_id = uuid.uuid4()
+    old_task_id = uuid.uuid4()
+    new_task_id = uuid.uuid4()
+    tela_instance_id = uuid.uuid4()
+    item = _feature_item(id=feature_item_id, feature_id=feature_id, task_id=old_task_id)
+    feature = SimpleNamespace(id=feature_id)
+    proposal = _proposal(user_id=user_id, repo="owner/repo", project="nexus")
+    captured = {}
+    runner = SimpleNamespace(submit_task=AsyncMock(return_value=new_task_id))
+
+    async def fake_list_tela(session, *, agent, user_id=None, github_repo=None, project=None, limit=1):
+        captured["agent"] = agent
+        captured["user_id"] = user_id
+        captured["github_repo"] = github_repo
+        captured["project"] = project
+        captured["limit"] = limit
+        return [SimpleNamespace(id=tela_instance_id)]
+
+    async def fake_assign_task(session, item_id, *, task_id, require_unassigned=True):
+        captured["item_id"] = item_id
+        captured["task_id"] = task_id
+        captured["require_unassigned"] = require_unassigned
+        return _feature_item(
+            id=item_id,
+            feature_id=feature_id,
+            status="in_progress",
+            task_id=task_id,
+            finished_at=None,
+        )
+
+    monkeypatch.setattr(FeatureItemRepository, "get_feature", AsyncMock(return_value=feature))
+    monkeypatch.setattr(FeatureItemRepository, "get_proposal", AsyncMock(return_value=proposal))
+    monkeypatch.setattr(FeatureItemRepository, "list_by_feature", AsyncMock(return_value=[item]))
+    monkeypatch.setattr(AgentInstanceRepository, "list_by_active_task_load", fake_list_tela)
+    monkeypatch.setattr(FeatureItemRepository, "assign_task", fake_assign_task)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(runner=runner, user_id=user_id))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(
+                f"/v1/product/feature-items/{feature_item_id}/retry-task",
+                json={"reason": "User requested retry."},
+            )
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["feature_item"]["status"] == "in_progress"
+    assert data["feature_item"]["task_id"] == str(new_task_id)
+    assert data["task"] == {
+        "task_id": str(new_task_id),
+        "agent_instance_id": str(tela_instance_id),
+        "category": "coding",
+        "status": "queued",
+    }
+    assert captured["require_unassigned"] is False
+    payload = runner.submit_task.await_args.args[0]
+    assert payload.agent_instance_id == tela_instance_id
+    assert payload.agent.value == "tela"
+    assert "Implement product feature item: Render failed items" in payload.question
+
+
+def test_retry_feature_item_task_rejects_non_failed_item(monkeypatch) -> None:
+    user_id = uuid.uuid4()
+    feature_id = uuid.uuid4()
+    feature_item_id = uuid.uuid4()
+    item = _feature_item(id=feature_item_id, feature_id=feature_id, status="in_progress")
+
+    monkeypatch.setattr(FeatureItemRepository, "get_feature", AsyncMock(return_value=SimpleNamespace(id=feature_id)))
+    monkeypatch.setattr(FeatureItemRepository, "get_proposal", AsyncMock(return_value=_proposal(user_id=user_id)))
+    monkeypatch.setattr(FeatureItemRepository, "list_by_feature", AsyncMock(return_value=[item]))
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(user_id=user_id))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(f"/v1/product/feature-items/{feature_item_id}/retry-task", json={})
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Only failed feature items can be retried"
+
+
+def test_retry_feature_item_task_rejects_when_no_tela(monkeypatch) -> None:
+    user_id = uuid.uuid4()
+    feature_id = uuid.uuid4()
+    feature_item_id = uuid.uuid4()
+    item = _feature_item(id=feature_item_id, feature_id=feature_id)
+
+    monkeypatch.setattr(FeatureItemRepository, "get_feature", AsyncMock(return_value=SimpleNamespace(id=feature_id)))
+    monkeypatch.setattr(FeatureItemRepository, "get_proposal", AsyncMock(return_value=_proposal(user_id=user_id)))
+    monkeypatch.setattr(FeatureItemRepository, "list_by_feature", AsyncMock(return_value=[item]))
+    monkeypatch.setattr(AgentInstanceRepository, "list_by_active_task_load", AsyncMock(return_value=[]))
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(user_id=user_id))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(f"/v1/product/feature-items/{feature_item_id}/retry-task", json={})
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "No active Tela agent instance is available"

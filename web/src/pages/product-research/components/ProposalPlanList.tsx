@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  AlertCircle,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -10,9 +11,11 @@ import {
   KanbanSquare,
   ListTodo,
 } from 'lucide-react';
+import { getErrorDetail } from '@/api/client';
 import { getTask } from '@/api/tasks';
-import type { ApiFeature, ApiTask } from '@/api/types';
+import type { ApiFeature, ApiFeatureItemStatus, ApiTask } from '@/api/types';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -48,13 +51,20 @@ import {
 
 type ProposalPlanListProps = {
   features: ApiFeature[];
+  onRetryFeatureItem: (featureItemId: string) => Promise<void>;
+  retryingFeatureItemId: string | null;
 };
 
-export function ProposalPlanList({ features }: ProposalPlanListProps) {
+function getWorkItemDisplayStatus(itemStatus: ApiFeatureItemStatus, task: ApiTask | null | undefined): ApiFeatureItemStatus {
+  return itemStatus === 'failed' || task?.status === 'failed' ? 'failed' : itemStatus;
+}
+
+export function ProposalPlanList({ features, onRetryFeatureItem, retryingFeatureItemId }: ProposalPlanListProps) {
   const { t } = useTranslation();
   const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
   const [expandedItemIds, setExpandedItemIds] = useState<string[]>([]);
   const [tasksById, setTasksById] = useState<Record<string, ApiTask | null>>({});
+  const [taskLoadErrorsById, setTaskLoadErrorsById] = useState<Record<string, string>>({});
   const selectedFeature =
     features.find(feature => feature.id === selectedFeatureId) ?? null;
   const selectedFeatureTaskIds = useMemo(
@@ -86,9 +96,13 @@ export function ProposalPlanList({ features }: ProposalPlanListProps) {
     void Promise.all(
       missingTaskIds.map(async taskId => {
         try {
-          return [taskId, await getTask(taskId)] as const;
-        } catch {
-          return [taskId, null] as const;
+          return { taskId, task: await getTask(taskId), loadError: null };
+        } catch (error) {
+          return {
+            taskId,
+            task: null,
+            loadError: getErrorDetail(error, t('productResearch.workItemTaskLoadFailedDescription')),
+          };
         }
       }),
     ).then(entries => {
@@ -99,8 +113,22 @@ export function ProposalPlanList({ features }: ProposalPlanListProps) {
       setTasksById(current => {
         const next = { ...current };
 
-        for (const [taskId, task] of entries) {
-          next[taskId] = task;
+        for (const entry of entries) {
+          next[entry.taskId] = entry.task;
+        }
+
+        return next;
+      });
+
+      setTaskLoadErrorsById(current => {
+        const next = { ...current };
+
+        for (const entry of entries) {
+          if (entry.task) {
+            delete next[entry.taskId];
+          } else if (entry.loadError) {
+            next[entry.taskId] = entry.loadError;
+          }
         }
 
         return next;
@@ -110,7 +138,7 @@ export function ProposalPlanList({ features }: ProposalPlanListProps) {
     return () => {
       isCancelled = true;
     };
-  }, [selectedFeature, selectedFeatureTaskIds, tasksById]);
+  }, [selectedFeature, selectedFeatureTaskIds, tasksById, t]);
 
   function openFeatureDetail(feature: ApiFeature) {
     setSelectedFeatureId(feature.id);
@@ -163,6 +191,10 @@ export function ProposalPlanList({ features }: ProposalPlanListProps) {
               const activeItems = items.filter(
                 item => item.status === 'in_progress',
               ).length;
+              const failedItems = items.filter(item => {
+                const task = item.task_id ? tasksById[item.task_id] : null;
+                return getWorkItemDisplayStatus(item.status, task) === 'failed';
+              }).length;
 
               return (
                 <TableRow
@@ -237,6 +269,12 @@ export function ProposalPlanList({ features }: ProposalPlanListProps) {
                         <CircleDot className="size-4 text-black/45" />
                         <span>{activeItems}</span>
                       </div>
+                      {failedItems > 0 ? (
+                        <div className="flex items-center gap-2 text-red-700">
+                          <AlertCircle className="size-4" />
+                          <span>{failedItems}</span>
+                        </div>
+                      ) : null}
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="size-4 text-black/45" />
                         <span>{completedItems}</span>
@@ -288,10 +326,17 @@ export function ProposalPlanList({ features }: ProposalPlanListProps) {
                     </p>
                   ) : (
                     (selectedFeature.items ?? []).map(item => {
-                      const itemMeta = FEATURE_ITEM_STATUS_META[item.status];
                       const isExpanded = expandedItemIds.includes(item.id);
                       const task = item.task_id ? tasksById[item.task_id] : null;
                       const pullRequestUrl = getTaskPullRequestUrl(task);
+                      const taskLoadError = item.task_id ? taskLoadErrorsById[item.task_id] : null;
+                      const displayStatus = getWorkItemDisplayStatus(item.status, task);
+                      const itemMeta = FEATURE_ITEM_STATUS_META[displayStatus];
+                      const taskError = displayStatus === 'failed'
+                        ? task?.error ?? taskLoadError ?? t('productResearch.workItemFailedFallback')
+                        : null;
+                      const isRetrying = retryingFeatureItemId === item.id;
+                      const errorId = `feature-item-${item.id}-error`;
 
                       return (
                         <div
@@ -340,10 +385,39 @@ export function ProposalPlanList({ features }: ProposalPlanListProps) {
                                     variant={itemMeta.variant}
                                     className={itemMeta.className}
                                   >
-                                    {t(`productResearch.featureItemStatus.${item.status}`)}
+                                    {t(`productResearch.featureItemStatus.${displayStatus}`)}
                                   </Badge>
+                                  {displayStatus === 'failed' ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 border-red-200 px-2.5 text-xs text-red-700 hover:bg-red-50 hover:text-red-800"
+                                      disabled={isRetrying}
+                                      aria-describedby={taskError ? errorId : undefined}
+                                      onClick={event => {
+                                        event.stopPropagation();
+                                        void onRetryFeatureItem(item.id);
+                                      }}
+                                    >
+                                      {isRetrying
+                                        ? t('productResearch.workItemRetrying')
+                                        : t('productResearch.workItemRetry')}
+                                    </Button>
+                                  ) : null}
                                 </div>
                               </div>
+
+                              {taskError ? (
+                                <div
+                                  id={errorId}
+                                  role="alert"
+                                  className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm leading-6 text-red-800"
+                                >
+                                  <span className="font-medium">{t('productResearch.workItemFailed')}</span>
+                                  <span className="ml-1">{taskError}</span>
+                                </div>
+                              ) : null}
 
                               {isExpanded ? (
                                 <p className="text-sm leading-6 text-muted-foreground">
