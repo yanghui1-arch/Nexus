@@ -6,6 +6,7 @@ import type {
   WorkspaceConsultMessageView,
   WorkspaceTaskView,
 } from '@/lib/workspace-task-view';
+import type { ApiTaskExecutionStats } from '@/api/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CardTitle } from '@/components/ui/card';
@@ -27,6 +28,7 @@ type ProcessTrackingPanelProps = {
   agents: WorkspaceAgentOption[];
   tasksForAgent: WorkspaceTaskView[];
   messages: WorkspaceConsultMessageView[];
+  taskStats: ApiTaskExecutionStats | null;
   selectedAgentId: string;
   selectedTaskId: string;
   selectedTask?: WorkspaceTaskView;
@@ -43,10 +45,17 @@ function detailValue(value: string | null | undefined): string {
   return value || '-';
 }
 
-function formatRuntime(task: WorkspaceTaskView | undefined): string {
+function formatRuntime(task: WorkspaceTaskView | undefined, stats: ApiTaskExecutionStats | null): string {
+  if (stats?.duration_seconds != null) {
+    return formatDuration(stats.duration_seconds);
+  }
   if (!task?.startedAt) return '-';
   const endTime = task.finishedAt ? new Date(task.finishedAt).getTime() : Date.now();
-  const seconds = Math.max(1, Math.round((endTime - new Date(task.startedAt).getTime()) / 1000));
+  return formatDuration(Math.max(1, Math.round((endTime - new Date(task.startedAt).getTime()) / 1000)));
+}
+
+function formatDuration(secondsValue: number): string {
+  const seconds = Math.max(1, Math.round(secondsValue));
   if (seconds < 60) return `${seconds}s`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
   const hours = Math.floor(seconds / 3600);
@@ -66,6 +75,7 @@ export function ProcessTrackingPanel({
   agents,
   tasksForAgent,
   messages,
+  taskStats,
   selectedAgentId,
   selectedTaskId,
   selectedTask,
@@ -84,14 +94,14 @@ export function ProcessTrackingPanel({
   const hasAgents = agents.length > 0;
   const hasTasks = tasksForAgent.length > 0;
   const canSubmit = Boolean(selectedTask) && input.trim().length > 0 && !isSending;
-  const latestIssueSummary = selectedTask?.latestErrorRetrySummary || selectedTask?.error || '-';
+  const latestIssueSummary = taskStats?.latest_error || selectedTask?.error || '-';
   const metrics = [
     [t('processTracking.metrics.status'), selectedTask ? t(`status.${selectedTask.status}`) : '-'],
-    [t('processTracking.metrics.runtime'), formatRuntime(selectedTask)],
-    [t('processTracking.metrics.totalTokens'), formatCount(selectedTask?.totalTokens, t('common.unknown'))],
-    [t('processTracking.metrics.toolCalls'), formatCount(selectedTask?.toolCallCount)],
-    [t('processTracking.metrics.lastEvent'), metricTime(selectedTask?.lastEventAt ?? selectedTask?.updatedAt)],
-    [t('processTracking.metrics.lastCheckpoint'), metricTime(selectedTask?.lastCheckpointAt)],
+    [t('processTracking.metrics.runtime'), formatRuntime(selectedTask, taskStats)],
+    [t('processTracking.metrics.totalTokens'), taskStats ? formatCount(taskStats.total_tokens, t('common.unknown')) : t('common.unknown')],
+    [t('processTracking.metrics.toolCalls'), formatCount(taskStats?.tool_call_count)],
+    [t('processTracking.metrics.lastEvent'), metricTime(taskStats?.last_event_at ?? selectedTask?.updatedAt)],
+    [t('processTracking.metrics.lastCheckpoint'), metricTime(taskStats?.last_checkpoint_at)],
   ];
 
   useEffect(() => {

@@ -2,7 +2,8 @@ import { startTransition, useEffect, useMemo, useState, type FormEvent } from 'r
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { getErrorDetail } from '@/api/client';
-import { consultTask } from '@/api/tasks';
+import { consultTask, getTaskStats } from '@/api/tasks';
+import type { ApiTaskExecutionStats } from '@/api/types';
 import {
   selectTrackingTask,
   sortTaskViewsByNewest,
@@ -25,6 +26,7 @@ export type ProcessTracking = {
   trackingInput: string;
   setTrackingInput: (value: string) => void;
   activeConsultMessages: WorkspaceConsultMessageView[];
+  selectedTaskStats: ApiTaskExecutionStats | null;
   isSendingTracking: boolean;
   consultSelectedTask: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 };
@@ -40,6 +42,7 @@ export function useProcessTracking({
   const [consultMessagesByTask, setConsultMessagesByTask] = useState<
     Record<string, WorkspaceConsultMessageView[]>
   >({});
+  const [statsByTask, setStatsByTask] = useState<Record<string, ApiTaskExecutionStats>>({});
   const [isSendingTracking, setIsSendingTracking] = useState(false);
 
   const tasksForSelectedAgent = useMemo(
@@ -63,6 +66,8 @@ export function useProcessTracking({
     () => (selectedTaskId ? consultMessagesByTask[selectedTaskId] ?? [] : []),
     [consultMessagesByTask, selectedTaskId],
   );
+
+  const selectedTaskStats = selectedTaskId ? statsByTask[selectedTaskId] ?? null : null;
 
   // Keep selectedAgentId pointing at a valid agent.
   useEffect(() => {
@@ -96,6 +101,26 @@ export function useProcessTracking({
       setTrackingInput('');
     });
   }, [selectedAgentId, selectedTaskId]);
+
+  useEffect(() => {
+    if (!selectedTaskId) return;
+
+    let isCurrent = true;
+    void getTaskStats(selectedTaskId).then(stats => {
+      if (!isCurrent) return;
+      startTransition(() => {
+        setStatsByTask(previous => ({ ...previous, [selectedTaskId]: stats }));
+      });
+    }).catch(error => {
+      toast.error(t('processTracking.loadStatsFailed'), {
+        description: getErrorDetail(error, t('processTracking.loadStatsFailedDescription')),
+      });
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [selectedTaskId, t]);
 
   const consultSelectedTask = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -162,6 +187,7 @@ export function useProcessTracking({
     trackingInput,
     setTrackingInput,
     activeConsultMessages,
+    selectedTaskStats,
     isSendingTracking,
     consultSelectedTask,
   };

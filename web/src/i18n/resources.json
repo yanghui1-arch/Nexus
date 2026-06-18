@@ -222,6 +222,8 @@
         "consultTask": "咨询所选任务",
         "consultFailed": "咨询智能体失败",
         "consultFailedDescription": "咨询所选任务失败。",
+        "loadStatsFailed": "加载任务统计失败",
+        "loadStatsFailedDescription": "无法加载所选任务的执行统计。",
         "metrics": {
           "status": "状态",
           "runtime": "运行时长",
@@ -617,6 +619,8 @@
         "consultTask": "Consult selected task",
         "consultFailed": "Failed to consult agent",
         "consultFailedDescription": "Failed to consult the selected task.",
+        "loadStatsFailed": "Failed to load task stats",
+        "loadStatsFailedDescription": "Could not load execution stats for the selected task.",
         "metrics": {
           "status": "Status",
           "runtime": "Runtime",

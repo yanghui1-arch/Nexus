@@ -6,6 +6,7 @@ import type {
   ApiTaskCreateRequest,
   ApiTaskMessage,
   ApiTaskCategory,
+  ApiTaskExecutionStats,
   ApiTaskStatus,
   ApiTaskSubmitResponse,
 } from '@/api/types';
@@ -53,4 +54,8 @@ export function getTaskMessages(
   return apiRequest<ApiTaskMessage[]>(
     buildApiPath(`/v1/tasks/${taskId}/messages`, { limit }),
   );
+}
+
+export function getTaskStats(taskId: string): Promise<ApiTaskExecutionStats> {
+  return apiRequest<ApiTaskExecutionStats>(`/v1/tasks/${taskId}/stats`);
 }
