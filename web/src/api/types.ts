@@ -56,12 +56,16 @@ export interface ApiTask {
   finished_at: string | null;
 }
 
-export interface ApiTaskMessage {
-  timestamp: string;
-  status: string;
-  description: string | null;
-  data: Record<string, unknown> | null;
-  meta: Record<string, unknown> | null;
+export interface ApiTaskExecutionEvent {
+  id: string;
+  task_id: string;
+  event_type: string;
+  agent: ApiAgentKind | null;
+  message: string | null;
+  safe_metadata: Record<string, unknown> | null;
+  tokens: number | null;
+  model: string | null;
+  created_at: string;
 }
 
 // Business-level proposal status. `approved` only means human approval happened;

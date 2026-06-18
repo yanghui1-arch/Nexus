@@ -2,8 +2,8 @@ import { startTransition, useEffect, useMemo, useState, type FormEvent } from 'r
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { getErrorDetail } from '@/api/client';
-import { consultTask, getTaskMessages } from '@/api/tasks';
-import type { ApiTaskMessage } from '@/api/types';
+import { consultTask, getTaskEvents } from '@/api/tasks';
+import type { ApiTaskExecutionEvent } from '@/api/types';
 import {
   selectTrackingTask,
   sortTaskViewsByNewest,
@@ -26,7 +26,7 @@ export type ProcessTracking = {
   trackingInput: string;
   setTrackingInput: (value: string) => void;
   activeConsultMessages: WorkspaceConsultMessageView[];
-  timelineEvents: ApiTaskMessage[];
+  timelineEvents: ApiTaskExecutionEvent[];
   isLoadingTimeline: boolean;
   isSendingTracking: boolean;
   consultSelectedTask: (event: FormEvent<HTMLFormElement>) => Promise<void>;
@@ -44,7 +44,7 @@ export function useProcessTracking({
     Record<string, WorkspaceConsultMessageView[]>
   >({});
   const [isSendingTracking, setIsSendingTracking] = useState(false);
-  const [timelineEvents, setTimelineEvents] = useState<ApiTaskMessage[]>([]);
+  const [timelineEvents, setTimelineEvents] = useState<ApiTaskExecutionEvent[]>([]);
   const [isLoadingTimeline, setIsLoadingTimeline] = useState(false);
 
   const tasksForSelectedAgent = useMemo(
@@ -112,7 +112,7 @@ export function useProcessTracking({
 
     let cancelled = false;
     setIsLoadingTimeline(true);
-    getTaskMessages(selectedTaskId)
+    getTaskEvents(selectedTaskId)
       .then(events => {
         if (!cancelled) setTimelineEvents(events);
       })

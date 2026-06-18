@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronsUpDown, SendHorizontal } from 'lucide-react';
-import type { ApiTaskMessage } from '@/api/types';
+import type { ApiTaskExecutionEvent } from '@/api/types';
 import { ExecutionTimeline } from '@/pages/process-tracking/components/ExecutionTimeline';
 import type {
   WorkspaceAgentOption,
@@ -29,7 +29,7 @@ type ProcessTrackingPanelProps = {
   agents: WorkspaceAgentOption[];
   tasksForAgent: WorkspaceTaskView[];
   messages: WorkspaceConsultMessageView[];
-  timelineEvents: ApiTaskMessage[];
+  timelineEvents: ApiTaskExecutionEvent[];
   isLoadingTimeline: boolean;
   selectedAgentId: string;
   selectedTaskId: string;
