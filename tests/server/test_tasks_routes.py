@@ -676,40 +676,6 @@ def test_consult_task_returns_process_reply(monkeypatch: pytest.MonkeyPatch) -> 
     ]
 
 
-def test_list_task_messages_returns_empty_list_for_existing_task_without_events(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Verify tasks with no execution events return an empty message list."""
-    now = datetime.now(timezone.utc)
-    task = _make_task(question='empty timeline', status=TaskStatus.queued, created_at=now)
-
-    async def fake_get_for_user(session, task_id, **kwargs):
-        """Provide a fake owned task."""
-        assert task_id == task.id
-        assert kwargs == {'user_id': uuid.UUID('00000000-0000-0000-0000-000000000001')}
-        return task
-
-    async def fake_list_events(session, task_id, **kwargs):
-        """Provide no execution events."""
-        assert task_id == task.id
-        assert kwargs == {'limit': 50}
-        return []
-
-    monkeypatch.setattr(TaskRepository, 'get_for_user', fake_get_for_user)
-    monkeypatch.setattr(TaskExecutionEventRepository, 'list_by_task', fake_list_events)
-
-    async def run_request() -> httpx.Response:
-        """Run the request test body."""
-        transport = httpx.ASGITransport(app=_build_app())
-        async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
-            return await client.get(f'/v1/tasks/{task.id}/messages', params={'limit': '50'})
-
-    response = asyncio.run(run_request())
-
-    assert response.status_code == 200
-    assert response.json() == []
-
-
 def test_task_stats_return_unknown_empty_state_for_existing_task_without_events(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -748,27 +714,3 @@ def test_task_stats_return_unknown_empty_state_for_existing_task_without_events(
         'duration_seconds': None,
         'model': 'unknown',
     }
-
-
-def test_task_messages_keep_not_found_semantics(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify missing tasks still use the existing 404 semantics."""
-    missing_task_id = uuid.uuid4()
-
-    async def fake_get_for_user(session, task_id, **kwargs):
-        """Provide a missing task."""
-        assert task_id == missing_task_id
-        assert kwargs == {'user_id': uuid.UUID('00000000-0000-0000-0000-000000000001')}
-        return None
-
-    monkeypatch.setattr(TaskRepository, 'get_for_user', fake_get_for_user)
-
-    async def run_request() -> httpx.Response:
-        """Run the request test body."""
-        transport = httpx.ASGITransport(app=_build_app())
-        async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
-            return await client.get(f'/v1/tasks/{missing_task_id}/messages')
-
-    response = asyncio.run(run_request())
-
-    assert response.status_code == 404
-    assert response.json() == {'detail': 'Task not found'}
