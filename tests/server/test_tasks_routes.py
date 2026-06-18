@@ -315,6 +315,88 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
     }
 
 
+def test_list_task_events_returns_timeline(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify list task events returns execution events for an owned task."""
+    now = datetime.now(timezone.utc)
+    task = _make_task(question="events", status=TaskStatus.running, created_at=now)
+    events = [
+        SimpleNamespace(
+            id=uuid.uuid4(),
+            task_id=task.id,
+            event_type="task_started",
+            agent=AgentName.sophie,
+            message="started",
+            safe_metadata={"phase": "setup"},
+            tokens=None,
+            model=None,
+            created_at=now,
+        ),
+        SimpleNamespace(
+            id=uuid.uuid4(),
+            task_id=task.id,
+            event_type="model_usage",
+            agent=None,
+            message=None,
+            safe_metadata=None,
+            tokens=42,
+            model="gpt-test",
+            created_at=now + timedelta(seconds=1),
+        ),
+    ]
+    captured: dict[str, Any] = {}
+
+    async def fake_get_for_user(session, task_id, **kwargs):
+        assert task_id == task.id
+        return task
+
+    async def fake_list_by_task(session, task_id, **kwargs):
+        captured["task_id"] = task_id
+        captured.update(kwargs)
+        return events
+
+    monkeypatch.setattr(TaskRepository, "get_for_user", fake_get_for_user)
+    monkeypatch.setattr(TaskExecutionEventRepository, "list_by_task", fake_list_by_task)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app())
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.get(f"/v1/tasks/{task.id}/events", params={"limit": "2"})
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["event_type"] for item in payload] == ["task_started", "model_usage"]
+    assert payload[0]["agent"] == "sophie"
+    assert payload[0]["safe_metadata"] == {"phase": "setup"}
+    assert payload[1]["tokens"] == 42
+    assert payload[1]["model"] == "gpt-test"
+    assert captured == {"task_id": task.id, "limit": 2}
+
+
+def test_list_task_events_hides_unowned_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify task event access follows task ownership checks."""
+    now = datetime.now(timezone.utc)
+    task = _make_task(question="foreign events", status=TaskStatus.running, created_at=now)
+
+    async def fake_get_for_user(session, task_id, **kwargs):
+        return None
+
+    list_mock = AsyncMock(return_value=[])
+    monkeypatch.setattr(TaskRepository, "get_for_user", fake_get_for_user)
+    monkeypatch.setattr(TaskExecutionEventRepository, "list_by_task", list_mock)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app())
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.get(f"/v1/tasks/{task.id}/events")
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 404
+    list_mock.assert_not_awaited()
+
+
 def test_list_task_work_items(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify list task work items."""
     now = datetime.now(timezone.utc)

@@ -19,6 +19,7 @@ from src.server.postgres.models import (
     FeatureRecord,
     FeatureStatus,
     TaskCategory,
+    TaskExecutionEventRecord,
     TaskRecord,
     TaskStatus,
     TaskWorkItemRecord,
@@ -276,6 +277,11 @@ class TaskSubmitResponse(BaseModel):
     status: TaskStatus
 
 
+class FeatureItemRetryTaskResponse(BaseModel):
+    feature_item: FeatureItemResponse
+    task: TaskSubmitResponse
+
+
 class TaskConsultResponse(BaseModel):
     task_id: uuid.UUID
     status: TaskStatus
@@ -344,6 +350,34 @@ class TaskResponse(BaseModel):
             updated_at=task.updated_at,
             started_at=task.started_at,
             finished_at=task.finished_at,
+        )
+
+
+class TaskExecutionEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    task_id: uuid.UUID
+    event_type: str
+    agent: str | None
+    message: str | None
+    safe_metadata: dict[str, Any] | None
+    tokens: int | None
+    model: str | None
+    created_at: datetime
+
+    @classmethod
+    def from_record(cls, event: TaskExecutionEventRecord) -> "TaskExecutionEventResponse":
+        return cls(
+            id=event.id,
+            task_id=event.task_id,
+            event_type=event.event_type,
+            agent=event.agent.value if event.agent is not None else None,
+            message=event.message,
+            safe_metadata=event.safe_metadata,
+            tokens=event.tokens,
+            model=event.model,
+            created_at=event.created_at,
         )
 
 

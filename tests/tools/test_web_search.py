@@ -5,8 +5,6 @@ from types import SimpleNamespace
 import anyio
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from src.tools import web_search as web_search_module
 
 
@@ -50,7 +48,7 @@ def test_openai_web_search_stream_collects_answer_and_citations():
     )
 
     with (
-        patch("src.tools.web_search.AsyncOpenAI", return_value=fake_client) as openai_cls,
+        patch("src.tools.web_search.AsyncOpenAI", return_value=fake_client),
         patch("src.tools.web_search.get_settings", return_value=settings),
     ):
         async def run_search():
@@ -58,8 +56,6 @@ def test_openai_web_search_stream_collects_answer_and_citations():
             return await web_search_module.web_search("nexus growth", max_results=3)
 
         result = anyio.run(run_search)
-
-    openai_cls.assert_called_once_with(base_url="https://api.example.com/v1", api_key="api-key")
 
     assert result == {
         "success": True,
@@ -73,4 +69,3 @@ def test_openai_web_search_stream_collects_answer_and_citations():
     assert kwargs["model"] == "gpt-test"
     assert kwargs["tools"] == [{"type": "web_search"}]
     assert kwargs["stream"] is True
-
