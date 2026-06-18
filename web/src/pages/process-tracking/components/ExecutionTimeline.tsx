@@ -13,8 +13,16 @@ type ExecutionTimelineProps = {
 const PROMINENT_EVENT_TYPES = new Set(['agent_finished', 'agent_failed', 'tool_call', 'tool_result']);
 const MUTED_EVENT_TYPES = new Set(['agent_started', 'agent_message']);
 
+function toolNames(event: ApiTaskExecutionEvent): string[] {
+  const tools = event.safe_metadata?.current_use_tool ?? event.safe_metadata?.tools ?? event.safe_metadata?.tool_names;
+  if (Array.isArray(tools)) {
+    return tools.map(tool => String(tool)).filter(Boolean);
+  }
+  return typeof tools === 'string' && tools ? [tools] : [];
+}
+
 function isToolEvent(event: ApiTaskExecutionEvent): boolean {
-  return event.event_type === 'tool_call' || event.event_type === 'tool_result';
+  return event.event_type === 'tool_call' || event.event_type === 'tool_result' || toolNames(event).length > 0;
 }
 
 function isFailedEvent(event: ApiTaskExecutionEvent): boolean {
@@ -22,7 +30,7 @@ function isFailedEvent(event: ApiTaskExecutionEvent): boolean {
 }
 
 function isProminent(event: ApiTaskExecutionEvent): boolean {
-  return PROMINENT_EVENT_TYPES.has(event.event_type);
+  return PROMINENT_EVENT_TYPES.has(event.event_type) || toolNames(event).length > 0;
 }
 
 function eventIcon(event: ApiTaskExecutionEvent) {
@@ -33,8 +41,8 @@ function eventIcon(event: ApiTaskExecutionEvent) {
 }
 
 function eventTitle(event: ApiTaskExecutionEvent): string {
-  const tools = event.safe_metadata?.tools ?? event.safe_metadata?.tool_names;
-  if (Array.isArray(tools) && tools.length > 0) {
+  const tools = toolNames(event);
+  if (tools.length > 0) {
     return `TOOL · ${tools.join(', ')}`;
   }
   return event.event_type;
