@@ -389,6 +389,32 @@ class TaskMessage(BaseModel):
     meta: dict[str, Any] | None = None
 
 
+class TaskExecutionStatsResponse(BaseModel):
+    event_count: int = 0
+    total_tokens: int = 0
+    first_event_at: datetime | None = None
+    last_event_at: datetime | None = None
+    duration_seconds: float | None = None
+    model: str = "unknown"
+
+    @classmethod
+    def from_events(cls, events: list[Any]) -> "TaskExecutionStatsResponse":
+        """Build task execution statistics, preserving an explicit empty state."""
+        if not events:
+            return cls()
+        first_event_at = min(event.created_at for event in events)
+        last_event_at = max(event.created_at for event in events)
+        models = {event.model for event in events if event.model}
+        return cls(
+            event_count=len(events),
+            total_tokens=sum(event.tokens or 0 for event in events),
+            first_event_at=first_event_at,
+            last_event_at=last_event_at,
+            duration_seconds=(last_event_at - first_event_at).total_seconds(),
+            model=models.pop() if len(models) == 1 else "unknown",
+        )
+
+
 class TaskWorkItemResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

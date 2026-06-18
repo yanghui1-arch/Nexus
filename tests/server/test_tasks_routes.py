@@ -674,3 +674,43 @@ def test_consult_task_returns_process_reply(monkeypatch: pytest.MonkeyPatch) -> 
         {'role': 'user', 'content': 'Original task request'},
         {'role': 'assistant', 'content': 'Checkpointed progress'},
     ]
+
+
+def test_task_stats_return_unknown_empty_state_for_existing_task_without_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify tasks with no execution events return zero/unknown statistics."""
+    now = datetime.now(timezone.utc)
+    task = _make_task(question='empty stats', status=TaskStatus.queued, created_at=now)
+
+    async def fake_get_for_user(session, task_id, **kwargs):
+        """Provide a fake owned task."""
+        assert task_id == task.id
+        assert kwargs == {'user_id': uuid.UUID('00000000-0000-0000-0000-000000000001')}
+        return task
+
+    async def fake_list_events(session, task_id, **kwargs):
+        """Provide no execution events."""
+        assert task_id == task.id
+        return []
+
+    monkeypatch.setattr(TaskRepository, 'get_for_user', fake_get_for_user)
+    monkeypatch.setattr(TaskExecutionEventRepository, 'list_by_task', fake_list_events)
+
+    async def run_request() -> httpx.Response:
+        """Run the request test body."""
+        transport = httpx.ASGITransport(app=_build_app())
+        async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
+            return await client.get(f'/v1/tasks/{task.id}/stats')
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 200
+    assert response.json() == {
+        'event_count': 0,
+        'total_tokens': 0,
+        'first_event_at': None,
+        'last_event_at': None,
+        'duration_seconds': None,
+        'model': 'unknown',
+    }

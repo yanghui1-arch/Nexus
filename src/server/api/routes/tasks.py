@@ -30,6 +30,8 @@ from src.server.schemas import (
     TaskConsultResponse,
     TaskCreateRequest,
     TaskExecutionEventResponse,
+    TaskExecutionStatsResponse,
+    TaskMessage,
     TaskResponse,
     TaskStatusUpdateRequest,
     TaskSubmitResponse,
@@ -130,6 +132,48 @@ async def list_tasks(
     return responses
 
 
+@router.get("/{task_id}/messages", response_model=list[TaskMessage])
+async def list_task_messages(
+    request: Request,
+    task_id: uuid.UUID,
+    limit: int = Query(default=200, ge=1, le=1000),
+    user: UserRecord = Depends(get_current_user),
+) -> list[TaskMessage]:
+    """List execution messages for a task owned by the current user."""
+    database: Database = request.app.state.database
+    async with database.session() as session:
+        task = await TaskRepository.get_for_user(session, task_id, user_id=user.id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        events = await TaskExecutionEventRepository.list_by_task(session, task_id, limit=limit)
+    return [
+        TaskMessage(
+            timestamp=event.created_at.isoformat(),
+            status=event.event_type,
+            description=event.message,
+            data=None,
+            meta=event.safe_metadata,
+        )
+        for event in events
+    ]
+
+
+@router.get("/{task_id}/stats", response_model=TaskExecutionStatsResponse)
+async def get_task_stats(
+    request: Request,
+    task_id: uuid.UUID,
+    user: UserRecord = Depends(get_current_user),
+) -> TaskExecutionStatsResponse:
+    """Return aggregate execution statistics for a task owned by the current user."""
+    database: Database = request.app.state.database
+    async with database.session() as session:
+        task = await TaskRepository.get_for_user(session, task_id, user_id=user.id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        events = await TaskExecutionEventRepository.list_by_task(session, task_id)
+    return TaskExecutionStatsResponse.from_events(events)
+
+
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(
     request: Request,
@@ -139,13 +183,10 @@ async def get_task(
     """Return one task owned by the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
-        task = await TaskRepository.get(session, task_id)
+        task = await TaskRepository.get_for_user(session, task_id, user_id=user.id)
         if task is None:
             raise HTTPException(status_code=404, detail="Task not found")
-        instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
         workspace = await WorkspaceRepository.get_by_agent_instance_id(session, task.agent_instance_id)
-    if instance is None or instance.user_id != user.id:
-        raise HTTPException(status_code=404, detail="Task not found")
     repo, project = _resolved_task_repo_project(task, workspace)
     return TaskResponse.from_record(task, repo=repo, project=project)
 

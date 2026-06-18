@@ -1917,6 +1917,26 @@ class GithubPullRequestFeedbackRepository:
         await session.commit()
 
 
+class TaskExecutionEventRepository:
+    @staticmethod
+    async def list_by_task(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+        *,
+        limit: int | None = None,
+    ) -> list[TaskExecutionEventRecord]:
+        """List execution events for a task timeline."""
+        query = (
+            select(TaskExecutionEventRecord)
+            .where(TaskExecutionEventRecord.task_id == task_id)
+            .order_by(TaskExecutionEventRecord.created_at.asc(), TaskExecutionEventRecord.id.asc())
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+
 class UserRepository:
     @staticmethod
     async def get(session: AsyncSession, user_id: uuid.UUID) -> UserRecord | None:
