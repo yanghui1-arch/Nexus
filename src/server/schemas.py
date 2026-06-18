@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Any
+from typing import Any, Protocol
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
@@ -389,6 +389,14 @@ class TaskMessage(BaseModel):
     meta: dict[str, Any] | None = None
 
 
+class TaskExecutionStatsEvent(Protocol):
+    event_type: str
+    message: str | None
+    tokens: int | None
+    model: str | None
+    created_at: datetime
+
+
 class TaskExecutionStatsResponse(BaseModel):
     event_count: int = 0
     total_tokens: int = 0
@@ -403,7 +411,7 @@ class TaskExecutionStatsResponse(BaseModel):
     @classmethod
     def from_events(
         cls,
-        events: list[Any],
+        events: list[TaskExecutionStatsEvent],
         *,
         task: TaskRecord | None = None,
     ) -> "TaskExecutionStatsResponse":
