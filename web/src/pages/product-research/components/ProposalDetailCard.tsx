@@ -21,7 +21,7 @@ import {
 } from '../utils';
 import { ProposalPlanList } from './ProposalPlanList';
 
-type DetailTabKey = 'decision-brief' | 'plan-list';
+type DetailTabKey = 'decision-brief' | 'description' | 'plan-list';
 
 type ProposalDetailCardProps = {
   activeReview: ReviewActionState;
@@ -194,6 +194,9 @@ export function ProposalDetailCard({
           <TabsTrigger value="decision-brief">
             {t('productResearch.decisionBrief')}
           </TabsTrigger>
+          <TabsTrigger value="description">
+            {t('common.description')}
+          </TabsTrigger>
           <TabsTrigger value="plan-list" disabled={!canOpenPlanList}>
             {t('productResearch.planList')}
           </TabsTrigger>
@@ -217,6 +220,16 @@ export function ProposalDetailCard({
           />
         </TabsContent>
 
+
+        <TabsContent value="description" className="text-sm leading-6">
+          {proposal.answer?.trim() ? (
+            <MarkdownContent content={proposal.answer} />
+          ) : (
+            <p className="text-muted-foreground">
+              {t('productResearch.decisionBriefUnavailable')}
+            </p>
+          )}
+        </TabsContent>
 
         <TabsContent value="plan-list">
           <ProposalPlanList features={relatedFeatures} />
