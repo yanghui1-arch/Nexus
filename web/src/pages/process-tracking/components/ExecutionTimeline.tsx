@@ -40,12 +40,16 @@ function eventIcon(event: ApiTaskExecutionEvent) {
   return Sparkles;
 }
 
+function formatEventType(type: string): string {
+  return type.replaceAll('_', ' ');
+}
+
 function eventTitle(event: ApiTaskExecutionEvent): string {
   const tools = toolNames(event);
   if (tools.length > 0) {
-    return `TOOL · ${tools.join(', ')}`;
+    return `Tool · ${tools.join(', ')}`;
   }
-  return event.event_type;
+  return formatEventType(event.event_type);
 }
 
 export function ExecutionTimeline({ events, isLoading }: ExecutionTimelineProps) {
@@ -81,7 +85,7 @@ export function ExecutionTimeline({ events, isLoading }: ExecutionTimelineProps)
                 </span>
                 <div className={cn('rounded-lg border px-3 py-2', prominent ? 'bg-card shadow-sm' : 'bg-muted/30 opacity-75', failed && 'border-destructive/40 bg-destructive/10')}>
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide">{eventTitle(event)}</p>
+                    <p className="text-sm text-foreground">{eventTitle(event)}</p>
                     <time className="shrink-0 text-[11px] text-muted-foreground">{timeAgo(event.created_at)}</time>
                   </div>
                   {event.message ? <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{event.message}</p> : null}
