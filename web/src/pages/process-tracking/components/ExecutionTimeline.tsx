@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Hammer, Save, Sparkles } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Hammer, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { ApiTaskExecutionEvent } from '@/api/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -10,36 +10,24 @@ type ExecutionTimelineProps = {
   isLoading: boolean;
 };
 
-const PROMINENT_EVENT_KEYWORDS = ['SAVE_CHECKPOINT', 'COMPLETED', 'FAILED'];
-const MUTED_EVENT_TYPES = new Set(['START', 'PROCESS']);
-
-function eventType(event: ApiTaskExecutionEvent): string {
-  return event.event_type.toUpperCase();
-}
+const PROMINENT_EVENT_TYPES = new Set(['agent_finished', 'agent_failed', 'tool_call', 'tool_result']);
+const MUTED_EVENT_TYPES = new Set(['agent_started', 'agent_message']);
 
 function isToolEvent(event: ApiTaskExecutionEvent): boolean {
-  const type = eventType(event);
-  return (
-    type.includes('TOOL') ||
-    Array.isArray(event.safe_metadata?.tools) ||
-    Array.isArray(event.safe_metadata?.tool_names)
-  );
+  return event.event_type === 'tool_call' || event.event_type === 'tool_result';
 }
 
 function isFailedEvent(event: ApiTaskExecutionEvent): boolean {
-  return eventType(event).includes('FAILED');
+  return event.event_type === 'agent_failed';
 }
 
 function isProminent(event: ApiTaskExecutionEvent): boolean {
-  const type = eventType(event);
-  return PROMINENT_EVENT_KEYWORDS.some(keyword => type.includes(keyword)) || isToolEvent(event);
+  return PROMINENT_EVENT_TYPES.has(event.event_type);
 }
 
 function eventIcon(event: ApiTaskExecutionEvent) {
-  const type = eventType(event);
-  if (type.includes('FAILED')) return AlertCircle;
-  if (type.includes('COMPLETED')) return CheckCircle2;
-  if (type.includes('SAVE_CHECKPOINT')) return Save;
+  if (event.event_type === 'agent_failed') return AlertCircle;
+  if (event.event_type === 'agent_finished') return CheckCircle2;
   if (isToolEvent(event)) return Hammer;
   return Sparkles;
 }
@@ -54,7 +42,7 @@ function eventTitle(event: ApiTaskExecutionEvent): string {
 
 export function ExecutionTimeline({ events, isLoading }: ExecutionTimelineProps) {
   const { t } = useTranslation();
-  const visibleEvents = events.filter(event => isProminent(event) || !MUTED_EVENT_TYPES.has(eventType(event)));
+  const visibleEvents = events.filter(event => isProminent(event) || !MUTED_EVENT_TYPES.has(event.event_type));
   const mutedCount = events.length - visibleEvents.length;
 
   return (
