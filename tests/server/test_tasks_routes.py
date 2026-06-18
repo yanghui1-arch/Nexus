@@ -683,9 +683,10 @@ def test_list_task_messages_returns_empty_list_for_existing_task_without_events(
     now = datetime.now(timezone.utc)
     task = _make_task(question='empty timeline', status=TaskStatus.queued, created_at=now)
 
-    async def fake_get(session, task_id, **kwargs):
-        """Provide a fake get."""
+    async def fake_get_for_user(session, task_id, **kwargs):
+        """Provide a fake owned task."""
         assert task_id == task.id
+        assert kwargs == {'user_id': uuid.UUID('00000000-0000-0000-0000-000000000001')}
         return task
 
     async def fake_list_events(session, task_id, **kwargs):
@@ -694,8 +695,7 @@ def test_list_task_messages_returns_empty_list_for_existing_task_without_events(
         assert kwargs == {'limit': 50}
         return []
 
-    monkeypatch.setattr(TaskRepository, 'get', fake_get)
-    monkeypatch.setattr(AgentInstanceRepository, 'get', _fake_get_current_user_instance)
+    monkeypatch.setattr(TaskRepository, 'get_for_user', fake_get_for_user)
     monkeypatch.setattr(TaskExecutionEventRepository, 'list_by_task', fake_list_events)
 
     async def run_request() -> httpx.Response:
@@ -717,9 +717,10 @@ def test_task_stats_return_unknown_empty_state_for_existing_task_without_events(
     now = datetime.now(timezone.utc)
     task = _make_task(question='empty stats', status=TaskStatus.queued, created_at=now)
 
-    async def fake_get(session, task_id, **kwargs):
-        """Provide a fake get."""
+    async def fake_get_for_user(session, task_id, **kwargs):
+        """Provide a fake owned task."""
         assert task_id == task.id
+        assert kwargs == {'user_id': uuid.UUID('00000000-0000-0000-0000-000000000001')}
         return task
 
     async def fake_list_events(session, task_id, **kwargs):
@@ -727,8 +728,7 @@ def test_task_stats_return_unknown_empty_state_for_existing_task_without_events(
         assert task_id == task.id
         return []
 
-    monkeypatch.setattr(TaskRepository, 'get', fake_get)
-    monkeypatch.setattr(AgentInstanceRepository, 'get', _fake_get_current_user_instance)
+    monkeypatch.setattr(TaskRepository, 'get_for_user', fake_get_for_user)
     monkeypatch.setattr(TaskExecutionEventRepository, 'list_by_task', fake_list_events)
 
     async def run_request() -> httpx.Response:
@@ -754,12 +754,13 @@ def test_task_messages_keep_not_found_semantics(monkeypatch: pytest.MonkeyPatch)
     """Verify missing tasks still use the existing 404 semantics."""
     missing_task_id = uuid.uuid4()
 
-    async def fake_get(session, task_id, **kwargs):
+    async def fake_get_for_user(session, task_id, **kwargs):
         """Provide a missing task."""
         assert task_id == missing_task_id
+        assert kwargs == {'user_id': uuid.UUID('00000000-0000-0000-0000-000000000001')}
         return None
 
-    monkeypatch.setattr(TaskRepository, 'get', fake_get)
+    monkeypatch.setattr(TaskRepository, 'get_for_user', fake_get_for_user)
 
     async def run_request() -> httpx.Response:
         """Run the request test body."""

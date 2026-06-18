@@ -58,17 +58,6 @@ def _resolved_task_repo_project(task, workspace) -> tuple[str | None, str | None
     return repo, project
 
 
-async def _require_owned_task(session, task_id: uuid.UUID, user: UserRecord):
-    """Return a task when it exists and belongs to the current user."""
-    task = await TaskRepository.get(session, task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
-    instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
-    if instance is None or instance.user_id != user.id:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return task
-
-
 @router.post("", response_model=TaskSubmitResponse, status_code=202)
 async def create_task(
     request: Request,
@@ -153,7 +142,9 @@ async def list_task_messages(
     """List execution messages for a task owned by the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
-        await _require_owned_task(session, task_id, user)
+        task = await TaskRepository.get_for_user(session, task_id, user_id=user.id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
         events = await TaskExecutionEventRepository.list_by_task(session, task_id, limit=limit)
     return [
         TaskMessage(
@@ -176,7 +167,9 @@ async def get_task_stats(
     """Return aggregate execution statistics for a task owned by the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
-        await _require_owned_task(session, task_id, user)
+        task = await TaskRepository.get_for_user(session, task_id, user_id=user.id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
         events = await TaskExecutionEventRepository.list_by_task(session, task_id)
     return TaskExecutionStatsResponse.from_events(events)
 
@@ -190,7 +183,9 @@ async def get_task(
     """Return one task owned by the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
-        task = await _require_owned_task(session, task_id, user)
+        task = await TaskRepository.get_for_user(session, task_id, user_id=user.id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
         workspace = await WorkspaceRepository.get_by_agent_instance_id(session, task.agent_instance_id)
     repo, project = _resolved_task_repo_project(task, workspace)
     return TaskResponse.from_record(task, repo=repo, project=project)
