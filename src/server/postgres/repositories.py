@@ -957,7 +957,7 @@ class TaskRepository:
         *,
         user_id: uuid.UUID,
     ) -> TaskRecord | None:
-        """Return a task only when it belongs to the given user."""
+        """Return a task owned by the user, even if its agent instance is inactive/expired."""
         result = await session.execute(
             select(TaskRecord)
             .join(AgentInstanceRecord, AgentInstanceRecord.id == TaskRecord.agent_instance_id)
