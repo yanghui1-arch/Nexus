@@ -161,11 +161,8 @@ async def list_task_events(
     """List execution events for a task owned by the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
-        task = await TaskRepository.get(session, task_id)
+        task = await TaskRepository.get_for_user(session, task_id, user_id=user.id)
         if task is None:
-            raise HTTPException(status_code=404, detail="Task not found")
-        instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
-        if instance is None or instance.user_id != user.id:
             raise HTTPException(status_code=404, detail="Task not found")
         events = await TaskExecutionEventRepository.list_by_task(session, task_id, limit=limit)
     return [TaskExecutionEventResponse.from_record(event) for event in events]
@@ -180,11 +177,8 @@ async def get_task_metrics(
     """Return aggregated observability metrics for a task."""
     database: Database = request.app.state.database
     async with database.session() as session:
-        task = await TaskRepository.get(session, task_id)
+        task = await TaskRepository.get_for_user(session, task_id, user_id=user.id)
         if task is None:
-            raise HTTPException(status_code=404, detail="Task not found")
-        instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
-        if instance is None or instance.user_id != user.id:
             raise HTTPException(status_code=404, detail="Task not found")
         event_metrics = await TaskExecutionEventRepository.metrics_by_task(session, task_id)
     return TaskMetricsResponse.from_task(task, event_metrics=event_metrics)
@@ -302,14 +296,15 @@ async def consult_task(
         max_attempts=settings.max_attempts,
         github_token=github_token,
     )
-
     try:
         reply = await agent.report_current_process(
-            checkpoint=task.checkpoint,
+            checkpoint=task.checkpoint or [],
             user_message=payload.message,
         )
     finally:
-        await agent.close()
+        close = getattr(agent, "close", None)
+        if close is not None:
+            await close()
 
     return TaskConsultResponse(
         task_id=task.id,

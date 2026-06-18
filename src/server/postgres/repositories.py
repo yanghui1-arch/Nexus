@@ -3,18 +3,20 @@ from __future__ import annotations
 import uuid
 from decimal import Decimal
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal, TypeAlias, TypedDict
 
 from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.exception.execution_event import ExecutionEventWriteError
 from src.server.postgres.models import (
     AgentInstanceRecord,
     AgentName,
     AgentPurchaseRecord,
     AuthSessionRecord,
+    ExecutionEventRecord,
     FeatureItemRecord,
     FeatureItemStatus,
     FeatureRecord,
@@ -795,19 +797,27 @@ class FeatureItemRepository:
         item_id: uuid.UUID,
         *,
         task_id: uuid.UUID,
+        require_unassigned: bool = True,
     ) -> FeatureItemRecord | None:
-        """Assign a task to a feature item."""
+        """Assign a task to a feature item.
+
+        ``require_unassigned`` keeps the normal product workflow poller atomic: it
+        only claims pending items that still have no task. Retry paths pass
+        ``False`` because a failed item already points at the failed task and must
+        be re-attached to the newly submitted replacement task.
+        """
         now = utc_now()
+        conditions = [FeatureItemRecord.id == item_id]
+        if require_unassigned:
+            conditions.append(FeatureItemRecord.task_id.is_(None))
         stmt = (
             update(FeatureItemRecord)
-            .where(
-                FeatureItemRecord.id == item_id,
-                FeatureItemRecord.task_id.is_(None),
-            )
+            .where(*conditions)
             .values(
                 task_id=task_id,
                 status=FeatureItemStatus.in_progress,
                 started_at=now,
+                finished_at=None,
                 updated_at=now,
             )
             .returning(FeatureItemRecord)
@@ -888,53 +898,6 @@ class FeatureItemRepository:
         return items
 
 
-class TaskExecutionEventRepository:
-    @staticmethod
-    async def list_by_task(
-        session: AsyncSession,
-        task_id: uuid.UUID,
-        *,
-        limit: int = 200,
-    ) -> list[TaskExecutionEventRecord]:
-        """List execution events for a task in timeline order."""
-        query = (
-            select(TaskExecutionEventRecord)
-            .where(TaskExecutionEventRecord.task_id == task_id)
-            .order_by(TaskExecutionEventRecord.created_at.asc(), TaskExecutionEventRecord.id.asc())
-            .limit(limit)
-        )
-        result = await session.execute(query)
-        return list(result.scalars().all())
-
-    @staticmethod
-    async def metrics_by_task(session: AsyncSession, task_id: uuid.UUID) -> dict[str, Any]:
-        """Return aggregate execution metrics for one task."""
-        event_type_lower = func.lower(TaskExecutionEventRecord.event_type)
-        metrics_result = await session.execute(
-            select(
-                func.coalesce(func.sum(TaskExecutionEventRecord.tokens), 0),
-                func.count(TaskExecutionEventRecord.id),
-                func.count(TaskExecutionEventRecord.id).filter(event_type_lower.like("%tool%")),
-                func.max(TaskExecutionEventRecord.created_at),
-            ).where(TaskExecutionEventRecord.task_id == task_id)
-        )
-        total_tokens, event_count, tool_call_count, last_event_at = metrics_result.one()
-
-        error_result = await session.execute(
-            select(TaskExecutionEventRecord.message)
-            .where(TaskExecutionEventRecord.task_id == task_id, event_type_lower.like("%error%"))
-            .order_by(TaskExecutionEventRecord.created_at.desc())
-            .limit(1)
-        )
-        return {
-            "total_tokens": total_tokens,
-            "event_count": event_count,
-            "tool_call_count": tool_call_count,
-            "last_event_at": last_event_at,
-            "latest_error": error_result.scalar_one_or_none(),
-        }
-
-
 class TaskRepository:
     @staticmethod
     async def create_pending(
@@ -994,6 +957,21 @@ class TaskRepository:
     async def get(session: AsyncSession, task_id: uuid.UUID) -> TaskRecord | None:
         """Return a record by identifier."""
         return await session.get(TaskRecord, task_id)
+
+    @staticmethod
+    async def get_for_user(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+        *,
+        user_id: uuid.UUID,
+    ) -> TaskRecord | None:
+        """Return a task owned by the user, even if its agent instance is inactive/expired."""
+        result = await session.execute(
+            select(TaskRecord)
+            .join(AgentInstanceRecord, AgentInstanceRecord.id == TaskRecord.agent_instance_id)
+            .where(TaskRecord.id == task_id, AgentInstanceRecord.user_id == user_id)
+        )
+        return result.scalar_one_or_none()
 
     @staticmethod
     async def list_existing_ids(
@@ -1347,6 +1325,157 @@ class TaskRepository:
         await session.commit()
         await session.refresh(task)
         return task
+
+
+ExecutionEventType: TypeAlias = Literal[
+    "agent_started",
+    "agent_finished",
+    "agent_failed",
+    "agent_message",
+    "tool_call",
+    "tool_result",
+]
+
+
+class ExecutionEventAggregateData(TypedDict):
+    """Precomputed task execution-event summary for dashboards and API responses."""
+
+    task_id: uuid.UUID
+    total_count: int
+    counts_by_type: dict[str, int]
+    latest_event: ExecutionEventRecord | None
+
+
+class ExecutionEventRepository:
+    @staticmethod
+    async def create(
+        session: AsyncSession,
+        *,
+        task_id: uuid.UUID,
+        event_type: ExecutionEventType,
+        message: str | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> ExecutionEventRecord:
+        """Persist an execution event for a task.
+
+        ``event_type`` is a stable category constrained by ``ExecutionEventType``.
+        Add a new literal value there before introducing a new event category.
+        Aggregate queries group events by the exact string written.
+        """
+        event = ExecutionEventRecord(
+            task_id=task_id,
+            event_type=event_type,
+            message=message,
+            payload=payload,
+        )
+        session.add(event)
+        try:
+            await session.commit()
+            await session.refresh(event)
+        except Exception as exc:
+            await session.rollback()
+            raise ExecutionEventWriteError("Failed to persist execution event") from exc
+        return event
+
+    @staticmethod
+    async def list_by_task(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[ExecutionEventRecord]:
+        """List events for a task in chronological order."""
+        query = (
+            select(ExecutionEventRecord)
+            .where(ExecutionEventRecord.task_id == task_id)
+            .order_by(ExecutionEventRecord.created_at.asc(), ExecutionEventRecord.id.asc())
+            .offset(max(offset, 0))
+            .limit(max(limit, 0))
+        )
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def get_task_aggregate_data(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+    ) -> ExecutionEventAggregateData:
+        """Return precomputed event summary data for task aggregate statistics.
+
+        Consumers use this to render task-level execution metrics without loading
+        the whole event timeline: total event count, counts grouped by event type,
+        and the latest event for status/last-activity displays.
+        """
+        counts_query = (
+            select(ExecutionEventRecord.event_type, func.count(ExecutionEventRecord.id))
+            .where(ExecutionEventRecord.task_id == task_id)
+            .group_by(ExecutionEventRecord.event_type)
+        )
+        counts_result = await session.execute(counts_query)
+        total_query = select(func.count(ExecutionEventRecord.id)).where(ExecutionEventRecord.task_id == task_id)
+        total = int((await session.execute(total_query)).scalar_one())
+        latest_query = (
+            select(ExecutionEventRecord)
+            .where(ExecutionEventRecord.task_id == task_id)
+            .order_by(ExecutionEventRecord.created_at.desc(), ExecutionEventRecord.id.desc())
+            .limit(1)
+        )
+        latest = (await session.execute(latest_query)).scalar_one_or_none()
+        return {
+            "task_id": task_id,
+            "total_count": total,
+            "counts_by_type": {event_type: int(count) for event_type, count in counts_result.all()},
+            "latest_event": latest,
+        }
+
+
+class TaskExecutionEventRepository:
+    @staticmethod
+    async def list_by_task(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+        *,
+        limit: int = 200,
+    ) -> list[TaskExecutionEventRecord]:
+        """List execution events for a task in timeline order."""
+        query = (
+            select(TaskExecutionEventRecord)
+            .where(TaskExecutionEventRecord.task_id == task_id)
+            .order_by(TaskExecutionEventRecord.created_at.asc(), TaskExecutionEventRecord.id.asc())
+            .limit(limit)
+        )
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+
+    @staticmethod
+    async def metrics_by_task(session: AsyncSession, task_id: uuid.UUID) -> dict[str, Any]:
+        """Return aggregate execution metrics for one task."""
+        event_type_lower = func.lower(TaskExecutionEventRecord.event_type)
+        metrics_result = await session.execute(
+            select(
+                func.coalesce(func.sum(TaskExecutionEventRecord.tokens), 0),
+                func.count(TaskExecutionEventRecord.id),
+                func.count(TaskExecutionEventRecord.id).filter(event_type_lower.like("%tool%")),
+                func.max(TaskExecutionEventRecord.created_at),
+            ).where(TaskExecutionEventRecord.task_id == task_id)
+        )
+        total_tokens, event_count, tool_call_count, last_event_at = metrics_result.one()
+
+        error_result = await session.execute(
+            select(TaskExecutionEventRecord.message)
+            .where(TaskExecutionEventRecord.task_id == task_id, event_type_lower.like("%error%"))
+            .order_by(TaskExecutionEventRecord.created_at.desc())
+            .limit(1)
+        )
+        return {
+            "total_tokens": total_tokens,
+            "event_count": event_count,
+            "tool_call_count": tool_call_count,
+            "last_event_at": last_event_at,
+            "latest_error": error_result.scalar_one_or_none(),
+        }
 
 
 class TaskWorkItemRepository:

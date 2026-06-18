@@ -70,3 +70,34 @@ async def test_task_repository_filters_by_agent_instance_user(db_session):
     tasks = await TaskRepository.list(db_session, user_id=owner.id)
     assert [task.id for task in tasks] == [owner_task.id]
     assert await TaskRepository.get(db_session, owner_task.id) == owner_task
+
+
+@pytest.mark.asyncio
+async def test_task_repository_get_for_user_allows_inactive_expired_agent_instances(db_session):
+    """Verify historical task lookup is not gated on active agent entitlements."""
+    owner = await UserRepository.upsert_github_user(db_session, github_id="scope-4", github_login="expired", email=None)
+    other = await UserRepository.upsert_github_user(db_session, github_id="scope-5", github_login="other-expired", email=None)
+    expired_instance = AgentInstanceRecord(
+        user_id=owner.id,
+        agent=AgentName.tela,
+        client_id="expired-owner",
+        is_active=False,
+        expires_at=utc_now() - timedelta(days=1),
+    )
+    db_session.add(expired_instance)
+    await db_session.commit()
+    await db_session.refresh(expired_instance)
+
+    task = await TaskRepository.create(
+        db_session,
+        agent=AgentName.tela,
+        agent_instance_id=expired_instance.id,
+        category=TaskCategory.coding,
+        question="historical task",
+        repo=None,
+        project=None,
+        external_issue_url=None,
+    )
+
+    assert await TaskRepository.get_for_user(db_session, task.id, user_id=owner.id) == task
+    assert await TaskRepository.get_for_user(db_session, task.id, user_id=other.id) is None

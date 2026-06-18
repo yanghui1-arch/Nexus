@@ -82,11 +82,21 @@ export type ApiFeatureStatus =
 export type ApiFeatureItemStatus =
   | 'pending'
   | 'in_progress'
+  | 'failed'
   | 'completed'
   | 'closed';
 
 export interface ApiProductProposalStatusUpdateRequest {
   status: Extract<ApiProductProposalStatus, 'approved' | 'rejected' | 'planned'>;
+}
+
+export interface ApiFeatureItemRetryTaskRequest {
+  reason?: string | null;
+}
+
+export interface ApiFeatureItemRetryTaskResponse {
+  feature_item: ApiFeatureItem;
+  task: ApiTaskSubmitResponse;
 }
 
 export interface ApiProductProposal {

@@ -316,32 +316,45 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
 
 
 def test_list_task_events_returns_timeline(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify an owned task returns execution events in API shape."""
+    """Verify list task events returns execution events for an owned task."""
     now = datetime.now(timezone.utc)
     task = _make_task(question="events", status=TaskStatus.running, created_at=now)
-    event = SimpleNamespace(
-        id=uuid.uuid4(),
-        task_id=task.id,
-        event_type="task_started",
-        agent=AgentName.sophie,
-        message="started",
-        safe_metadata={"phase": "setup"},
-        tokens=42,
-        model="gpt-test",
-        created_at=now,
-    )
+    events = [
+        SimpleNamespace(
+            id=uuid.uuid4(),
+            task_id=task.id,
+            event_type="task_started",
+            agent=AgentName.sophie,
+            message="started",
+            safe_metadata={"phase": "setup"},
+            tokens=None,
+            model=None,
+            created_at=now,
+        ),
+        SimpleNamespace(
+            id=uuid.uuid4(),
+            task_id=task.id,
+            event_type="model_usage",
+            agent=None,
+            message=None,
+            safe_metadata=None,
+            tokens=42,
+            model="gpt-test",
+            created_at=now + timedelta(seconds=1),
+        ),
+    ]
+    captured: dict[str, Any] = {}
 
-    async def fake_get(session, task_id, **kwargs):
+    async def fake_get_for_user(session, task_id, **kwargs):
         assert task_id == task.id
         return task
 
     async def fake_list_by_task(session, task_id, **kwargs):
-        assert task_id == task.id
-        assert kwargs == {"limit": 2}
-        return [event]
+        captured["task_id"] = task_id
+        captured.update(kwargs)
+        return events
 
-    monkeypatch.setattr(TaskRepository, "get", fake_get)
-    monkeypatch.setattr(AgentInstanceRepository, "get", _fake_get_current_user_instance)
+    monkeypatch.setattr(TaskRepository, "get_for_user", fake_get_for_user)
     monkeypatch.setattr(TaskExecutionEventRepository, "list_by_task", fake_list_by_task)
 
     async def run_request() -> httpx.Response:
@@ -350,20 +363,22 @@ def test_list_task_events_returns_timeline(monkeypatch: pytest.MonkeyPatch) -> N
             return await client.get(f"/v1/tasks/{task.id}/events", params={"limit": "2"})
 
     response = asyncio.run(run_request())
+
     assert response.status_code == 200
     payload = response.json()
-    assert payload[0]["event_type"] == "task_started"
+    assert [item["event_type"] for item in payload] == ["task_started", "model_usage"]
     assert payload[0]["agent"] == "sophie"
     assert payload[0]["safe_metadata"] == {"phase": "setup"}
-    assert payload[0]["tokens"] == 42
+    assert payload[1]["tokens"] == 42
+    assert payload[1]["model"] == "gpt-test"
+    assert captured == {"task_id": task.id, "limit": 2}
 
 
 def test_list_task_events_returns_empty_for_task_without_events(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify an existing task with no events returns an empty timeline."""
     task = _make_task(question="no events", status=TaskStatus.queued, created_at=datetime.now(timezone.utc))
 
-    monkeypatch.setattr(TaskRepository, "get", AsyncMock(return_value=task))
-    monkeypatch.setattr(AgentInstanceRepository, "get", _fake_get_current_user_instance)
+    monkeypatch.setattr(TaskRepository, "get_for_user", AsyncMock(return_value=task))
     monkeypatch.setattr(TaskExecutionEventRepository, "list_by_task", AsyncMock(return_value=[]))
 
     async def run_request() -> httpx.Response:
@@ -376,10 +391,10 @@ def test_list_task_events_returns_empty_for_task_without_events(monkeypatch: pyt
     assert response.json() == []
 
 
-def test_list_task_events_returns_404_for_missing_task(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify event access preserves missing task semantics."""
+def test_list_task_events_hides_unowned_or_missing_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify task event access follows task ownership and missing-task checks."""
     list_mock = AsyncMock(return_value=[])
-    monkeypatch.setattr(TaskRepository, "get", AsyncMock(return_value=None))
+    monkeypatch.setattr(TaskRepository, "get_for_user", AsyncMock(return_value=None))
     monkeypatch.setattr(TaskExecutionEventRepository, "list_by_task", list_mock)
 
     async def run_request() -> httpx.Response:
@@ -388,6 +403,7 @@ def test_list_task_events_returns_404_for_missing_task(monkeypatch: pytest.Monke
             return await client.get(f"/v1/tasks/{uuid.uuid4()}/events")
 
     response = asyncio.run(run_request())
+
     assert response.status_code == 404
     list_mock.assert_not_awaited()
 
@@ -401,8 +417,7 @@ def test_get_task_metrics_returns_failure_event_details(monkeypatch: pytest.Monk
     task.updated_at = now - timedelta(minutes=3)
     metrics = {"total_tokens": 123, "event_count": 5, "tool_call_count": 2, "latest_error": "tool failed"}
 
-    monkeypatch.setattr(TaskRepository, "get", AsyncMock(return_value=task))
-    monkeypatch.setattr(AgentInstanceRepository, "get", _fake_get_current_user_instance)
+    monkeypatch.setattr(TaskRepository, "get_for_user", AsyncMock(return_value=task))
     monkeypatch.setattr(TaskExecutionEventRepository, "metrics_by_task", AsyncMock(return_value=metrics))
 
     async def run_request() -> httpx.Response:
@@ -417,6 +432,23 @@ def test_get_task_metrics_returns_failure_event_details(monkeypatch: pytest.Monk
     assert payload["total_tokens"] == 123
     assert payload["duration"] == 300.0
     assert payload["latest_error"] == "tool failed"
+
+
+def test_get_task_metrics_returns_404_for_missing_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify missing task metrics are hidden as not found."""
+    metrics_mock = AsyncMock(return_value={})
+    monkeypatch.setattr(TaskRepository, "get_for_user", AsyncMock(return_value=None))
+    monkeypatch.setattr(TaskExecutionEventRepository, "metrics_by_task", metrics_mock)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app())
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.get(f"/v1/tasks/{uuid.uuid4()}/metrics")
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 404
+    metrics_mock.assert_not_awaited()
 
 
 def test_observability_routes_require_auth_token() -> None:

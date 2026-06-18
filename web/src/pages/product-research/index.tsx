@@ -10,6 +10,7 @@ import {
 import { toast } from 'sonner';
 import { getErrorDetail } from '@/api/client';
 import {
+  retryProductFeatureItemTask,
   retryProductProposalPlanning,
   updateProductProposalStatus,
 } from '@/api/product';
@@ -67,6 +68,7 @@ export default function ProductResearchPage() {
   const [featurePage, setFeaturePage] = useState(1);
   const [activeReview, setActiveReview] = useState<ReviewActionState>(null);
   const [recoveringPlanningProposalId, setRecoveringPlanningProposalId] = useState<string | null>(null);
+  const [retryingFeatureItemId, setRetryingFeatureItemId] = useState<string | null>(null);
 
   const isFeatureRoute = location.pathname.startsWith('/product-research/features');
   const viewMode = isFeatureRoute ? 'features' : 'proposals';
@@ -204,6 +206,31 @@ export default function ProductResearchPage() {
     }
   }
 
+  async function handleRetryFeatureItem(featureItemId: string): Promise<void> {
+    startTransition(() => {
+      setRetryingFeatureItemId(featureItemId);
+    });
+
+    try {
+      await retryProductFeatureItemTask(featureItemId, {
+        reason: 'User requested retry from proposal plan list.',
+      });
+      toast.success(t('productResearch.workItemRetryStarted'));
+      await reloadSnapshot('mutation');
+    } catch (error) {
+      toast.error(t('productResearch.workItemRetryFailed'), {
+        description: getErrorDetail(
+          error,
+          t('productResearch.workItemRetryFailedDescription'),
+        ),
+      });
+    } finally {
+      startTransition(() => {
+        setRetryingFeatureItemId(null);
+      });
+    }
+  }
+
   async function handleRecoverPlanning(currentProposalId: string): Promise<void> {
     startTransition(() => {
       setRecoveringPlanningProposalId(currentProposalId);
@@ -258,7 +285,9 @@ export default function ProductResearchPage() {
             activeReview={activeReview}
             onReview={handleReview}
             onRecoverPlanning={handleRecoverPlanning}
+            onRetryFeatureItem={handleRetryFeatureItem}
             recoveringPlanning={recoveringPlanningProposalId === selectedProposal.id}
+            retryingFeatureItemId={retryingFeatureItemId}
           />
         )}
       </div>

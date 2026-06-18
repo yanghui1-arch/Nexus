@@ -1,6 +1,8 @@
 import { apiRequest, buildApiPath } from '@/api/client';
 import type {
   ApiFeature,
+  ApiFeatureItemRetryTaskRequest,
+  ApiFeatureItemRetryTaskResponse,
   ApiFeatureStatus,
   ApiProductProposal,
   ApiProductProposalStatus,
@@ -41,6 +43,16 @@ export function retryProductProposalPlanning(
 ): Promise<ApiProductProposal> {
   return apiRequest<ApiProductProposal>(`/v1/product/proposals/${proposalId}/retry-planning`, {
     method: 'POST',
+  });
+}
+
+export function retryProductFeatureItemTask(
+  featureItemId: string,
+  payload: ApiFeatureItemRetryTaskRequest = {},
+): Promise<ApiFeatureItemRetryTaskResponse> {
+  return apiRequest<ApiFeatureItemRetryTaskResponse>(`/v1/product/feature-items/${featureItemId}/retry-task`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
   });
 }
 

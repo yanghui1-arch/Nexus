@@ -140,6 +140,11 @@ export const FEATURE_ITEM_STATUS_META: Record<
     variant: 'outline',
     className: 'border-black bg-black text-white hover:bg-black',
   },
+  failed: {
+    label: 'Failed',
+    variant: 'outline',
+    className: 'border-red-200 bg-red-50 text-red-700 hover:bg-red-50',
+  },
   completed: {
     label: 'Completed',
     variant: 'outline',

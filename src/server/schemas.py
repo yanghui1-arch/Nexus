@@ -277,6 +277,11 @@ class TaskSubmitResponse(BaseModel):
     status: TaskStatus
 
 
+class FeatureItemRetryTaskResponse(BaseModel):
+    feature_item: FeatureItemResponse
+    task: TaskSubmitResponse
+
+
 class TaskConsultResponse(BaseModel):
     task_id: uuid.UUID
     status: TaskStatus

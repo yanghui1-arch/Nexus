@@ -1,6 +1,7 @@
-# Python Design Patterns
-
-Write maintainable Python code using fundamental design principles. These patterns help you build systems that are easy to understand, test, and modify.
+---
+name: Python Design Patterns
+description: Write maintainable Python code using fundamental design principles. These patterns help you build systems that are easy to understand, test, and modify.
+---
 
 ## When to Use This Skill
 
