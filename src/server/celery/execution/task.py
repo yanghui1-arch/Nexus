@@ -98,8 +98,6 @@ async def execute_agent_task(
         """
         if status["process"] != "SAVE_CHECKPOINT":
             _schedule_lifecycle_event(status)
-
-        if status["process"] != "SAVE_CHECKPOINT":
             return
 
         if task is None:
