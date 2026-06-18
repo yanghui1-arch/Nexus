@@ -6,6 +6,8 @@ import { Link, Navigate, useParams } from 'react-router-dom';
 import { useAppLayout } from '@/components/layout/AppLayout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { getTaskEvents } from '@/api/tasks';
+import type { ApiTaskExecutionEvent } from '@/api/types';
 import { useWorkspaceRecords } from '@/lib/useWorkspaceRecords';
 import {
   STATUS_META,
@@ -14,6 +16,7 @@ import {
 } from '@/lib/workspace-task-view';
 import { cn } from '@/lib/utils';
 import { TaskBoardRepoSelect } from '@/pages/task-board/components/TaskBoardRepoSelect';
+import { ExecutionTimeline } from '@/pages/process-tracking/components/ExecutionTimeline';
 
 const ALL_REPOSITORIES = 'All repositories';
 const REVIEW_STATUSES = new Set<WorkspaceTaskView['status']>([
@@ -99,6 +102,8 @@ export function NexusReviewPage() {
   const { taskViews, isLoading } = useWorkspaceRecords();
   const [repoFilter, setRepoFilter] = useState(ALL_REPOSITORIES);
   const [activeTab, setActiveTab] = useState<QueueTab['id']>('review');
+  const [timelineEvents, setTimelineEvents] = useState<ApiTaskExecutionEvent[]>([]);
+  const [isLoadingTimeline, setIsLoadingTimeline] = useState(false);
 
   const reviewTasks = useMemo(
     () => sortNewestFirst(taskViews.filter(isReviewTask)),
@@ -137,6 +142,30 @@ export function NexusReviewPage() {
     () => reviewTasks.find(task => task.id === taskId) ?? null,
     [reviewTasks, taskId],
   );
+
+  useEffect(() => {
+    if (!selectedTask?.id) {
+      setTimelineEvents([]);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingTimeline(true);
+    getTaskEvents(selectedTask.id)
+      .then(events => {
+        if (!cancelled) setTimelineEvents(events);
+      })
+      .catch(() => {
+        if (!cancelled) setTimelineEvents([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingTimeline(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTask?.id, selectedTask?.updatedAt]);
 
   if (taskId && !isLoading && !selectedTask) {
     return <Navigate to="/code-review/nexus" replace />;
@@ -244,6 +273,10 @@ export function NexusReviewPage() {
                 ) : null}
               </div>
             </div>
+          </div>
+
+          <div className="min-h-[420px]">
+            <ExecutionTimeline events={timelineEvents} isLoading={isLoadingTimeline} />
           </div>
         </section>
       </div>
