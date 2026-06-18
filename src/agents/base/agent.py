@@ -2,7 +2,7 @@ import asyncio
 import inspect
 import json
 from functools import wraps
-from typing import Literal, Any, List, Dict, Callable, Coroutine, TypedDict, Required, NotRequired, TypeAlias
+from typing import Literal, Any, List, Dict, Callable, Coroutine, TypedDict, Required, NotRequired
 from dataclasses import dataclass
 from textwrap import dedent
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
@@ -80,11 +80,8 @@ class ModelConfig:
     max_length_context: int
 
 
-LifecycleProcess: TypeAlias = Literal["START", "PROCESS", "SAVE_CHECKPOINT", "COMPLETED", "FAILED", "EXCEED_ATTEMPTS"]
-
-
 class WorkTempStatus(TypedDict):
-    process: Required[LifecycleProcess]
+    process: Required[Literal["START", "PROCESS", "SAVE_CHECKPOINT", "COMPLETED", "FAILED", "EXCEED_ATTEMPTS"]]
     agent_content: Required[str | None]
     current_use_tool: Required[List[str] | None]
     current_use_tool_args: Required[List[Dict[str, Any]] | None]

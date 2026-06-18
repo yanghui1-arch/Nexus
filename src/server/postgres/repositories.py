@@ -39,9 +39,6 @@ from src.server.postgres.models import (
     WorkspaceStatus,
 )
 
-LifecycleEventType: TypeAlias = Literal["START", "PROCESS", "SAVE_CHECKPOINT", "COMPLETED", "FAILED", "EXCEED_ATTEMPTS"]
-
-
 def utc_now() -> datetime:
     """Return the current UTC timestamp."""
     return datetime.now(timezone.utc)
@@ -1132,7 +1129,7 @@ class TaskRepository:
         session: AsyncSession,
         *,
         task_id: uuid.UUID,
-        event_type: LifecycleEventType,
+        event_type: Literal["START", "PROCESS", "SAVE_CHECKPOINT", "COMPLETED", "FAILED", "EXCEED_ATTEMPTS"],
         agent: AgentName | None,
         message: str | None = None,
         safe_metadata: dict[str, object] | None = None,

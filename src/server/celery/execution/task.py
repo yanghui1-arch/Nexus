@@ -4,7 +4,7 @@ import asyncio
 import uuid
 from typing import Any
 
-from src.agents.base.agent import LifecycleProcess, WorkTempStatus
+from src.agents.base.agent import WorkTempStatus
 from src.logger import logger
 from src.server.config import Settings, get_settings
 from src.server.postgres.database import Database
@@ -50,7 +50,7 @@ async def execute_agent_task(
             logger.warning("Skipping lifecycle event for missing task %s", task_id)
             return
 
-        event_type: LifecycleProcess = status["process"]
+        event_type = status["process"]
         safe_metadata: dict[str, object] = {"process": event_type}
         current_tools = status.get("current_use_tool")
         if current_tools is not None:
