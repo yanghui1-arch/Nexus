@@ -179,7 +179,7 @@ async def get_task_stats(
         if task is None:
             raise HTTPException(status_code=404, detail="Task not found")
         events = await TaskExecutionEventRepository.list_by_task(session, task_id)
-    return TaskExecutionStatsResponse.from_events(events)
+    return TaskExecutionStatsResponse.from_events(events, task=task)
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

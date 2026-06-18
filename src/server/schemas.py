@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Any
+from typing import Any, Protocol
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
@@ -389,28 +389,52 @@ class TaskMessage(BaseModel):
     meta: dict[str, Any] | None = None
 
 
+class TaskExecutionStatsEvent(Protocol):
+    event_type: str
+    message: str | None
+    tokens: int | None
+    model: str | None
+    created_at: datetime
+
+
 class TaskExecutionStatsResponse(BaseModel):
     event_count: int = 0
     total_tokens: int = 0
     first_event_at: datetime | None = None
     last_event_at: datetime | None = None
     duration_seconds: float | None = None
+    tool_call_count: int = 0
+    last_checkpoint_at: datetime | None = None
+    latest_error: str | None = None
     model: str = "unknown"
 
     @classmethod
-    def from_events(cls, events: list[Any]) -> "TaskExecutionStatsResponse":
+    def from_events(
+        cls,
+        events: list[TaskExecutionStatsEvent],
+        *,
+        task: TaskRecord | None = None,
+    ) -> "TaskExecutionStatsResponse":
         """Build task execution statistics, preserving an explicit empty state."""
         if not events:
-            return cls()
+            return cls(
+                last_checkpoint_at=task.updated_at if task is not None and task.checkpoint else None,
+                latest_error=task.error if task is not None else None,
+            )
         first_event_at = min(event.created_at for event in events)
         last_event_at = max(event.created_at for event in events)
         models = {event.model for event in events if event.model}
+        error_events = [event for event in events if "error" in event.event_type.lower()]
+        latest_error_event = max(error_events, key=lambda event: event.created_at, default=None)
         return cls(
             event_count=len(events),
             total_tokens=sum(event.tokens or 0 for event in events),
             first_event_at=first_event_at,
             last_event_at=last_event_at,
             duration_seconds=(last_event_at - first_event_at).total_seconds(),
+            tool_call_count=sum(1 for event in events if "tool" in event.event_type.lower()),
+            last_checkpoint_at=task.updated_at if task is not None and task.checkpoint else None,
+            latest_error=(latest_error_event.message if latest_error_event else None) or (task.error if task is not None else None),
             model=models.pop() if len(models) == 1 else "unknown",
         )
 
