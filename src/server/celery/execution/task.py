@@ -53,8 +53,7 @@ async def execute_agent_task(
             logger.warning("Skipping lifecycle event for missing task %s", task_id)
             return
 
-        event_type = status["process"]
-        safe_metadata: dict[str, str | list[str] | bool | int] = {"process": event_type}
+        safe_metadata = {"process": status["process"]}
         current_tools = status.get("current_use_tool")
         if current_tools is not None:
             safe_metadata["current_use_tool"] = list(current_tools)
@@ -69,7 +68,7 @@ async def execute_agent_task(
                 await TaskRepository.create_execution_event(
                     session,
                     task_id=task_id,
-                    event_type=event_type,
+                    event_type=status["process"],
                     agent=task.agent,
                     message=status.get("agent_content"),
                     safe_metadata=safe_metadata,

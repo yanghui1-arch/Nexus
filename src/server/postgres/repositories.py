@@ -1132,7 +1132,7 @@ class TaskRepository:
         event_type: Literal["START", "PROCESS", "SAVE_CHECKPOINT", "COMPLETED", "FAILED", "EXCEED_ATTEMPTS"],
         agent: AgentName | None,
         message: str | None = None,
-        safe_metadata: dict[str, str | list[str] | bool | int] | None = None,
+        safe_metadata: dict[str, object] | None = None,
         tokens: int | None = None,
         model: str | None = None,
     ) -> TaskExecutionEventRecord:
