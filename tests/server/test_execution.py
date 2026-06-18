@@ -1314,7 +1314,8 @@ def test_execute_agent_task_writes_lifecycle_events(monkeypatch):
         return TaskExecutionEventRecord(**kwargs)
 
     _patch_execute_agent_task_happy_path(monkeypatch, task_id, fake_run_agent_workflow)
-    monkeypatch.setattr(TaskRepository, "update_checkpoint", AsyncMock())
+    update_checkpoint = AsyncMock()
+    monkeypatch.setattr(TaskRepository, "update_checkpoint", update_checkpoint)
     monkeypatch.setattr(TaskRepository, "create_execution_event", fake_create_execution_event)
 
     asyncio.run(execution_task.execute_agent_task(task_id=task_id, settings=SimpleNamespace(database_url="test")))
@@ -1322,7 +1323,6 @@ def test_execute_agent_task_writes_lifecycle_events(monkeypatch):
     assert [event["event_type"] for event in events] == [
         "START",
         "PROCESS",
-        "SAVE_CHECKPOINT",
         "COMPLETED",
         "FAILED",
         "EXCEED_ATTEMPTS",
@@ -1332,7 +1332,8 @@ def test_execute_agent_task_writes_lifecycle_events(monkeypatch):
         "current_use_tool": ["shell"],
         "has_tool_args": True,
     }
-    assert events[2]["safe_metadata"]["checkpoint_message_count"] == 1
+    update_checkpoint.assert_awaited_once()
+    assert update_checkpoint.await_args.kwargs["checkpoint"] == [{"role": "assistant", "content": "safe point"}]
 
 
 

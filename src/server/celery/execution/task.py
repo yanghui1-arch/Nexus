@@ -96,7 +96,8 @@ async def execute_agent_task(
             RuntimeError: If a checkpoint event arrives before the task has
                 been loaded.
         """
-        _schedule_lifecycle_event(status)
+        if status["process"] != "SAVE_CHECKPOINT":
+            _schedule_lifecycle_event(status)
 
         if status["process"] != "SAVE_CHECKPOINT":
             return
