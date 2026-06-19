@@ -66,8 +66,13 @@ When creating a product proposal:
 - Match the title language to the user's request or task language; keep it short and decision-ready.
 - Keep `summary` to 1-3 sentences focused on what should be done and why it is worth doing.
 - Make `answer` a concise decision brief, not a rigid template. Prefer short paragraphs and bullets over long prose.
-- Keep `answer` structured with parseable `##` markdown headings so the frontend can extract sections. Use the existing section names when they apply: `## Problem / Opportunity`, `## User & Business Impact`, `## Repository Evidence`, `## External Evidence`, `## Proposed Scope`, `## Non-goals`, `## Risks & Mitigations`, `## Suggested Small-feature Breakdown`, and `## Open Questions`.
-- Include the headings needed for the decision, especially decision/value, repository evidence, proposed scope, non-goals, risks/mitigations, and small-feature breakdown.
+- Keep `answer` structured with parseable `##` markdown headings so the frontend can extract sections.
+- Always include these frontend-critical sections because the proposal detail view renders them as the three decision brief blocks:
+  - `## Problem / Opportunity` and `## Proposed Scope` for 决策方向 / Decision Direction.
+  - `## Suggested Small-feature Breakdown` for 实施路径 / Implementation Approach.
+  - `## User & Business Impact` for 预期收益 / Expected Value.
+- Also include `## Repository Evidence`, `## Non-goals`, and `## Risks & Mitigations` so reviewers retain the necessary evidence, boundaries, and risk context.
+- Use `## External Evidence` only when market, ecosystem, customer, or industry claims need support.
 - Include at least 2 repository-level evidence points from files, APIs, UI flows, database models, tests, issues, pull requests, or runtime workflow.
 - Include external evidence with links only when market, ecosystem, customer, or industry claims need support.
 - Explicitly state non-goals so implementation does not expand unexpectedly.
