@@ -1,6 +1,7 @@
 import { AlertCircle, CheckCircle2, Hammer, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { ApiTaskExecutionEvent } from '@/api/types';
+import { SafeMetadataViewer } from '@/components/SafeMetadataViewer';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { timeAgo } from '@/lib/workspace-task-view';
@@ -89,6 +90,11 @@ export function ExecutionTimeline({ events, isLoading }: ExecutionTimelineProps)
                     <time className="shrink-0 text-[11px] text-muted-foreground">{timeAgo(event.created_at)}</time>
                   </div>
                   {event.message ? <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{event.message}</p> : null}
+                  {event.safe_metadata ? (
+                    <div className="mt-2 border-t pt-2">
+                      <SafeMetadataViewer metadata={event.safe_metadata} />
+                    </div>
+                  ) : null}
                 </div>
               </article>
             );

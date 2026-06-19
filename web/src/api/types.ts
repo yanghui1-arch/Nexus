@@ -1,3 +1,9 @@
+export type SafeMetadataValue = string | number | boolean | null | SafeMetadataValue[] | {
+  [key: string]: SafeMetadataValue;
+};
+
+export type SafeMetadata = Record<string, SafeMetadataValue>;
+
 export type ApiAgentKind = 'tela' | 'sophie' | 'jules' | 'marc';
 
 export type ApiTaskCategory = 'coding' | 'product discovery';
@@ -62,7 +68,7 @@ export interface ApiTaskExecutionEvent {
   event_type: string;
   agent: ApiAgentKind | null;
   message: string | null;
-  safe_metadata: Record<string, unknown> | null;
+  safe_metadata: SafeMetadata | null;
   tokens: number | null;
   model: string | null;
   created_at: string;
