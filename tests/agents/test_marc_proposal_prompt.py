@@ -34,6 +34,7 @@ def test_marc_proposal_prompt_preserves_frontend_parseable_headings():
 def test_marc_proposal_prompt_matches_decision_brief_rendering_contract():
     assert "three decision brief blocks" in MARC_SYSTEM_PROMPT
     assert "决策方向 / Decision Direction" in MARC_SYSTEM_PROMPT
+    assert "smallest implementation scope recommended for approval" in MARC_SYSTEM_PROMPT
     assert "实施路径 / Implementation Approach" in MARC_SYSTEM_PROMPT
     assert "预期收益 / Expected Value" in MARC_SYSTEM_PROMPT
 
