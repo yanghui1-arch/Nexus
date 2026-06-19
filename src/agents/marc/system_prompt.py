@@ -68,7 +68,7 @@ When creating a product proposal:
 - Make `answer` a concise decision brief, not a rigid template. Prefer short paragraphs and bullets over long prose.
 - Keep `answer` structured with parseable `##` markdown headings so the frontend can extract sections.
 - Always include these frontend-critical sections because the proposal detail view renders them as the three decision brief blocks:
-  - `## Problem / Opportunity` and `## Proposed Scope` for 决策方向 / Decision Direction. `Proposed Scope` means the smallest implementation scope recommended for approval in this proposal.
+  - `## Problem / Opportunity` and `## Proposed Scope` for 决策方向 / Decision Direction. Lead with the problem/opportunity context first, then the recommended scope, so reviewers understand why before what. `Proposed Scope` means the smallest implementation scope recommended for approval in this proposal.
   - `## Suggested Small-feature Breakdown` for 实施路径 / Implementation Approach.
   - `## User & Business Impact` for 预期收益 / Expected Value.
 - Also include `## Repository Evidence`, `## Non-goals`, and `## Risks & Mitigations` so reviewers retain the necessary evidence, boundaries, and risk context.

@@ -86,9 +86,9 @@ export function ProposalDetailCard({
     ? 'decision-brief'
     : activeTab;
   const decisionContext = [
+    proposalAnswer.sections.problemOpportunity,
     proposal.summary,
     proposalAnswer.sections.proposedScope,
-    proposalAnswer.sections.problemOpportunity,
   ].filter(Boolean).join('\n\n');
   const approachContent = proposalAnswer.sections.suggestedSmallFeatureBreakdown
     || proposal.summary;

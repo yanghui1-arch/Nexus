@@ -23,8 +23,8 @@ class CreateProductProposal(BaseModel):
     )
     answer: str = Field(
         description=(
-            "Concise, frontend-parseable decision brief using ## Problem / Opportunity, "
-            "## Proposed Scope (the smallest implementation scope recommended for approval), "
+            "Concise, frontend-parseable decision brief using ## Problem / Opportunity first, "
+            "then ## Proposed Scope (the smallest implementation scope recommended for approval), "
             "## Suggested Small-feature Breakdown, and "
             "## User & Business Impact so the UI can render its three summary blocks; "
             "include open questions only if real ones exist"
