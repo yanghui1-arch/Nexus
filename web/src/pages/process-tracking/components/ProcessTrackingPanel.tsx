@@ -88,7 +88,7 @@ export function ProcessTrackingPanel({
               <Select id="tracking-agent" value={selectedAgentId} onChange={e => onSelectedAgentChange(e.target.value)} disabled={!hasAgents || isSending}>
                 {isLoadingAgents && <option value="">{t('processTracking.loadingAgents')}</option>}
                 {agents.map(agent => (
-                  <option key={agent.id} value={agent.id} selected={agent.id === selectedAgentId}>
+                  <option key={agent.id} value={agent.id}>
                     {agent.label} - {agent.subtitle}
                   </option>
                 ))}
