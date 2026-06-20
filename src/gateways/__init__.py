@@ -1,1 +1,0 @@
-"""External realtime gateway integrations."""
