@@ -33,20 +33,6 @@ class DiscordMessageHandler(Protocol):
         ...
 
 
-class LoggingDiscordMessageHandler:
-    async def handle_message(self, event: DiscordMessageEvent) -> None:
-        source = "dm" if event.is_direct_message else "guild"
-        logger.info(
-            "Discord Gateway message received source=%s guild_id=%s channel_id=%s author_id=%s mentions_bot=%s content=%r",
-            source,
-            event.guild_id,
-            event.channel_id,
-            event.author_id,
-            event.mentions_bot,
-            _preview(event.content),
-        )
-
-
 class DiscordGateway(BackgroundService):
     """Discord realtime Gateway listener.
 
@@ -59,10 +45,12 @@ class DiscordGateway(BackgroundService):
         self,
         *,
         settings: Settings,
-        handler: DiscordMessageHandler | None = None,
+        handler: DiscordMessageHandler,
     ) -> None:
+        if handler is None:
+            raise ValueError("DiscordGateway requires a DiscordMessageHandler.")
         self._settings = settings
-        self._handler = handler or LoggingDiscordMessageHandler()
+        self._handler = handler
         self._allowed_channel_ids = set(settings.discord_gateway_channel_ids)
         self._allowed_user_ids = set(settings.discord_gateway_user_ids)
         self._client: discord.Client | None = None

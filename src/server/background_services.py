@@ -14,6 +14,7 @@ from src.server.postgres.database import Database
 from src.server.product_discovery import ProductDiscoveryPoller
 from src.server.product_workflow import ProductWorkflowPoller
 from src.server.runner import AgentTaskRunner
+from src.server.services.assistant_discord import AssistantDiscordMessageHandler
 
 
 async def run_background_services() -> None:
@@ -28,8 +29,17 @@ async def run_background_services() -> None:
         ProductDiscoveryPoller(settings=settings, database=database, runner=runner),
         ProductWorkflowPoller(settings=settings, database=database, runner=runner),
         AssistantPoller(settings=settings, database=database, runner=runner),
-        DiscordGateway(settings=settings),
     ]
+    try:
+        services.append(
+            DiscordGateway(
+                settings=settings,
+                handler=AssistantDiscordMessageHandler(settings=settings, database=database),
+            )
+        )
+    except Exception:
+        logger.exception("Discord Gateway failed to initialize; other background services will continue.")
+
     for service in services:
         if not isinstance(service, BackgroundService):
             raise TypeError(f"{service.__class__.__name__} does not implement BackgroundService.")
@@ -41,13 +51,25 @@ async def run_background_services() -> None:
             loop.add_signal_handler(signum, stop_event.set)
 
     try:
+        started_services: list[BackgroundService] = []
         for service in services:
-            service.start()
+            try:
+                service.start()
+            except Exception:
+                logger.exception(
+                    "%s failed to start; other background services will continue.",
+                    service.__class__.__name__,
+                )
+                continue
+            started_services.append(service)
         logger.info("Nexus background services process starts.")
         await stop_event.wait()
     finally:
-        for service in reversed(services):
-            await service.stop()
+        for service in reversed(started_services):
+            try:
+                await service.stop()
+            except Exception:
+                logger.exception("%s failed to stop cleanly.", service.__class__.__name__)
         await runner.shutdown()
         await database.disconnect()
         logger.info("Nexus background services process stops.")
