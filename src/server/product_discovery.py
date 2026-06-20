@@ -22,8 +22,7 @@ from src.server.postgres.repositories import (
     ProductProposalRepository,
     WorkspaceRepository,
 )
-from src.server.runner import AgentTaskRunner
-from src.server.schemas import AgentKind, TaskCreateRequest
+from src.server.runner import AgentTaskRunner, TaskSubmission
 
 
 PRODUCT_DISCOVERY_AGENT_NAMES = {AgentName.marc}
@@ -209,9 +208,9 @@ class ProductDiscoveryPoller:
                     )
 
                 task_id = await self._runner.submit_task(
-                    TaskCreateRequest(
+                    TaskSubmission(
                         agent_instance_id=instance.id,
-                        agent=AgentKind(instance.agent.value),
+                        agent=instance.agent,
                         question=build_product_discovery_question(
                             recent_proposals,
                             proposal_limit=recent_limit,

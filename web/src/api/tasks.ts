@@ -4,7 +4,7 @@ import type {
   ApiTaskConsultRequest,
   ApiTaskConsultResponse,
   ApiTaskCreateRequest,
-  ApiTaskMessage,
+  ApiTaskExecutionEvent,
   ApiTaskCategory,
   ApiTaskStatus,
   ApiTaskSubmitResponse,
@@ -46,11 +46,11 @@ export function consultTask(
   });
 }
 
-export function getTaskMessages(
+export function getTaskEvents(
   taskId: string,
   limit = 200,
-): Promise<ApiTaskMessage[]> {
-  return apiRequest<ApiTaskMessage[]>(
-    buildApiPath(`/v1/tasks/${taskId}/messages`, { limit }),
+): Promise<ApiTaskExecutionEvent[]> {
+  return apiRequest<ApiTaskExecutionEvent[]>(
+    buildApiPath(`/v1/tasks/${taskId}/events`, { limit }),
   );
 }

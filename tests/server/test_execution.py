@@ -7,7 +7,7 @@ import pytest
 
 from src.agents.base.agent import BaseAgentResponse
 from src.server.celery.execution import agents, prompt_helper, state, task as execution_task, workflows
-from src.server.postgres.models import GithubPullRequestFeedbackKind, TaskCategory, TaskStatus, TaskWorkItemStatus
+from src.server.postgres.models import GithubPullRequestFeedbackKind, TaskCategory, TaskExecutionEventRecord, TaskStatus, TaskWorkItemStatus
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
     ProductProposalRepository,
@@ -191,6 +191,109 @@ def test_execute_agent_task_skips_non_redelivered_running_duplicate(monkeypatch)
     assert len(databases) == 1
     assert databases[0].connected is True
     assert databases[0].disconnected is True
+
+
+def test_execute_agent_task_logs_claim_failure_without_releasing_workspace(monkeypatch):
+    """Verify failed task claims explain the blocker and do not release a workspace."""
+    task_id = uuid.uuid4()
+    agent_instance_id = uuid.uuid4()
+    conflicting_task_id = uuid.uuid4()
+    databases = []
+    warnings = []
+
+    class RuntimeDatabase(FakeDatabase):
+        def __init__(self, database_url):
+            """Initialize runtime database test helper."""
+            super().__init__()
+            self.database_url = database_url
+            self.connected = False
+            self.disconnected = False
+            databases.append(self)
+
+        async def connect(self):
+            """Track database connection."""
+            self.connected = True
+
+        async def disconnect(self):
+            """Track database disconnection."""
+            self.disconnected = True
+
+    async def fake_load_task(database, requested_task_id):
+        """Return a queued task that will fail to claim."""
+        assert requested_task_id == task_id
+        return make_task(
+            id=task_id,
+            status=TaskStatus.queued,
+            agent_instance_id=agent_instance_id,
+        )
+
+    async def fake_load_binding(database, task):
+        """Return an execution binding."""
+        assert task.id == task_id
+        return state.ExecutionBinding(
+            user_id=uuid.uuid4(),
+            github_repo="owner/repo",
+            project="workspace",
+            workspace_key="workspace-key",
+        )
+
+    async def fake_mark_task_running(database, requested_task_id, *, expected_agent_instance_id, allow_running):
+        """Simulate a claim failure."""
+        assert requested_task_id == task_id
+        assert expected_agent_instance_id == agent_instance_id
+        assert allow_running is False
+        return None
+
+    async def fake_claim_snapshot(database, requested_task_id, *, expected_agent_instance_id):
+        """Return a useful claim failure snapshot."""
+        assert requested_task_id == task_id
+        assert expected_agent_instance_id == agent_instance_id
+        return state.TaskClaimFailureSnapshot(
+            task_status=TaskStatus.queued.value,
+            task_agent_instance_id=agent_instance_id,
+            conflicting_running_task_id=conflicting_task_id,
+            conflicting_running_task_started_at=None,
+            conflicting_running_task_updated_at=None,
+            workspace_status="idle",
+            workspace_updated_at=None,
+        )
+
+    async def fail_if_called(*args, **kwargs):
+        """Fail if execution continues after the failed claim."""
+        raise AssertionError("failed claim should stop execution")
+
+    def capture_warning(*args, **kwargs):
+        """Capture warning call arguments."""
+        warnings.append(args)
+
+    monkeypatch.setattr(execution_task, "Database", RuntimeDatabase)
+    monkeypatch.setattr(state, "load_task", fake_load_task)
+    monkeypatch.setattr(state, "load_binding", fake_load_binding)
+    monkeypatch.setattr(state, "mark_task_running", fake_mark_task_running)
+    monkeypatch.setattr(state, "load_task_claim_failure_snapshot", fake_claim_snapshot)
+    monkeypatch.setattr(state, "mark_workspace_running", fail_if_called)
+    monkeypatch.setattr(state, "release_workspace", fail_if_called)
+    monkeypatch.setattr(workflows, "run_agent_workflow", fail_if_called)
+    monkeypatch.setattr(state, "mark_failed", fail_if_called)
+    monkeypatch.setattr(execution_task.logger, "warning", capture_warning)
+
+    asyncio.run(
+        execution_task.execute_agent_task(
+            task_id=task_id,
+            settings=SimpleNamespace(database_url="postgresql://test"),
+            allow_running=False,
+        )
+    )
+
+    assert len(databases) == 1
+    assert databases[0].connected is True
+    assert databases[0].disconnected is True
+    assert len(warnings) == 1
+    warning_message, *warning_args = warnings[0]
+    assert "conflicting_running_task_id=%s" in warning_message
+    assert conflicting_task_id in warning_args
+    assert TaskStatus.queued.value in warning_args
+    assert "idle" in warning_args
 
 
 def test_load_binding_prefers_task_snapshot_over_workspace_context(monkeypatch):
@@ -1149,3 +1252,109 @@ def test_mark_waiting_for_review_fails_planning_run_when_plan_is_invalid(monkeyp
         "task_failed": ("task-id", "missing feature items"),
         "run_failed": ("planning-run-id", "missing feature items"),
     }
+
+
+
+def _patch_execute_agent_task_happy_path(monkeypatch, task_id, run_agent_workflow):
+    """Patch execute_agent_task dependencies for progress callback tests."""
+
+    class RuntimeDatabase(FakeDatabase):
+        def __init__(self, database_url):
+            super().__init__()
+
+        async def connect(self):
+            return None
+
+        async def disconnect(self):
+            return None
+
+    async def fake_load_task(database, requested_task_id):
+        return make_task(id=requested_task_id, status=TaskStatus.queued, agent_instance_id=uuid.uuid4())
+
+    async def fake_load_binding(database, task):
+        return SimpleNamespace(
+            github_repo="owner/repo",
+            project="workspace",
+            user_id=uuid.uuid4(),
+            workspace_key="workspace-key",
+        )
+
+    async def fake_mark_task_running(*args, **kwargs):
+        return make_task(id=task_id, status=TaskStatus.running, agent_instance_id=uuid.uuid4())
+
+    monkeypatch.setattr(execution_task, "Database", RuntimeDatabase)
+    monkeypatch.setattr(state, "load_task", fake_load_task)
+    monkeypatch.setattr(state, "load_binding", fake_load_binding)
+    monkeypatch.setattr(state, "mark_workspace_running", AsyncMock())
+    monkeypatch.setattr(state, "mark_task_running", fake_mark_task_running)
+    monkeypatch.setattr(state, "mark_post_execution_wait_state", AsyncMock())
+    monkeypatch.setattr(state, "release_workspace", AsyncMock())
+    monkeypatch.setattr(workflows, "run_agent_workflow", run_agent_workflow)
+
+
+def test_execute_agent_task_writes_lifecycle_events(monkeypatch):
+    """Verify agent progress creates structured lifecycle events."""
+    task_id = uuid.uuid4()
+    events = []
+
+    async def fake_run_agent_workflow(**kwargs):
+        for process in ["START", "PROCESS", "SAVE_CHECKPOINT", "COMPLETED", "FAILED", "EXCEED_ATTEMPTS"]:
+            status = {
+                "process": process,
+                "agent_content": f"{process} message",
+                "current_use_tool": ["shell"] if process == "PROCESS" else None,
+                "current_use_tool_args": [{"cmd": "secret"}] if process == "PROCESS" else None,
+            }
+            if process == "SAVE_CHECKPOINT":
+                status["context"] = [{"role": "assistant", "content": "safe point"}]
+            kwargs["on_progress"](status)
+
+    async def fake_create_execution_event(session, **kwargs):
+        events.append(kwargs)
+        return TaskExecutionEventRecord(**kwargs)
+
+    _patch_execute_agent_task_happy_path(monkeypatch, task_id, fake_run_agent_workflow)
+    update_checkpoint = AsyncMock()
+    monkeypatch.setattr(TaskRepository, "update_checkpoint", update_checkpoint)
+    monkeypatch.setattr(TaskRepository, "create_execution_event", fake_create_execution_event)
+
+    asyncio.run(execution_task.execute_agent_task(task_id=task_id, settings=SimpleNamespace(database_url="test")))
+
+    assert [event["event_type"] for event in events] == [
+        "START",
+        "PROCESS",
+        "COMPLETED",
+        "FAILED",
+        "EXCEED_ATTEMPTS",
+    ]
+    assert events[1]["safe_metadata"] == {
+        "process": "PROCESS",
+        "current_use_tool": ["shell"],
+        "has_tool_args": True,
+    }
+    update_checkpoint.assert_awaited_once()
+    assert update_checkpoint.await_args.kwargs["checkpoint"] == [{"role": "assistant", "content": "safe point"}]
+
+
+
+def test_execute_agent_task_logs_lifecycle_event_failures(monkeypatch):
+    """Verify lifecycle event failures do not fail task execution."""
+    task_id = uuid.uuid4()
+
+    async def fake_run_agent_workflow(**kwargs):
+        kwargs["on_progress"]({"process": "START", "agent_content": "started", "current_use_tool": None, "current_use_tool_args": None})
+
+    async def fail_create_execution_event(*args, **kwargs):
+        raise RuntimeError("event store unavailable")
+
+    mark_failed = AsyncMock()
+    logged_exceptions = []
+    _patch_execute_agent_task_happy_path(monkeypatch, task_id, fake_run_agent_workflow)
+    monkeypatch.setattr(state, "mark_failed", mark_failed)
+    monkeypatch.setattr(TaskRepository, "create_execution_event", fail_create_execution_event)
+    monkeypatch.setattr(execution_task.logger, "exception", lambda *args, **kwargs: logged_exceptions.append(args))
+
+    asyncio.run(execution_task.execute_agent_task(task_id=task_id, settings=SimpleNamespace(database_url="test")))
+
+    mark_failed.assert_not_awaited()
+    assert any("Lifecycle event persistence failed" in args[0] for args in logged_exceptions)

@@ -22,7 +22,8 @@ class FakeDatabase:
 class FakeRunner:
     def __init__(self):
         """Initialize the test helper."""
-        self.submit_task = AsyncMock(return_value="coding-task-id")
+        self.create_task_record = AsyncMock(return_value=SimpleNamespace(id="coding-task-id"))
+        self.dispatch_task = AsyncMock(return_value=True)
 
 
 def _settings(**overrides):
@@ -80,7 +81,7 @@ def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
         captured["proposal_item_id"] = item_id
         return proposal
 
-    async def fake_assign(session, item_id, *, task_id):
+    async def fake_assign(session, item_id, *, task_id, require_unassigned=True):
         """Provide a fake assign."""
         captured["assign"] = (item_id, task_id)
         return item
@@ -112,11 +113,12 @@ def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
     assert captured["dispatch_group"] == (proposal.user_id, "owner/repo", "nexus")
     assert captured["feature_item_id"] == "feature-item-id"
     assert captured["proposal_item_id"] == "feature-item-id"
-    payload = runner.submit_task.await_args.args[0]
+    payload = runner.create_task_record.await_args.args[0]
     assert payload.agent_instance_id == tela_instance_id
-    assert payload.agent.value == "tela"
+    assert payload.agent == AgentName.tela
     assert "Knowledge base" in payload.question
     assert captured["assign"] == ("feature-item-id", "coding-task-id")
+    runner.dispatch_task.assert_awaited_once_with("coding-task-id")
 
 
 def test_poll_once_skips_when_no_feature_item(monkeypatch):
@@ -137,7 +139,8 @@ def test_poll_once_skips_when_no_feature_item(monkeypatch):
     result = asyncio.run(poller.poll_once())
 
     assert result == 0
-    runner.submit_task.assert_not_awaited()
+    runner.create_task_record.assert_not_awaited()
+    runner.dispatch_task.assert_not_awaited()
 
 
 def test_poll_once_skips_blocked_group_and_continues_with_other_workspaces(monkeypatch):
@@ -194,7 +197,7 @@ def test_poll_once_skips_blocked_group_and_continues_with_other_workspaces(monke
             return ready_proposal
         return None
 
-    async def fake_assign(session, item_id, *, task_id):
+    async def fake_assign(session, item_id, *, task_id, require_unassigned=True):
         """Assign only the dispatchable item."""
         captured["assign"] = (item_id, task_id)
         return ready_item
@@ -223,9 +226,10 @@ def test_poll_once_skips_blocked_group_and_continues_with_other_workspaces(monke
         (AgentName.tela, blocked_user, "blocked/repo", "blocked", 1),
         (AgentName.tela, ready_user, "ready/repo", "ready", 1),
     ]
-    payload = runner.submit_task.await_args.args[0]
+    payload = runner.create_task_record.await_args.args[0]
     assert payload.agent_instance_id == ready_tela.id
     assert "Ready" in payload.question
+    runner.dispatch_task.assert_awaited_once_with("coding-task-id")
 
 
 def test_product_workflow_poller_start_and_stop(monkeypatch):

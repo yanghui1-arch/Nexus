@@ -27,9 +27,11 @@ type ProposalDetailCardProps = {
   activeReview: ReviewActionState;
   onReview: (proposalId: string, status: ReviewActionStatus) => Promise<void>;
   onRecoverPlanning: (proposalId: string) => Promise<void>;
+  onRetryFeatureItem: (featureItemId: string) => Promise<void>;
   proposal: ApiProductProposal;
   relatedFeatures: ApiFeature[];
   recoveringPlanning: boolean;
+  retryingFeatureItemId: string | null;
 };
 
 function BriefDisclosure({
@@ -64,9 +66,11 @@ export function ProposalDetailCard({
   activeReview,
   onReview,
   onRecoverPlanning,
+  onRetryFeatureItem,
   proposal,
   relatedFeatures,
   recoveringPlanning,
+  retryingFeatureItemId,
 }: ProposalDetailCardProps) {
   const { t } = useTranslation();
   const statusMeta = PROPOSAL_STATUS_META[proposal.status];
@@ -86,9 +90,9 @@ export function ProposalDetailCard({
     ? 'decision-brief'
     : activeTab;
   const decisionContext = [
+    proposalAnswer.sections.problemOpportunity,
     proposal.summary,
     proposalAnswer.sections.proposedScope,
-    proposalAnswer.sections.problemOpportunity,
   ].filter(Boolean).join('\n\n');
   const approachContent = proposalAnswer.sections.suggestedSmallFeatureBreakdown
     || proposal.summary;
@@ -217,9 +221,12 @@ export function ProposalDetailCard({
           />
         </TabsContent>
 
-
         <TabsContent value="plan-list">
-          <ProposalPlanList features={relatedFeatures} />
+          <ProposalPlanList
+            features={relatedFeatures}
+            retryingFeatureItemId={retryingFeatureItemId}
+            onRetryFeatureItem={onRetryFeatureItem}
+          />
         </TabsContent>
       </Tabs>
 

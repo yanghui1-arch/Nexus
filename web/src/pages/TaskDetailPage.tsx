@@ -3,8 +3,8 @@ import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertCircle, GitBranch } from 'lucide-react';
 import { ApiError, getErrorDetail } from '@/api/client';
-import { getTask } from '@/api/tasks';
-import type { ApiTask } from '@/api/types';
+import { getTask, getTaskEvents } from '@/api/tasks';
+import type { ApiTask, ApiTaskExecutionEvent } from '@/api/types';
 import { useAppLayout } from '@/components/layout/AppLayout';
 import { Badge } from '@/components/ui/badge';
 import { STATUS_META } from '@/lib/workspace-task-view';
@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/card';
 import { getTaskById } from '@/data/mockWorkflows';
 import { usePolling } from '@/lib/usePolling';
+import { ExecutionTimeline } from '@/pages/process-tracking/components/ExecutionTimeline';
 
 type LegacyTask = NonNullable<ReturnType<typeof getTaskById>>;
 
@@ -96,6 +97,8 @@ export default function TaskDetailPage() {
   );
   const [taskError, setTaskError] = useState<string | null>(null);
   const [isLoadingTask, setIsLoadingTask] = useState(Boolean(taskId && isUuidLike(taskId)));
+  const [timelineEvents, setTimelineEvents] = useState<ApiTaskExecutionEvent[]>([]);
+  const [isLoadingTimeline, setIsLoadingTimeline] = useState(false);
 
   useEffect(() => {
     startTransition(() => {
@@ -103,6 +106,8 @@ export default function TaskDetailPage() {
       setTaskError(null);
       setUseLegacyFallback(Boolean(taskId && legacyTask && !isUuidLike(taskId)));
       setIsLoadingTask(Boolean(taskId && isUuidLike(taskId)));
+      setTimelineEvents([]);
+      setIsLoadingTimeline(false);
     });
   }, [legacyTask, taskId]);
 
@@ -137,6 +142,27 @@ export default function TaskDetailPage() {
       });
     }
   };
+
+  useEffect(() => {
+    if (!task?.id) return;
+
+    let cancelled = false;
+    setIsLoadingTimeline(true);
+    getTaskEvents(task.id)
+      .then(events => {
+        if (!cancelled) setTimelineEvents(events);
+      })
+      .catch(() => {
+        if (!cancelled) setTimelineEvents([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingTimeline(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [task?.id, task?.updated_at]);
 
   usePolling(refreshTask, 5_000, {
     enabled: Boolean(taskId && isUuidLike(taskId) && !useLegacyFallback),
@@ -182,12 +208,13 @@ export default function TaskDetailPage() {
   }
 
   return (
-    <Card className="h-fit max-w-3xl">
-      <CardHeader>
-        <CardTitle>{t('taskDetail.metadata')}</CardTitle>
-        <CardDescription>{t('taskDetail.backendDescription')}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3 text-sm">
+    <div className="space-y-4">
+      <Card className="h-fit max-w-3xl">
+        <CardHeader>
+          <CardTitle>{t('taskDetail.metadata')}</CardTitle>
+          <CardDescription>{t('taskDetail.backendDescription')}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 text-sm">
         <MetadataRow label={t('taskDetail.agent')} value={task.agent} />
         <MetadataRow label={t('taskDetail.agentInstance')} value={task.agent_instance_id} />
         <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
@@ -222,6 +249,10 @@ export default function TaskDetailPage() {
           </div>
         ) : null}
       </CardContent>
-    </Card>
+      </Card>
+      <div className="min-h-[420px] max-w-3xl">
+        <ExecutionTimeline events={timelineEvents} isLoading={isLoadingTimeline} />
+      </div>
+    </div>
   );
 }

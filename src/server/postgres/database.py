@@ -37,6 +37,7 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
         "dispatch_token",
         "lease_expires_at",
     },
+    "execution_event": {"id", "task_id", "event_type", "message", "payload", "created_at"},
     "product_proposal": {
         "id",
         "title",

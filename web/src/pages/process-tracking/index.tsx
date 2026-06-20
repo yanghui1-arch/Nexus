@@ -22,6 +22,8 @@ export default function ProcessTrackingPage() {
         agents={data.agentOptions}
         tasksForAgent={tracking.tasksForSelectedAgent}
         messages={tracking.activeConsultMessages}
+        timelineEvents={tracking.timelineEvents}
+        isLoadingTimeline={tracking.isLoadingTimeline}
         selectedAgentId={tracking.selectedAgentId}
         selectedTaskId={tracking.selectedTaskId}
         selectedTask={tracking.selectedTrackingTask}

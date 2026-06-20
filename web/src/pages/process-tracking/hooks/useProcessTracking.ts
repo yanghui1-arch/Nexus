@@ -2,7 +2,8 @@ import { startTransition, useEffect, useMemo, useState, type FormEvent } from 'r
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { getErrorDetail } from '@/api/client';
-import { consultTask } from '@/api/tasks';
+import { consultTask, getTaskEvents } from '@/api/tasks';
+import type { ApiTaskExecutionEvent } from '@/api/types';
 import {
   selectTrackingTask,
   sortTaskViewsByNewest,
@@ -25,6 +26,8 @@ export type ProcessTracking = {
   trackingInput: string;
   setTrackingInput: (value: string) => void;
   activeConsultMessages: WorkspaceConsultMessageView[];
+  timelineEvents: ApiTaskExecutionEvent[];
+  isLoadingTimeline: boolean;
   isSendingTracking: boolean;
   consultSelectedTask: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 };
@@ -41,6 +44,8 @@ export function useProcessTracking({
     Record<string, WorkspaceConsultMessageView[]>
   >({});
   const [isSendingTracking, setIsSendingTracking] = useState(false);
+  const [timelineEvents, setTimelineEvents] = useState<ApiTaskExecutionEvent[]>([]);
+  const [isLoadingTimeline, setIsLoadingTimeline] = useState(false);
 
   const tasksForSelectedAgent = useMemo(
     () =>
@@ -96,6 +101,36 @@ export function useProcessTracking({
       setTrackingInput('');
     });
   }, [selectedAgentId, selectedTaskId]);
+
+  // Fetch the read-only execution timeline for the selected task.
+  useEffect(() => {
+    if (!selectedTaskId) {
+      setTimelineEvents([]);
+      setIsLoadingTimeline(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingTimeline(true);
+    getTaskEvents(selectedTaskId)
+      .then(events => {
+        if (!cancelled) setTimelineEvents(events);
+      })
+      .catch(error => {
+        if (cancelled) return;
+        setTimelineEvents([]);
+        toast.error(t('processTracking.timelineLoadFailed'), {
+          description: getErrorDetail(error, t('processTracking.timelineLoadFailedDescription')),
+        });
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingTimeline(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTaskId, taskViews, t]);
 
   const consultSelectedTask = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -162,6 +197,8 @@ export function useProcessTracking({
     trackingInput,
     setTrackingInput,
     activeConsultMessages,
+    timelineEvents,
+    isLoadingTimeline,
     isSendingTracking,
     consultSelectedTask,
   };
