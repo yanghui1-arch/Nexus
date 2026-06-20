@@ -25,6 +25,8 @@ from src.tools.code.github.notification import GET_NOTIFICATIONS
 __all__ = [
     "issues",
     "prs",
+    "admin_prs",
+    "admin",
     "notifications",
     "GithubTools",
 ]
@@ -42,7 +44,8 @@ prs = [
     GET_PR_COMMENTS,
     REPLY_TO_PR,
     CREATE_PR_REVIEW,
-    MERGE_PR,
     GET_MY_OPEN_PRS,
 ]
+admin_prs = [MERGE_PR]
+admin = [*admin_prs]
 notifications = [GET_NOTIFICATIONS]

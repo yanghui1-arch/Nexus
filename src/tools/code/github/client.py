@@ -1028,8 +1028,15 @@ class GithubTools:
             "get_pr_comments": self.get_pr_comments,
             "reply_to_pr": self.reply_to_pr,
             "create_pr_review": self.create_pr_review,
-            "merge_pr": self.merge_pr,
             "get_my_open_prs": self.get_my_open_prs,
+        }
+
+
+    @property
+    def admin_prs(self):
+        """Return administrator-only pull request tools."""
+        return {
+            "merge_pr": self.merge_pr,
         }
 
 
@@ -1040,7 +1047,15 @@ class GithubTools:
             "get_notifications": self.get_notifications,
         }
 
-    
+
+    @property
+    def admin_tools(self):
+        """Return administrator-only GitHub tools."""
+        return {
+            **self.admin_prs,
+        }
+
+
     @property
     def all_tools(self):
         """Return all tools exposed by this toolkit."""
