@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from src.agents import Assistant, Jules, Marc, Sophie, Tela
 from src.agents.base.agent import Agent
@@ -85,9 +85,7 @@ def build_agent(
             github_repo=resolved_repo,
             sandbox_workspace_key=workspace_key,
             github_token=github_token,
-            discord_bot_token=getattr(settings, "secretary_discord_bot_token", None),
-            discord_user_id=getattr(settings, "secretary_discord_user_id", None),
-            review_test_commands=getattr(settings, "secretary_test_commands", {}),
+            review_test_commands=getattr(settings, "assistant_test_commands", {}),
         )
 
     return agent_builder.create(

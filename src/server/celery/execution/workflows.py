@@ -361,7 +361,7 @@ async def run_review_agent_workflow(
     workspace_key: str,
     github_repo: str | None,
 ):
-    """Run an Assistant PR review task once and close the task when complete."""
+    """Run an Assistant PR review turn and keep the PR thread watchable."""
     repo = task.repo or github_repo
     project = task.project
     if not repo or not project:
@@ -386,7 +386,46 @@ async def run_review_agent_workflow(
 
     async with agent:
         checkpoint = await state.get_latest_checkpoint(database, task.id)
-        if checkpoints.checkpoint_has_completed_turn(checkpoint):
+        claimed_feedback = await state.claim_pending_github_feedback(
+            database,
+            task.id,
+            limit=settings.github_feedback_batch_size,
+        )
+        if claimed_feedback:
+            feedback_prompt = prompt_helper.build_assistant_github_feedback_prompt(task, claimed_feedback)
+            if checkpoints.checkpoint_completed_prompt(checkpoint, feedback_prompt):
+                logger.info(
+                    "Assistant task %s GitHub feedback was already completed in checkpoint; marking feedback processed.",
+                    task.id,
+                )
+                await state.mark_github_feedback_processed(database, claimed_feedback)
+                await state.mark_review_completed(
+                    database,
+                    task.id,
+                    checkpoints.checkpoint_completion_text(checkpoint),
+                )
+                return
+
+            logger.info(
+                "Assistant task %s is resuming from checkpoint to process %s GitHub feedback item(s).",
+                task.id,
+                len(claimed_feedback),
+            )
+            try:
+                response = await run_agent(
+                    agent=agent,
+                    question=feedback_prompt,
+                    checkpoint=checkpoint,
+                    on_progress=on_progress,
+                )
+            except Exception:
+                await state.requeue_github_feedback(database, claimed_feedback)
+                raise
+            await state.mark_github_feedback_processed(database, claimed_feedback)
+            await state.mark_review_completed(database, task.id, response.response)
+            return
+
+        if checkpoints.checkpoint_completed_prompt(checkpoint, task.question):
             await state.mark_review_completed(
                 database,
                 task.id,
