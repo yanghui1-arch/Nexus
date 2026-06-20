@@ -95,6 +95,42 @@ def build_github_feedback_prompt(
     return "\n".join(lines).rstrip()
 
 
+def build_assistant_github_feedback_prompt(
+    task: TaskRecord,
+    feedback_items: list[GithubPullRequestFeedbackRecord],
+) -> str:
+    """Build a resume prompt for Assistant PR review follow-up."""
+    pull_number = feedback_items[0].pull_request_number
+    lines = [
+        "Continue the existing Assistant PR review thread.",
+        f"You reviewed pull request #{pull_number} in {task.repo} before.",
+        "There is new information on this PR now. Re-open the PR context, review the latest PR messages, and respond as needed.",
+        "",
+        "New GitHub information:",
+    ]
+
+    for index, item in enumerate(feedback_items, start=1):
+        summary_parts = [
+            f"{index}. kind={item.kind.value}",
+            f"github_id={item.external_id}",
+            f"author={item.author or 'unknown'}",
+        ]
+        if item.review_state:
+            summary_parts.append(f"review_state={item.review_state}")
+        if item.file_path:
+            summary_parts.append(f"file={item.file_path}")
+        if item.line is not None:
+            summary_parts.append(f"line={item.line}")
+        if item.html_url:
+            summary_parts.append(f"url={item.html_url}")
+        lines.append("; ".join(summary_parts))
+        if item.body:
+            lines.append(format_github_feedback_message(item))
+        lines.append("")
+
+    return "\n".join(lines).rstrip()
+
+
 def format_github_feedback_message(item: GithubPullRequestFeedbackRecord) -> str:
     """Format one GitHub feedback body for the agent prompt.
 
