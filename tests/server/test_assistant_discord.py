@@ -36,12 +36,17 @@ class FakeDatabase:
 
 class FakeAssistant:
     created_kwargs: dict[str, object] = {}
+    event_context = None
     work_kwargs: dict[str, object] = {}
 
     @classmethod
     def create(cls, **kwargs):
         cls.created_kwargs = kwargs
+        cls.event_context = None
         return cls()
+
+    def set_nexus_assistant_event_context(self, context):
+        self.__class__.event_context = context
 
     async def __aenter__(self):
         return self
@@ -144,6 +149,7 @@ async def test_assistant_discord_handler_loads_checkpoint_and_prompts_dm_reply(m
     checkpoint = [{"role": "system", "content": "previous"}]
     saved: dict[str, str | None] = {}
     workspace = SimpleNamespace(
+        agent_instance_id="assistant-agent-instance-id",
         github_repo="owner/repo",
         project="nexus",
         workspace_key="workspace-key",
@@ -171,6 +177,7 @@ async def test_assistant_discord_handler_loads_checkpoint_and_prompts_dm_reply(m
     await handler.handle_message(make_event())
 
     assert FakeAssistant.created_kwargs["github_repo"] == "owner/repo"
+    assert FakeAssistant.event_context.agent_instance_id == "assistant-agent-instance-id"
     assert FakeAssistant.created_kwargs["sandbox_workspace_key"] == "workspace-key"
     assert FakeAssistant.created_kwargs["discord_bot_token"] == "discord-token"
     assert FakeAssistant.work_kwargs["from_checkpoint"] is True
@@ -185,6 +192,7 @@ async def test_assistant_discord_handler_loads_checkpoint_and_prompts_dm_reply(m
 async def test_assistant_discord_handler_prompts_channel_reply(monkeypatch) -> None:
     """Verify guild messages ask Assistant to reply through tools."""
     workspace = SimpleNamespace(
+        agent_instance_id="assistant-agent-instance-id",
         github_repo="owner/repo",
         project="nexus",
         workspace_key="workspace-key",

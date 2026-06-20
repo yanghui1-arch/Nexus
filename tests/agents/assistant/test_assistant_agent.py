@@ -27,6 +27,8 @@ EXPECTED_TOOLS = {
     "send_discord_dm",
     "send_discord_channel_message",
     "reply_to_discord_channel_message",
+    "record_assistant_event",
+    "list_recent_assistant_events",
 }
 
 FORBIDDEN_TOOLS = {
@@ -100,6 +102,15 @@ def test_assistant_tool_kits_are_review_scoped():
                 project="nexus",
             )
         )
+        assistant.set_nexus_assistant_event_context(
+            SimpleNamespace(
+                agent_instance_id="agent-instance-id",
+                database=SimpleNamespace(),
+                repo="owner/repo",
+                project="nexus",
+                current_task_id="task-id",
+            )
+        )
 
         with patch("src.agents.assistant.agent.get_sandbox_pool_manager", return_value=pool):
             async with assistant:
@@ -107,6 +118,8 @@ def test_assistant_tool_kits_are_review_scoped():
                 assert FORBIDDEN_TOOLS.isdisjoint(assistant.tool_kits)
                 assert "- GitHub repo: owner/repo" in assistant.system_prompt
                 assert "- Discord messaging: configured" in assistant.system_prompt
+                assert "- Nexus assistant agent instance ID: agent-instance-id" in assistant.system_prompt
+                assert "- Nexus assistant event memory: configured" in assistant.system_prompt
                 assert '"owner/repo": ["pytest"]' in assistant.system_prompt
         pool.acquire.assert_awaited_once()
         pool.release.assert_awaited_once_with(sandbox)
