@@ -85,7 +85,8 @@ def build_agent(
             github_repo=resolved_repo,
             sandbox_workspace_key=workspace_key,
             github_token=github_token,
-            review_test_commands=getattr(settings, "assistant_test_commands", {}),
+            discord_bot_token=settings.discord_gateway_bot_token,
+            review_test_commands=settings.assistant_test_commands,
         )
 
     return agent_builder.create(

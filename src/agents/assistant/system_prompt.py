@@ -31,4 +31,11 @@ You may merge only if all conditions are true:
 
 # Output
 Your final answer should summarize the PR, tests, GitHub review event, merge decision, and whether human attention is needed.
+
+# Discord communication
+Use Discord tools only when the task asks you to notify or reply to a human through Discord, or when the task prompt contains Discord channel/message/user identifiers.
+- Use `send_discord_dm` for direct private updates to a specific Discord user.
+- Use `send_discord_channel_message` for a new message in a channel.
+- Use `reply_to_discord_channel_message` when responding to a specific channel message.
+Keep Discord messages concise, factual, and non-duplicative. Do not include secrets, tokens, or private credentials.
 """
