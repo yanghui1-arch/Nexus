@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import uuid
 from decimal import Decimal
@@ -25,7 +25,7 @@ from src.server.postgres.models import (
     ProductProposalStatus,
     ProposalPlanningRunRecord,
     ProposalPlanningRunStatus,
-    SecretaryStateRecord,
+    AssistantStateRecord,
     TaskCategory,
     TaskExecutionEventRecord,
     GithubPullRequestFeedbackKind,
@@ -1054,11 +1054,11 @@ class TaskRepository:
         *,
         limit: int = 200,
     ) -> list[TaskRecord]:
-        """List tasks needing external pull request discovery."""
+        """List tasks whose existing pull request may have follow-up GitHub events."""
         query = (
             select(TaskRecord)
             .where(
-                TaskRecord.category == TaskCategory.coding,
+                TaskRecord.category.in_([TaskCategory.coding, TaskCategory.review]),
                 TaskRecord.repo.is_not(None),
                 TaskRecord.external_pull_request_url.is_not(None),
                 TaskRecord.status == TaskStatus.waiting_for_review,
@@ -1969,14 +1969,14 @@ class GithubPullRequestFeedbackRepository:
         await session.commit()
 
 
-class SecretaryStateRepository:
+class AssistantStateRepository:
     @staticmethod
     async def get(
         session: AsyncSession,
         key: str,
     ) -> str | None:
-        """Return a persisted secretary state value."""
-        record = await session.get(SecretaryStateRecord, key)
+        """Return a persisted assistant state value."""
+        record = await session.get(AssistantStateRecord, key)
         return record.value if record is not None else None
 
     @staticmethod
@@ -1985,12 +1985,12 @@ class SecretaryStateRepository:
         *,
         key: str,
         value: str | None,
-    ) -> SecretaryStateRecord:
-        """Persist a secretary state value."""
-        record = await session.get(SecretaryStateRecord, key)
+    ) -> AssistantStateRecord:
+        """Persist a assistant state value."""
+        record = await session.get(AssistantStateRecord, key)
         now = utc_now()
         if record is None:
-            record = SecretaryStateRecord(key=key, value=value)
+            record = AssistantStateRecord(key=key, value=value)
             session.add(record)
         else:
             record.value = value

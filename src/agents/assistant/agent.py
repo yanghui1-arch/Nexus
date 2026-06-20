@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from typing import List
@@ -10,6 +10,7 @@ from pydantic import ConfigDict, Field, PrivateAttr
 from src.agents.assistant.system_prompt import ASSISTANT_SYSTEM_PROMPT
 from src.agents.base.agent import Agent, BaseAgentStepResult, ModelConfig
 from src.sandbox import PYTHON_312, Sandbox, SandboxConfig, SandboxPoolManager, get_sandbox_pool_manager
+from src.tools.code import GITHUB_ADMIN_TOOLS_SCHEMA
 from src.tools.code.github.client import GithubTools
 from src.tools.code.github.notification import GET_NOTIFICATIONS
 from src.tools.code.github.pr import (
@@ -21,11 +22,9 @@ from src.tools.code.github.pr import (
     GET_PR_REVIEWS,
     GET_PULL_REQUEST,
     LIST_OPEN_PULL_REQUESTS,
-    MERGE_PR,
     REPLY_TO_PR,
     REPLY_TO_PR_REVIEW_COMMENT,
 )
-from src.tools.discord import DISCORD_TOOL_DEFINITIONS, DiscordTools
 from src.tools.nexus import NexusTaskContext
 from src.tools.sandbox import LIST_FILES, READ_FILE, RUN_SHELL, SandboxToolKit
 from src.tools.skills import READ_SKILL, project_path_for_repo
@@ -42,21 +41,19 @@ ASSISTANT_GITHUB_TOOLS = [
     REPLY_TO_PR,
     REPLY_TO_PR_REVIEW_COMMENT,
     CREATE_PR_REVIEW,
-    MERGE_PR,
+    *GITHUB_ADMIN_TOOLS_SCHEMA,
     GET_NOTIFICATIONS,
 ]
 
 
 class Assistant(Agent):
-    """Assistant - Nexus PR review secretary agent."""
+    """Assistant - Nexus PR review agent."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     github_repo: str | None = None
     repo_url: str | None = None
     github_token: str | None = None
-    discord_bot_token: str | None = None
-    discord_user_id: str | None = None
     review_test_commands: dict[str, list[str]] = Field(default_factory=dict)
     sandbox_config: SandboxConfig = PYTHON_312
     sandbox_workspace_key: str | None = None
@@ -65,7 +62,6 @@ class Assistant(Agent):
         READ_FILE,
         LIST_FILES,
         *ASSISTANT_GITHUB_TOOLS,
-        *DISCORD_TOOL_DEFINITIONS,
     ])
 
     _sandbox: Sandbox | None = PrivateAttr(default=None)
@@ -88,10 +84,6 @@ class Assistant(Agent):
 
         sandbox_tools = SandboxToolKit(self._sandbox)
         github_tools = GithubTools(self._sandbox, self._nexus_task_context)
-        discord_tools = DiscordTools(
-            bot_token=self.discord_bot_token,
-            default_recipient_id=self.discord_user_id,
-        )
 
         self.tool_kits = {
             "RunCommand": sandbox_tools.all_tools["RunCommand"],
@@ -107,9 +99,8 @@ class Assistant(Agent):
             "reply_to_pr": github_tools.reply_to_pr,
             "reply_to_pr_review_comment": github_tools.reply_to_pr_review_comment,
             "create_pr_review": github_tools.create_pr_review,
-            "merge_pr": github_tools.merge_pr,
+            **github_tools.admin_tools,
             **github_tools.notifications,
-            **discord_tools.all_tools,
         }
 
         repo_lines = ["\n## Runtime Context"]
@@ -118,8 +109,6 @@ class Assistant(Agent):
             repo_lines.append(f"- Local path: /workspace/{self.github_repo.rsplit('/', 1)[-1]}")
         if self.github_token:
             repo_lines.append(f"- GitHub token: {self.github_token}")
-        if self.discord_user_id:
-            repo_lines.append(f"- Default Discord recipient id: {self.discord_user_id}")
         repo_lines.append(f"- Merge method: squash unless the task says otherwise")
         repo_lines.append(
             "- Configured test commands: "
@@ -209,8 +198,6 @@ class Assistant(Agent):
         github_repo: str | None = None,
         repo_url: str | None = None,
         github_token: str | None = None,
-        discord_bot_token: str | None = None,
-        discord_user_id: str | None = None,
         review_test_commands: dict[str, list[str]] | None = None,
         sandbox_config: SandboxConfig = PYTHON_312,
         sandbox_workspace_key: str | None = None,
@@ -228,8 +215,6 @@ class Assistant(Agent):
             github_repo=github_repo,
             repo_url=repo_url,
             github_token=github_token,
-            discord_bot_token=discord_bot_token,
-            discord_user_id=discord_user_id,
             review_test_commands=review_test_commands or {},
             sandbox_config=sandbox_config,
             sandbox_workspace_key=sandbox_workspace_key,

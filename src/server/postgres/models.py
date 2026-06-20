@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import enum
 import uuid
@@ -687,8 +687,8 @@ class GithubPullRequestFeedbackRecord(Base):
     )
 
 
-class SecretaryStateRecord(Base):
-    __tablename__ = "secretary_state"
+class AssistantStateRecord(Base):
+    __tablename__ = "assistant_state"
 
     key: Mapped[str] = mapped_column(String(255), primary_key=True)
     value: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -38,18 +38,20 @@ class Settings:
     auth_session_cookie_name: str
     auth_session_ttl_seconds: int
     frontend_base_url: str
+    discord_gateway_enabled: bool
+    discord_gateway_bot_token: str | None
+    discord_gateway_channel_ids: list[str]
+    discord_gateway_user_ids: list[str]
     product_discovery_poll_interval_seconds: int
     product_discovery_poll_task_limit: int
     product_discovery_recent_proposal_limit: int
     product_discovery_pending_proposal_limit: int
     product_workflow_poll_interval_seconds: int
-    secretary_enabled: bool
-    secretary_github_token: str | None
-    secretary_discord_bot_token: str | None
-    secretary_discord_user_id: str | None
-    secretary_poll_interval_seconds: int
-    secretary_merge_method: str
-    secretary_test_commands: dict[str, list[str]]
+    assistant_enabled: bool
+    assistant_github_token: str | None
+    assistant_poll_interval_seconds: int
+    assistant_merge_method: str
+    assistant_test_commands: dict[str, list[str]]
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -61,7 +63,7 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 
 def _env_test_commands(name: str) -> dict[str, list[str]]:
-    """Read repo-scoped secretary test commands from JSON."""
+    """Read repo-scoped assistant test commands from JSON."""
     raw = os.getenv(name, "{}").strip()
     if not raw:
         return {}
@@ -83,6 +85,19 @@ def _env_test_commands(name: str) -> dict[str, list[str]]:
     return commands
 
 
+def _env_list(name: str) -> list[str]:
+    """Read a string list from JSON array or comma-separated environment value."""
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return []
+    if raw.startswith("["):
+        payload = json.loads(raw)
+        if not isinstance(payload, list) or not all(isinstance(item, str) for item in payload):
+            raise ValueError(f"{name} must be a JSON string array.")
+        return [item.strip() for item in payload if item.strip()]
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Return cached application settings."""
@@ -91,7 +106,7 @@ def get_settings() -> Settings:
     sophie_github_token = os.getenv("NEXUS_SOPHIE_GITHUB_TOKEN")
     jules_github_token = os.getenv("NEXUS_JULES_GITHUB_TOKEN")
     marc_github_token = os.getenv("NEXUS_MARC_GITHUB_TOKEN")
-    assistant_github_token = os.getenv("NEXUS_ASSISTANT_GITHUB_TOKEN") or os.getenv("NEXUS_SECRETARY_GITHUB_TOKEN")
+    assistant_github_token = os.getenv("NEXUS_ASSISTANT_GITHUB_TOKEN")
     github_tokens = {
         "tela": tela_github_token,
         "sophie": sophie_github_token,
@@ -148,6 +163,10 @@ def get_settings() -> Settings:
         auth_session_cookie_name=os.getenv("NEXUS_AUTH_SESSION_COOKIE_NAME", "nexus_session"),
         auth_session_ttl_seconds=int(os.getenv("NEXUS_AUTH_SESSION_TTL_SECONDS", "2592000")),
         frontend_base_url=os.getenv("NEXUS_FRONTEND_BASE_URL", "http://localhost:5174"),
+        discord_gateway_enabled=_env_bool("NEXUS_DISCORD_GATEWAY_ENABLED", False),
+        discord_gateway_bot_token=os.getenv("NEXUS_DISCORD_GATEWAY_BOT_TOKEN"),
+        discord_gateway_channel_ids=_env_list("NEXUS_DISCORD_GATEWAY_CHANNEL_IDS"),
+        discord_gateway_user_ids=_env_list("NEXUS_DISCORD_GATEWAY_USER_IDS"),
         product_discovery_poll_interval_seconds=int(
             os.getenv("NEXUS_PRODUCT_DISCOVERY_POLL_INTERVAL_SECONDS", "3600"),
         ),
@@ -163,13 +182,11 @@ def get_settings() -> Settings:
         product_workflow_poll_interval_seconds=int(
             os.getenv("NEXUS_PRODUCT_WORKFLOW_POLL_INTERVAL_SECONDS", "60"),
         ),
-        secretary_enabled=_env_bool("NEXUS_SECRETARY_ENABLED", False),
-        secretary_github_token=assistant_github_token,
-        secretary_discord_bot_token=os.getenv("NEXUS_SECRETARY_DISCORD_BOT_TOKEN"),
-        secretary_discord_user_id=os.getenv("NEXUS_SECRETARY_DISCORD_USER_ID"),
-        secretary_poll_interval_seconds=int(
-            os.getenv("NEXUS_SECRETARY_POLL_INTERVAL_SECONDS", "120"),
+        assistant_enabled=_env_bool("NEXUS_ASSISTANT_ENABLED", False),
+        assistant_github_token=assistant_github_token,
+        assistant_poll_interval_seconds=int(
+            os.getenv("NEXUS_ASSISTANT_POLL_INTERVAL_SECONDS", "120"),
         ),
-        secretary_merge_method=os.getenv("NEXUS_SECRETARY_MERGE_METHOD", "squash"),
-        secretary_test_commands=_env_test_commands("NEXUS_SECRETARY_TEST_COMMANDS_JSON"),
+        assistant_merge_method=os.getenv("NEXUS_ASSISTANT_MERGE_METHOD", "squash"),
+        assistant_test_commands=_env_test_commands("NEXUS_ASSISTANT_TEST_COMMANDS_JSON"),
     )

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
@@ -108,7 +108,7 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
         "processed_at",
         "payload",
     },
-    "secretary_state": {"key", "value"},
+    "assistant_state": {"key", "value"},
 }
 
 
