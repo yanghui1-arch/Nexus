@@ -25,6 +25,7 @@ from src.server.postgres.models import (
     ProductProposalStatus,
     ProposalPlanningRunRecord,
     ProposalPlanningRunStatus,
+    AssistantEventRecord,
     AssistantStateRecord,
     TaskCategory,
     TaskExecutionEventRecord,
@@ -1967,6 +1968,65 @@ class GithubPullRequestFeedbackRepository:
             record.processed_at = None
             record.updated_at = now
         await session.commit()
+
+
+class AssistantEventRepository:
+    @staticmethod
+    async def create(
+        session: AsyncSession,
+        *,
+        agent_instance_id: uuid.UUID,
+        summary: str,
+        task_id: uuid.UUID | None,
+        repo: str | None,
+        project: str | None,
+        external_pull_request_url: str | None,
+        external_issue_url: str | None,
+    ) -> AssistantEventRecord:
+        event = AssistantEventRecord(
+            agent_instance_id=agent_instance_id,
+            task_id=task_id,
+            repo=repo,
+            project=project,
+            external_pull_request_url=external_pull_request_url,
+            external_issue_url=external_issue_url,
+            summary=summary,
+        )
+        session.add(event)
+        await session.commit()
+        await session.refresh(event)
+        return event
+
+    @staticmethod
+    async def list_recent(
+        session: AsyncSession,
+        *,
+        agent_instance_id: uuid.UUID,
+        limit: int,
+        task_id: uuid.UUID | None = None,
+        external_pull_request_url: str | None = None,
+        external_issue_url: str | None = None,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
+    ) -> list[AssistantEventRecord]:
+        query = select(AssistantEventRecord).where(
+            AssistantEventRecord.agent_instance_id == agent_instance_id,
+        )
+        if task_id is not None:
+            query = query.where(AssistantEventRecord.task_id == task_id)
+        if external_pull_request_url is not None:
+            query = query.where(AssistantEventRecord.external_pull_request_url == external_pull_request_url)
+        if external_issue_url is not None:
+            query = query.where(AssistantEventRecord.external_issue_url == external_issue_url)
+        if start_time is not None:
+            query = query.where(AssistantEventRecord.created_at >= start_time)
+        if end_time is not None:
+            query = query.where(AssistantEventRecord.created_at < end_time)
+        query = query.order_by(
+            AssistantEventRecord.created_at.desc(),
+        ).limit(limit)
+        result = await session.execute(query)
+        return list(result.scalars().all())
 
 
 class AssistantStateRepository:

@@ -26,7 +26,12 @@ from src.tools.code.github.pr import (
     REPLY_TO_PR_REVIEW_COMMENT,
 )
 from src.tools.discord import DISCORD_TOOLS_SCHEMA, DiscordTools
-from src.tools.nexus import NexusTaskContext
+from src.tools.nexus import (
+    NEXUS_ASSISTANT_EVENT_TOOL_DEFINITIONS,
+    NexusAssistantEventContext,
+    NexusAssistantEventTools,
+    NexusTaskContext,
+)
 from src.tools.sandbox import LIST_FILES, READ_FILE, RUN_SHELL, SandboxToolKit
 from src.tools.skills import READ_SKILL, project_path_for_repo
 
@@ -50,6 +55,10 @@ ASSISTANT_DISCORD_TOOLS = [
     *DISCORD_TOOLS_SCHEMA,
 ]
 
+ASSISTANT_NEXUS_TOOLS = [
+    *NEXUS_ASSISTANT_EVENT_TOOL_DEFINITIONS,
+]
+
 
 class Assistant(Agent):
     """Assistant - Nexus PR review agent."""
@@ -69,15 +78,21 @@ class Assistant(Agent):
         LIST_FILES,
         *ASSISTANT_GITHUB_TOOLS,
         *ASSISTANT_DISCORD_TOOLS,
+        *ASSISTANT_NEXUS_TOOLS,
     ])
 
     _sandbox: Sandbox | None = PrivateAttr(default=None)
     _sandbox_pool_manager: SandboxPoolManager | None = PrivateAttr(default=None)
     _nexus_task_context: NexusTaskContext | None = PrivateAttr(default=None)
+    _nexus_assistant_event_context: NexusAssistantEventContext | None = PrivateAttr(default=None)
 
     def set_nexus_task_context(self, context: NexusTaskContext | None) -> None:
         """Attach Nexus task context for tool calls."""
         self._nexus_task_context = context
+
+    def set_nexus_assistant_event_context(self, context: NexusAssistantEventContext | None) -> None:
+        """Attach Nexus assistant event context for tool calls."""
+        self._nexus_assistant_event_context = context
 
     async def __aenter__(self) -> "Assistant":
         repo_url = self.repo_url or (f"https://github.com/{self.github_repo}" if self.github_repo else None)
@@ -92,6 +107,7 @@ class Assistant(Agent):
         sandbox_tools = SandboxToolKit(self._sandbox)
         github_tools = GithubTools(self._sandbox, self._nexus_task_context)
         discord_tools = DiscordTools(bot_token=self.discord_bot_token)
+        nexus_assistant_event_tools = NexusAssistantEventTools(self._nexus_assistant_event_context)
 
         self.tool_kits = {
             "RunCommand": sandbox_tools.all_tools["RunCommand"],
@@ -110,6 +126,7 @@ class Assistant(Agent):
             **github_tools.admin_tools,
             **github_tools.notifications,
             **discord_tools.all_tools,
+            **nexus_assistant_event_tools.all_tools,
         }
 
         repo_lines = ["\n## Runtime Context"]
@@ -122,6 +139,18 @@ class Assistant(Agent):
             "- Discord messaging: "
             + ("configured" if self.discord_bot_token else "not configured")
         )
+        if self._nexus_assistant_event_context is not None:
+            event_context = self._nexus_assistant_event_context
+            repo_lines.append(
+                f"- Nexus assistant agent instance ID: {event_context.agent_instance_id}"
+            )
+            if event_context.current_task_id is not None:
+                repo_lines.append(
+                    f"- Nexus current task ID: {event_context.current_task_id}"
+                )
+            repo_lines.append("- Nexus assistant event memory: configured")
+        else:
+            repo_lines.append("- Nexus assistant event memory: not configured")
         repo_lines.append(f"- Merge method: squash unless the task says otherwise")
         repo_lines.append(
             "- Configured test commands: "

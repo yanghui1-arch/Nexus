@@ -705,3 +705,33 @@ class AssistantStateRecord(Base):
         onupdate=utc_now,
         server_default=func.now(),
     )
+
+
+class AssistantEventRecord(Base):
+    __tablename__ = "assistant_event"
+    __table_args__ = (
+        Index("ix_assistant_event_agent_created", "agent_instance_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    agent_instance_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("agent_instance.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    task_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("task.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    repo: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    project: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    external_pull_request_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    external_issue_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        server_default=func.now(),
+    )

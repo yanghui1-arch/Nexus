@@ -15,7 +15,7 @@ from src.server.postgres.models import (
     TaskWorkItemStatus,
 )
 from src.server.postgres.repositories import TaskWorkItemRepository
-from src.tools.nexus import NexusTaskContext
+from src.tools.nexus import NexusAssistantEventContext, NexusTaskContext
 
 from . import agents, checkpoints, prompt_helper, state
 
@@ -383,6 +383,16 @@ async def run_review_agent_workflow(
     )
     if hasattr(agent, "set_nexus_task_context"):
         agent.set_nexus_task_context(nexus_context)
+    if hasattr(agent, "set_nexus_assistant_event_context"):
+        agent.set_nexus_assistant_event_context(
+            NexusAssistantEventContext(
+                agent_instance_id=task.agent_instance_id,
+                database=database,
+                repo=repo,
+                project=project,
+                current_task_id=task.id,
+            )
+        )
 
     async with agent:
         checkpoint = await state.get_latest_checkpoint(database, task.id)

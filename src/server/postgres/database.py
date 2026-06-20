@@ -109,6 +109,17 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
         "payload",
     },
     "assistant_state": {"key", "value"},
+    "assistant_event": {
+        "id",
+        "agent_instance_id",
+        "task_id",
+        "repo",
+        "project",
+        "external_pull_request_url",
+        "external_issue_url",
+        "summary",
+        "created_at",
+    },
 }
 
 

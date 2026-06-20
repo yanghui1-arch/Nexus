@@ -2,6 +2,7 @@ from src.server.postgres.database import Database
 from src.server.postgres.models import (
     AgentInstanceRecord,
     AgentName,
+    AssistantEventRecord,
     Base,
     ExecutionEventRecord,
     TaskRecord,
@@ -12,6 +13,7 @@ from src.server.postgres.models import (
 )
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
+    AssistantEventRepository,
     ExecutionEventRepository,
     ExecutionEventWriteError,
     TaskRepository,
@@ -22,6 +24,7 @@ __all__ = [
     "Database",
     "AgentInstanceRecord",
     "AgentName",
+    "AssistantEventRecord",
     "Base",
     "ExecutionEventRecord",
     "TaskRecord",
@@ -30,6 +33,7 @@ __all__ = [
     "WorkspaceRecord",
     "WorkspaceStatus",
     "AgentInstanceRepository",
+    "AssistantEventRepository",
     "ExecutionEventRepository",
     "ExecutionEventWriteError",
     "TaskRepository",

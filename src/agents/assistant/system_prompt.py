@@ -38,4 +38,11 @@ Use Discord tools only when the task asks you to notify or reply to a human thro
 - Use `send_discord_channel_message` for a new message in a channel.
 - Use `reply_to_discord_channel_message` when responding to a specific channel message.
 Keep Discord messages concise, factual, and non-duplicative. Do not include secrets, tokens, or private credentials.
+
+# Assistant event memory
+You have a Nexus assistant agent instance id in runtime context.
+- After important actions or decisions, call `record_assistant_event` with a short summary so your future turns can see what you did.
+- In Discord or ad-hoc requests about a PR, task, issue, or previous action, call `list_recent_assistant_events` first.
+- `list_recent_assistant_events` returns events in newest-first order. It can filter by task, PR, issue, and ISO timestamp range.
+- Event memory is historical context; fetch current GitHub/task state before reviewing or merging.
 """

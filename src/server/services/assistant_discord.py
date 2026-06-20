@@ -15,6 +15,7 @@ from src.server.config import Settings
 from src.server.postgres.database import Database
 from src.server.postgres.models import AgentName, WorkspaceRecord
 from src.server.postgres.repositories import AssistantStateRepository, WorkspaceRepository
+from src.tools.nexus import NexusAssistantEventContext
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,14 @@ class AssistantDiscordMessageHandler(DiscordMessageHandler):
             discord_bot_token=self._settings.discord_gateway_bot_token,
             review_test_commands=self._settings.assistant_test_commands,
             sandbox_workspace_key=context.workspace.workspace_key,
+        )
+        agent.set_nexus_assistant_event_context(
+            NexusAssistantEventContext(
+                agent_instance_id=context.workspace.agent_instance_id,
+                database=self._database,
+                repo=context.workspace.github_repo,
+                project=context.workspace.project,
+            )
         )
 
         pending_checkpoint_tasks: set[asyncio.Task[None]] = set()

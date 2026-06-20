@@ -4,6 +4,7 @@ import re
 import shlex
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Callable
 
 import httpx
@@ -14,6 +15,7 @@ from src.sandbox import Sandbox
 from src.server.postgres.database import Database
 from src.server.postgres.models import TaskWorkItemStatus
 from src.server.postgres.repositories import (
+    AssistantEventRepository,
     TaskRepository,
     TaskWorkItemRepository,
 )
@@ -36,6 +38,15 @@ class NexusTaskContext:
         return f"/workspace/{repo_name}"
 
 
+@dataclass
+class NexusAssistantEventContext:
+    agent_instance_id: uuid.UUID
+    database: Database
+    repo: str | None
+    project: str | None
+    current_task_id: uuid.UUID | None = None
+
+
 def _quote_git_command(local_path: str, *args: str) -> str:
     """Quote a command for git output."""
     return " ".join(["git", "-C", shlex.quote(local_path), *(shlex.quote(arg) for arg in args)])
@@ -50,6 +61,114 @@ async def _git_stdout(sandbox: Sandbox, local_path: str, *args: str) -> str:
         detail = stderr or stdout or "git command failed"
         raise RuntimeError(detail.strip())
     return result.get("stdout", "").strip()
+
+
+class NexusAssistantEventTools:
+    def __init__(self, context: NexusAssistantEventContext | None) -> None:
+        self._context = context
+
+    @track(step_type="tool")
+    async def record_assistant_event(
+        self,
+        summary: str,
+        task_id: str | None = None,
+        pull_request_url: str | None = None,
+        issue_url: str | None = None,
+    ) -> dict:
+        if self._context is None:
+            return {"success": False, "message": "Nexus assistant event context is not available."}
+
+        summary = summary.strip()
+        if not summary:
+            return {"success": False, "message": "summary is required."}
+
+        related_task_id = self._context.current_task_id
+        if task_id:
+            related_task_id = uuid.UUID(task_id)
+
+        async with self._context.database.session() as session:
+            event = await AssistantEventRepository.create(
+                session,
+                agent_instance_id=self._context.agent_instance_id,
+                task_id=related_task_id,
+                repo=self._context.repo,
+                project=self._context.project,
+                external_pull_request_url=pull_request_url.strip() if pull_request_url else None,
+                external_issue_url=issue_url.strip() if issue_url else None,
+                summary=summary,
+            )
+
+        event_payload = {
+            "task_id": str(event.task_id) if event.task_id else None,
+            "repo": event.repo,
+            "project": event.project,
+            "external_pull_request_url": event.external_pull_request_url,
+            "external_issue_url": event.external_issue_url,
+            "summary": event.summary,
+            "created_at": event.created_at.isoformat(),
+        }
+        return {
+            "success": True,
+            "event": {key: value for key, value in event_payload.items() if value not in (None, "")},
+        }
+
+    @track(step_type="tool")
+    async def list_recent_assistant_events(
+        self,
+        limit: int = 20,
+        task_id: str | None = None,
+        pull_request_url: str | None = None,
+        issue_url: str | None = None,
+        start_time: str | None = None,
+        end_time: str | None = None,
+    ) -> dict:
+        if self._context is None:
+            return {"success": False, "message": "Nexus assistant event context is not available.", "events": []}
+
+        related_task_id = uuid.UUID(task_id) if task_id else None
+        start_at = datetime.fromisoformat(start_time.replace("Z", "+00:00")) if start_time else None
+        end_at = datetime.fromisoformat(end_time.replace("Z", "+00:00")) if end_time else None
+
+        async with self._context.database.session() as session:
+            events = await AssistantEventRepository.list_recent(
+                session,
+                agent_instance_id=self._context.agent_instance_id,
+                limit=max(1, min(limit, 100)),
+                task_id=related_task_id,
+                external_pull_request_url=pull_request_url.strip() if pull_request_url else None,
+                external_issue_url=issue_url.strip() if issue_url else None,
+                start_time=start_at,
+                end_time=end_at,
+            )
+
+        event_payloads = []
+        for event in events:
+            event_payload = {
+                "task_id": str(event.task_id) if event.task_id else None,
+                "repo": event.repo,
+                "project": event.project,
+                "external_pull_request_url": event.external_pull_request_url,
+                "external_issue_url": event.external_issue_url,
+                "summary": event.summary,
+                "created_at": event.created_at.isoformat(),
+            }
+            event_payloads.append(
+                {key: value for key, value in event_payload.items() if value not in (None, "")}
+            )
+
+        return {
+            "success": True,
+            "count": len(events),
+            "order": "created_at_desc",
+            "events": event_payloads,
+        }
+
+    @property
+    def all_tools(self) -> dict[str, Callable]:
+        return {
+            "record_assistant_event": self.record_assistant_event,
+            "list_recent_assistant_events": self.list_recent_assistant_events,
+        }
 
 
 class NexusReviewTools:
