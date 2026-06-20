@@ -1,9 +1,20 @@
 import { renderHook, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getTaskEvents } from '@/api/tasks';
 import { useProcessTracking } from './hooks/useProcessTracking';
 import { agents, task } from './test/fixtures';
 
+vi.mock('@/api/tasks', () => ({
+  consultTask: vi.fn(),
+  getTaskEvents: vi.fn(),
+}));
+
+const getTaskEventsMock = vi.mocked(getTaskEvents);
+
 describe('useProcessTracking', () => {
+  beforeEach(() => {
+    getTaskEventsMock.mockResolvedValue([]);
+  });
   it('selects a valid agent and newest running task', async () => {
     const newestRunning = task({ id: 'new', createdAt: '2026-01-01T10:00:00.000Z' });
     const oldRunning = task({ id: 'old', createdAt: '2026-01-01T08:00:00.000Z' });
@@ -18,6 +29,7 @@ describe('useProcessTracking', () => {
     await waitFor(() => expect(result.current.selectedTaskId).toBe('new'));
     expect(result.current.tasksForSelectedAgent.map(item => item.id)).toEqual(['new', 'old']);
     expect(result.current.selectedTrackingTask?.id).toBe('new');
+    expect(getTaskEventsMock).toHaveBeenCalledWith('new');
   });
 
   it('clears selection when no running task remains', async () => {

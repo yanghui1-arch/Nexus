@@ -9,6 +9,8 @@ function renderPanel(overrides: Partial<Parameters<typeof ProcessTrackingPanel>[
       agents={agents}
       tasksForAgent={[task()]}
       messages={[]}
+      timelineEvents={[]}
+      isLoadingTimeline={false}
       selectedAgentId="agent-1"
       selectedTaskId="task-1"
       selectedTask={task()}
@@ -36,7 +38,7 @@ describe('ProcessTrackingPanel', () => {
     renderPanel({ tasksForAgent: [], selectedTaskId: '', selectedTask: undefined });
 
     expect(screen.getByText('No running tasks available for the selected agent.')).toBeInTheDocument();
-    expect(screen.getByText('No timeline events yet.')).toBeInTheDocument();
+    expect(screen.getByText('No key execution events to show yet.')).toBeInTheDocument();
     expect(screen.getByText('Token unknown')).toBeInTheDocument();
   });
 
@@ -47,7 +49,7 @@ describe('ProcessTrackingPanel', () => {
     expect(screen.getAllByText('Implement observability UI tests').length).toBeGreaterThan(0);
     expect(screen.getByLabelText('Process metrics')).toHaveTextContent('12,345');
     expect(screen.getByLabelText('Process metrics')).toHaveTextContent('gpt-5');
-    expect(screen.getByRole('heading', { name: 'Timeline' })).toBeInTheDocument();
+    expect(screen.getByText('Execution timeline')).toBeInTheDocument();
   });
 
   it('renders failed task errors and Token unknown fallback', () => {

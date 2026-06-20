@@ -38,6 +38,13 @@ vi.mock('react-i18next', () => ({
         'processTracking.consultTask': 'Consult selected task',
         'processTracking.consultFailed': 'Failed to consult agent',
         'processTracking.consultFailedDescription': 'Failed to consult the selected task.',
+        'processTracking.timeline': 'Execution timeline',
+        'processTracking.timelineHint': 'Key execution events in chronological order.',
+        'processTracking.timelineMuted': `${values?.count ?? 0} low-value events muted`,
+        'processTracking.timelineLoading': 'Loading execution timeline...',
+        'processTracking.timelineEmpty': 'No key execution events to show yet.',
+        'processTracking.timelineLoadFailed': 'Failed to load execution timeline',
+        'processTracking.timelineLoadFailedDescription': 'Could not fetch execution events for the selected task.',
         'status.running': 'Running',
         'status.failed': 'Failed',
       };

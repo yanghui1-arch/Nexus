@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { timeAgo } from '@/lib/workspace-task-view';
 
 type ExecutionTimelineProps = {
-  events: ApiTaskExecutionEvent[];
+  events?: ApiTaskExecutionEvent[];
   isLoading: boolean;
 };
 
@@ -52,7 +52,7 @@ function eventTitle(event: ApiTaskExecutionEvent): string {
   return formatEventType(event.event_type);
 }
 
-export function ExecutionTimeline({ events, isLoading }: ExecutionTimelineProps) {
+export function ExecutionTimeline({ events = [], isLoading }: ExecutionTimelineProps) {
   const { t } = useTranslation();
   const visibleEvents = events.filter(event => isProminent(event) || !MUTED_EVENT_TYPES.has(event.event_type));
   const mutedCount = events.length - visibleEvents.length;
