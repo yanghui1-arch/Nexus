@@ -7,6 +7,7 @@ from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.server.services.background import BackgroundService
 from src.logger import logger
 from src.server.config import Settings
 from src.server.postgres.database import Database
@@ -129,7 +130,7 @@ def build_product_discovery_question(proposals: list[ProductProposalRecord], *, 
     return "\n".join(lines)
 
 
-class ProductDiscoveryPoller:
+class ProductDiscoveryPoller(BackgroundService):
     def __init__(
         self,
         *,

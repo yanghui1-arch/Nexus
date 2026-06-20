@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from src.server.services.background import BackgroundService
 from src.logger import logger
 from src.server.config import Settings
 from src.server.postgres.database import Database
@@ -13,7 +14,7 @@ from src.server.services.product_workflow_publish import (
 )
 
 
-class ProductWorkflowPoller:
+class ProductWorkflowPoller(BackgroundService):
     def __init__(
         self,
         *,

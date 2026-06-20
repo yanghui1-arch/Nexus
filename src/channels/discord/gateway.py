@@ -8,6 +8,7 @@ import discord
 
 from src.logger import logger
 from src.server.config import Settings
+from src.server.services.background import BackgroundService
 
 
 @dataclass(frozen=True)
@@ -46,7 +47,7 @@ class LoggingDiscordMessageHandler:
         )
 
 
-class DiscordGateway:
+class DiscordGateway(BackgroundService):
     """Discord realtime Gateway listener.
 
     The websocket lifecycle, heartbeat, reconnect, and resume behavior are owned by

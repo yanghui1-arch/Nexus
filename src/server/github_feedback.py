@@ -79,6 +79,7 @@ from src.server.postgres.repositories import (
     WorkspaceRepository,
 )
 from src.server.runner import AgentTaskRunner
+from src.server.services.background import BackgroundService
 
 
 _PULL_REQUEST_NUMBER_RE = re.compile(r"/pull/(?P<number>\d+)")
@@ -101,7 +102,7 @@ class _GithubFeedbackItem:
     payload: dict[str, Any]
 
 
-class GithubFeedbackPoller:
+class GithubFeedbackPoller(BackgroundService):
     """Background poller that syncs GitHub PR feedback back into an existing Nexus task.
 
     The poller does not create new TaskRecord rows. Instead, it persists discovered
