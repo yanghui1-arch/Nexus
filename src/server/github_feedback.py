@@ -1,3 +1,56 @@
+"""Sync GitHub pull request feedback into existing Nexus tasks.
+
+This module polls GitHub for follow-up activity on pull requests already
+attached to Nexus tasks. It is intentionally task-scoped: the same GitHub
+comment or review may be stored once per related task because each task has its
+own agent token, checkpoint, and feedback processing status.
+
+Brief workflow:
+    1. Find coding and review tasks that are waiting for review and already
+       have an external pull request URL.
+    2. Fetch the pull request timeline-like inputs from GitHub.
+    3. Store actionable remote feedback as pending local inbox rows.
+    4. Re-dispatch the original task so the worker can resume from checkpoint.
+
+Detailed workflow:
+    1. Candidate selection:
+        The poller loads ``TaskCategory.coding`` and ``TaskCategory.review``
+        tasks whose ``external_pull_request_url`` and repo snapshot are present
+        and whose status is ``waiting_for_review``. The poller never creates a
+        new task for feedback.
+
+    2. GitHub access:
+        Each candidate task is polled with the GitHub token configured for that
+        task's agent. This lets the poller ignore comments written by the same
+        agent while still letting other agents receive that feedback on their
+        own task inbox.
+
+    3. Remote inputs:
+        For open pull requests, the poller fetches pull request comments,
+        reviews, and inline review comments. It also synthesizes a merge
+        conflict feedback item when GitHub reports ``mergeable_state=dirty``.
+        Merged and closed pull requests are treated as terminal status updates
+        for the owning task instead of feedback.
+
+    4. Local inbox:
+        Every remote item is normalized into ``github_pull_request_feedback``.
+        The local dedupe key is ``task_id + kind + external_id``, so feedback is
+        deduplicated per task, not globally per pull request. Empty feedback and
+        self-authored feedback are persisted as ignored; other feedback starts
+        as pending.
+
+    5. Task wake-up:
+        If a new pending feedback row is created, or pending feedback exists
+        that is newer than the task's current state, the poller dispatches the
+        original task through ``AgentTaskRunner.dispatch_github_feedback``. The
+        worker later claims pending rows, builds a feedback prompt, and resumes
+        the agent from the saved checkpoint.
+
+Notes:
+    Pure head SHA changes without a new GitHub comment, review, inline comment,
+    or merge conflict are not currently modeled as feedback events.
+"""
+
 from __future__ import annotations
 
 import asyncio
