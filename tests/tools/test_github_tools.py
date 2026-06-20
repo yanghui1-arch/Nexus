@@ -6,7 +6,7 @@ import anyio
 import httpx
 import pytest
 
-from src.tools.code import GITHUB_TOOLS_SCHEMA, GithubTools
+from src.tools.code import GITHUB_ADMIN_TOOLS_SCHEMA, GITHUB_TOOLS_SCHEMA, GithubTools
 from src.tools.code.github.issue import (
     CREATE_GITHUB_ISSUE,
     GET_ISSUE_COMMENTS,
@@ -480,7 +480,7 @@ class TestToolDefinitions:
     """Tests for tool definitions."""
 
     def test_all_new_tools_in_definitions(self):
-        """Verify all current GitHub tools are in GITHUB_TOOLS_SCHEMA."""
+        """Verify public GitHub tools are in GITHUB_TOOLS_SCHEMA."""
         expected_tools = [
             CREATE_GITHUB_ISSUE,
             GET_ISSUE_COMMENTS,
@@ -496,7 +496,6 @@ class TestToolDefinitions:
             GET_PR_COMMENTS,
             REPLY_TO_PR,
             CREATE_PR_REVIEW,
-            MERGE_PR,
             GET_MY_OPEN_PRS,
             GET_MY_ISSUES,
             GET_NOTIFICATIONS,
@@ -504,16 +503,33 @@ class TestToolDefinitions:
         for tool in expected_tools:
             assert tool in GITHUB_TOOLS_SCHEMA, f"{tool} not found in GITHUB_TOOLS_SCHEMA"
 
+    def test_admin_tools_are_not_in_public_definitions(self):
+        """Verify admin-only GitHub tools are excluded from public schemas."""
+        public_names = {tool["function"]["name"] for tool in GITHUB_TOOLS_SCHEMA}
+        admin_names = {tool["function"]["name"] for tool in GITHUB_ADMIN_TOOLS_SCHEMA}
+
+        assert "merge_pr" not in public_names
+        assert "merge_pr" in admin_names
+        assert MERGE_PR in GITHUB_ADMIN_TOOLS_SCHEMA
+
     def test_github_toolkit_does_not_expose_bind_pr_to_task(self, mock_sandbox):
         """Verify bind_pr_to_task is not part of the GitHub toolkit."""
         tools = GithubTools(mock_sandbox).all_tools
         assert "bind_pr_to_task" not in tools
         assert "create_pr_review" in tools
-        assert "merge_pr" in tools
+        assert "merge_pr" not in tools
+
+    def test_github_toolkit_exposes_merge_only_to_admin_tools(self, mock_sandbox):
+        """Verify merge_pr is restricted to administrator-only tools."""
+        kit = GithubTools(mock_sandbox)
+
+        assert "merge_pr" not in kit.all_tools
+        assert set(kit.admin_tools) == {"merge_pr"}
+        assert kit.admin_tools["merge_pr"] == kit.merge_pr
 
     def test_tool_definitions_have_required_fields(self):
         """Verify tool definitions have required structure."""
-        for tool_def in GITHUB_TOOLS_SCHEMA:
+        for tool_def in [*GITHUB_TOOLS_SCHEMA, *GITHUB_ADMIN_TOOLS_SCHEMA]:
             assert "type" in tool_def
             assert "function" in tool_def
             func = tool_def["function"]

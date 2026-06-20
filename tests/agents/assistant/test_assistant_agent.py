@@ -25,7 +25,8 @@ EXPECTED_TOOLS = {
     "merge_pr",
     "get_notifications",
     "send_discord_dm",
-    "send_discord_message",
+    "send_discord_channel_message",
+    "reply_to_discord_channel_message",
 }
 
 FORBIDDEN_TOOLS = {
@@ -51,7 +52,6 @@ def make_assistant() -> Assistant:
         github_repo="owner/repo",
         github_token="github-token",
         discord_bot_token="discord-token",
-        discord_user_id="discord-user",
         review_test_commands={"owner/repo": ["pytest"]},
         sandbox_workspace_key="workspace-key",
     )
@@ -106,6 +106,7 @@ def test_assistant_tool_kits_are_review_scoped():
                 assert set(assistant.tool_kits) == EXPECTED_TOOLS
                 assert FORBIDDEN_TOOLS.isdisjoint(assistant.tool_kits)
                 assert "- GitHub repo: owner/repo" in assistant.system_prompt
+                assert "- Discord messaging: configured" in assistant.system_prompt
                 assert '"owner/repo": ["pytest"]' in assistant.system_prompt
         pool.acquire.assert_awaited_once()
         pool.release.assert_awaited_once_with(sandbox)

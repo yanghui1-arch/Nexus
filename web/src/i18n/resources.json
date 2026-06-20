@@ -90,8 +90,7 @@
             "persistenceAndApi": "持久化与 API 设计"
           },
           "assistant": {
-            "description": "Discord 秘书、PR review、测试和低噪音自动合并。",
-            "discordCommands": "Discord 私信命令",
+            "description": "PR review、测试和低噪音自动合并。",
             "prReview": "PR review 与测试"
           }
         }
@@ -481,8 +480,7 @@
             "persistenceAndApi": "Persistence and API design"
           },
           "assistant": {
-            "description": "Discord secretary for PR review, testing, and low-noise auto-merge.",
-            "discordCommands": "Discord DM commands",
+            "description": "PR review, testing, and low-noise auto-merge.",
             "prReview": "PR review and tests"
           }
         }

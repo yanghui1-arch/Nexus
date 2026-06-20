@@ -89,7 +89,7 @@ class FakeFeatureItemSession:
 def _make_settings():
     """Create test server settings."""
     return SimpleNamespace(
-        github_tokens={"sophie": "test-token"},
+        github_tokens={"sophie": "test-token", "assistant": "assistant-token"},
         github_feedback_poll_interval_seconds=60,
         github_feedback_poll_task_limit=20,
         github_feedback_http_timeout_seconds=10.0,
@@ -248,6 +248,79 @@ def test_poll_once_discovers_feedback_and_reuses_existing_task(monkeypatch):
             "author": "reviewer",
         },
     ]
+
+
+def test_poll_once_discovers_feedback_for_assistant_review_task(monkeypatch):
+    """Verify Assistant review tasks reuse the GitHub feedback poller."""
+    task = SimpleNamespace(
+        id=uuid.uuid4(),
+        repo="owner/repo",
+        external_pull_request_url="https://github.com/owner/repo/pull/12",
+        agent=SimpleNamespace(value="assistant"),
+        status=TaskStatus.waiting_for_review,
+        result="assistant review result",
+        updated_at=datetime.fromisoformat("2024-01-01T00:00:00+00:00"),
+    )
+    captured = {}
+    runner = SimpleNamespace(dispatch_github_feedback=AsyncMock(return_value=True))
+
+    async def fake_list_candidates(session, *, limit):
+        assert limit == 20
+        return [task]
+
+    async def fake_upsert(session, **kwargs):
+        captured["token_used"] = kwargs["payload"]["token_used"]
+        return SimpleNamespace(id=uuid.uuid4()), True
+
+    async def fake_has_pending_newer_than(session, task_id, *, cutoff):
+        return False
+
+    async def fake_get(self, url, headers=None, params=None):
+        page = 1 if params is None else params.get("page", 1)
+        token = headers["Authorization"].removeprefix("Bearer ") if headers else None
+        if url.endswith("/user"):
+            return FakeResponse({"login": "assistant-bot"})
+        if url.endswith("/pulls/12"):
+            return FakeResponse({"state": "open", "merged_at": None})
+        if url.endswith("/issues/12/comments"):
+            if page > 1:
+                return FakeResponse([])
+            return FakeResponse(
+                [
+                    {
+                        "id": 401,
+                        "user": {"login": "reviewer"},
+                        "body": "Can you take another look?",
+                        "created_at": "2024-01-02T00:00:00Z",
+                        "updated_at": "2024-01-02T00:00:00Z",
+                        "html_url": "https://github.com/owner/repo/pull/12#issuecomment-401",
+                        "token_used": token,
+                    }
+                ]
+            )
+        if url.endswith("/pulls/12/reviews") or url.endswith("/pulls/12/comments"):
+            return FakeResponse([])
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    monkeypatch.setattr(TaskRepository, "list_external_pull_request_candidates", fake_list_candidates)
+    monkeypatch.setattr(GithubPullRequestFeedbackRepository, "upsert_discovered", fake_upsert)
+    monkeypatch.setattr(
+        GithubPullRequestFeedbackRepository,
+        "has_pending_newer_than",
+        fake_has_pending_newer_than,
+    )
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+
+    poller = GithubFeedbackPoller(
+        settings=_make_settings(),
+        database=FakeDatabase(),
+        runner=runner,
+    )
+    discovered = asyncio.run(poller.poll_once())
+
+    assert discovered == 1
+    assert captured["token_used"] == "assistant-token"
+    runner.dispatch_github_feedback.assert_awaited_once_with(task.id)
 
 
 def test_poll_once_does_not_redispatch_stale_pending_feedback(monkeypatch):

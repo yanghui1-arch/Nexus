@@ -32,6 +32,9 @@ FORBIDDEN_MUTATING_TOOLS = {
     "reply_to_issue",
     "reply_to_pr",
     "reply_to_pr_review_comment",
+    "send_discord_dm",
+    "send_discord_channel_message",
+    "reply_to_discord_channel_message",
     "create_task_work_items",
     "finish_current_task_work_item",
 }

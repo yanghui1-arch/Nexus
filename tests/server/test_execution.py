@@ -424,7 +424,7 @@ def test_build_jules_agent_as_coding_agent(monkeypatch):
 
 
 def test_build_assistant_agent_as_review_agent(monkeypatch):
-    """Verify build assistant agent uses review-agent context and Discord settings."""
+    """Verify build assistant agent uses review-agent context."""
     captured_agent = {}
 
     class FakeAssistant:
@@ -446,9 +446,8 @@ def test_build_assistant_agent_as_review_agent(monkeypatch):
         max_context=4096,
         max_attempts=8,
         github_tokens={"assistant": "assistant-token"},
-        secretary_discord_bot_token="discord-token",
-        secretary_discord_user_id="discord-user",
-        secretary_test_commands={"owner/repo": ["pytest"]},
+        discord_gateway_bot_token="discord-token",
+        assistant_test_commands={"owner/repo": ["pytest"]},
     )
 
     monkeypatch.setitem(agents.AGENT_BUILDERS, "assistant", FakeAssistant)
@@ -471,7 +470,6 @@ def test_build_assistant_agent_as_review_agent(monkeypatch):
         "sandbox_workspace_key": "workspace",
         "github_token": "assistant-token",
         "discord_bot_token": "discord-token",
-        "discord_user_id": "discord-user",
         "review_test_commands": {"owner/repo": ["pytest"]},
     }
 
@@ -1148,7 +1146,7 @@ def test_run_agent_workflow_dispatches_review_category(monkeypatch):
             database=FakeDatabase(),
             task=task,
             on_progress=None,
-            settings=SimpleNamespace(),
+            settings=SimpleNamespace(github_feedback_batch_size=5),
             user_id="user-id",
             workspace_key="workspace",
             github_repo="owner/repo",
@@ -1160,8 +1158,8 @@ def test_run_agent_workflow_dispatches_review_category(monkeypatch):
     assert captured["github_repo"] == "owner/repo"
 
 
-def test_run_review_agent_workflow_closes_task_with_response(monkeypatch):
-    """Verify Assistant review tasks run once and close with the final response."""
+def test_run_review_agent_workflow_waits_with_response(monkeypatch):
+    """Verify Assistant review tasks finish one turn and wait for GitHub follow-up."""
     task = make_task(
         agent=SimpleNamespace(value="assistant"),
         category=TaskCategory.review,
@@ -1183,9 +1181,13 @@ def test_run_review_agent_workflow_closes_task_with_response(monkeypatch):
         """Capture completed state."""
         captured["completed"] = (task_id, result)
 
+    async def no_feedback(database, task_id, *, limit):
+        return []
+
     monkeypatch.setattr(agents, "build_agent", lambda **_: fake_agent)
     monkeypatch.setattr(workflows, "run_agent", fake_run_agent)
     monkeypatch.setattr(state, "get_latest_checkpoint", latest_checkpoint)
+    monkeypatch.setattr(state, "claim_pending_github_feedback", no_feedback)
     monkeypatch.setattr(state, "mark_review_completed", mark_completed)
 
     result = asyncio.run(
@@ -1193,7 +1195,7 @@ def test_run_review_agent_workflow_closes_task_with_response(monkeypatch):
             database=FakeDatabase(),
             task=task,
             on_progress=None,
-            settings=SimpleNamespace(),
+            settings=SimpleNamespace(github_feedback_batch_size=5),
             user_id="user-id",
             workspace_key="workspace",
             github_repo="owner/repo",
@@ -1208,14 +1210,163 @@ def test_run_review_agent_workflow_closes_task_with_response(monkeypatch):
     assert fake_agent.close_count == 1
 
 
+def test_run_review_agent_workflow_processes_github_feedback_from_checkpoint(monkeypatch):
+    """Verify Assistant review workflow resumes from checkpoint for PR feedback."""
+    task = make_task(
+        agent=SimpleNamespace(value="assistant"),
+        category=TaskCategory.review,
+        checkpoint=[
+            {"role": "system", "content": "checkpoint system"},
+            {"role": "assistant", "content": "previous review"},
+        ],
+    )
+    fake_agent = FakeAgent()
+    captured = {}
+    feedback_items = [
+        SimpleNamespace(
+            id="feedback-1",
+            pull_request_number=17,
+            kind=GithubPullRequestFeedbackKind.pr_comment,
+            external_id=903,
+            author="reviewer",
+            body="Please review the latest update.",
+            review_state=None,
+            file_path=None,
+            line=None,
+            html_url="https://github.com/owner/repo/pull/17#issuecomment-903",
+        )
+    ]
+
+    async def claim_feedback(database, task_id, *, limit):
+        assert task_id == task.id
+        assert limit == 5
+        return feedback_items
+
+    async def mark_processed(database, claimed_items):
+        captured["processed"] = claimed_items
+
+    async def latest_checkpoint(database, task_id):
+        assert task_id == task.id
+        return task.checkpoint or []
+
+    async def fake_run_agent(**kwargs):
+        captured["run"] = kwargs
+        return BaseAgentResponse(response="assistant handled feedback")
+
+    async def mark_completed(database, task_id, result):
+        captured["completed"] = (task_id, result)
+
+    monkeypatch.setattr(agents, "build_agent", lambda **_: fake_agent)
+    monkeypatch.setattr(workflows, "run_agent", fake_run_agent)
+    monkeypatch.setattr(state, "get_latest_checkpoint", latest_checkpoint)
+    monkeypatch.setattr(state, "claim_pending_github_feedback", claim_feedback)
+    monkeypatch.setattr(state, "mark_github_feedback_processed", mark_processed)
+    monkeypatch.setattr(state, "mark_review_completed", mark_completed)
+
+    result = asyncio.run(
+        workflows.run_review_agent_workflow(
+            database=FakeDatabase(),
+            task=task,
+            on_progress=None,
+            settings=SimpleNamespace(github_feedback_batch_size=5),
+            user_id="user-id",
+            workspace_key="workspace",
+            github_repo="owner/repo",
+        )
+    )
+
+    assert result is None
+    assert captured["processed"] == feedback_items
+    assert captured["completed"] == (task.id, "assistant handled feedback")
+    assert captured["run"]["checkpoint"] == [
+        {"role": "system", "content": "checkpoint system"},
+        {"role": "assistant", "content": "previous review"},
+    ]
+    assert "Continue the existing Assistant PR review thread." in captured["run"]["question"]
+    assert "You reviewed pull request #17 in owner/repo before." in captured["run"]["question"]
+    assert "review the latest PR messages" in captured["run"]["question"]
+    assert "Please review the latest update." in captured["run"]["question"]
+
+
+def test_run_review_agent_workflow_marks_completed_github_feedback_from_checkpoint(monkeypatch):
+    """Verify completed Assistant feedback checkpoints return to waiting state."""
+    task = make_task(
+        agent=SimpleNamespace(value="assistant"),
+        category=TaskCategory.review,
+        checkpoint=[],
+    )
+    feedback_items = [
+        SimpleNamespace(
+            id="feedback-1",
+            pull_request_number=17,
+            kind=GithubPullRequestFeedbackKind.pr_comment,
+            external_id=904,
+            author="reviewer",
+            body="Thanks, please verify once more.",
+            review_state=None,
+            file_path=None,
+            line=None,
+            html_url="https://github.com/owner/repo/pull/17#issuecomment-904",
+        )
+    ]
+    feedback_prompt = prompt_helper.build_assistant_github_feedback_prompt(task, feedback_items)
+    task.checkpoint = [
+        {"role": "system", "content": "checkpoint system"},
+        {"role": "user", "content": feedback_prompt},
+        {"role": "assistant", "content": "Assistant feedback handled."},
+    ]
+    fake_agent = FakeAgent()
+    captured = {}
+
+    async def claim_feedback(database, task_id, *, limit):
+        assert task_id == task.id
+        return feedback_items
+
+    async def mark_processed(database, claimed_items):
+        captured["processed"] = claimed_items
+
+    async def latest_checkpoint(database, task_id):
+        assert task_id == task.id
+        return task.checkpoint or []
+
+    async def fail_run_agent(**kwargs):
+        raise AssertionError("completed Assistant feedback should not rerun")
+
+    async def mark_completed(database, task_id, result):
+        captured["completed"] = (task_id, result)
+
+    monkeypatch.setattr(agents, "build_agent", lambda **_: fake_agent)
+    monkeypatch.setattr(workflows, "run_agent", fail_run_agent)
+    monkeypatch.setattr(state, "get_latest_checkpoint", latest_checkpoint)
+    monkeypatch.setattr(state, "claim_pending_github_feedback", claim_feedback)
+    monkeypatch.setattr(state, "mark_github_feedback_processed", mark_processed)
+    monkeypatch.setattr(state, "mark_review_completed", mark_completed)
+
+    result = asyncio.run(
+        workflows.run_review_agent_workflow(
+            database=FakeDatabase(),
+            task=task,
+            on_progress=None,
+            settings=SimpleNamespace(github_feedback_batch_size=5),
+            user_id="user-id",
+            workspace_key="workspace",
+            github_repo="owner/repo",
+        )
+    )
+
+    assert result is None
+    assert captured["processed"] == feedback_items
+    assert captured["completed"] == (task.id, "Assistant feedback handled.")
+
+
 def test_run_review_agent_workflow_completes_from_checkpoint(monkeypatch):
-    """Verify completed review checkpoints are closed without rerunning Assistant."""
+    """Verify completed review checkpoints wait without rerunning Assistant."""
     task = make_task(
         agent=SimpleNamespace(value="assistant"),
         category=TaskCategory.review,
         checkpoint=[
             {"role": "system", "content": "system"},
-            {"role": "user", "content": "review pr"},
+            {"role": "user", "content": "do the task"},
             {"role": "assistant", "content": "already reviewed"},
         ],
     )
@@ -1235,9 +1386,13 @@ def test_run_review_agent_workflow_completes_from_checkpoint(monkeypatch):
         """Capture completed state."""
         captured["completed"] = (task_id, result)
 
+    async def no_feedback(database, task_id, *, limit):
+        return []
+
     monkeypatch.setattr(agents, "build_agent", lambda **_: fake_agent)
     monkeypatch.setattr(workflows, "run_agent", fail_run_agent)
     monkeypatch.setattr(state, "get_latest_checkpoint", latest_checkpoint)
+    monkeypatch.setattr(state, "claim_pending_github_feedback", no_feedback)
     monkeypatch.setattr(state, "mark_review_completed", mark_completed)
 
     result = asyncio.run(
@@ -1245,7 +1400,7 @@ def test_run_review_agent_workflow_completes_from_checkpoint(monkeypatch):
             database=FakeDatabase(),
             task=task,
             on_progress=None,
-            settings=SimpleNamespace(),
+            settings=SimpleNamespace(github_feedback_batch_size=5),
             user_id="user-id",
             workspace_key="workspace",
             github_repo="owner/repo",

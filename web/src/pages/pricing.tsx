@@ -39,7 +39,7 @@ const PLANS = [
     name: 'Assistant',
     price: '¥0',
     descriptionKey: 'pricing.plans.assistant.description',
-    featureKeys: ['pricing.plans.common.access', 'pricing.plans.assistant.discordCommands', 'pricing.plans.assistant.prReview'],
+    featureKeys: ['pricing.plans.common.access', 'pricing.plans.assistant.prReview'],
   },
 ];
 
