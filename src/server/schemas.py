@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
 from typing import Any, Protocol
@@ -287,6 +287,62 @@ class TaskSubmitResponse(BaseModel):
     status: TaskStatus
 
 
+class TaskRetryRequest(BaseModel):
+    from_checkpoint: bool = False
+    confirm_duplicate_side_effects: bool = False
+
+
+class TaskRecoveryResponse(BaseModel):
+    visible: bool
+    has_checkpoint: bool
+    checkpoint_summary: str | None
+    failure_summary: str | None
+    recommended_action: str
+    unrecoverable_reasons: list[str] = Field(default_factory=list)
+    risk_warnings: list[str] = Field(default_factory=list)
+    duplicate_side_effects_confirmation_required: bool
+    can_retry_from_checkpoint: bool
+    can_retry_as_new_task: bool
+
+
+    @classmethod
+    def from_task(cls, task: TaskRecord) -> "TaskRecoveryResponse" | None:
+        has_checkpoint = bool(task.checkpoint)
+        stale_running = _task_is_stale_running(task)
+        visible = task.status == TaskStatus.failed or stale_running or has_checkpoint
+        if not visible:
+            return None
+
+        unrecoverable_reasons: list[str] = []
+        if task.status not in {TaskStatus.failed, TaskStatus.running} and not has_checkpoint:
+            unrecoverable_reasons.append("Task is not failed, stale running, or checkpointed.")
+        can_retry_from_checkpoint = has_checkpoint and not unrecoverable_reasons
+        can_retry_as_new_task = task.status in {TaskStatus.failed, TaskStatus.running}
+        risk_warnings = [
+            "Retrying may repeat external side effects such as GitHub comments, commits, branches, or pull requests."
+        ]
+        if task.external_pull_request_url:
+            risk_warnings.append("This task is already linked to a pull request; verify the retry should touch the same PR.")
+        recommended_action = (
+            "Retry from checkpoint to preserve completed context."
+            if can_retry_from_checkpoint
+            else "Retry as a new task after reviewing the failure."
+        )
+        if stale_running:
+            recommended_action = "Task appears stale; retry from checkpoint if progress should be preserved."
+        return cls(
+            visible=True,
+            has_checkpoint=has_checkpoint,
+            checkpoint_summary=_checkpoint_summary(task),
+            failure_summary=task.error,
+            recommended_action=recommended_action,
+            unrecoverable_reasons=unrecoverable_reasons,
+            risk_warnings=risk_warnings,
+            duplicate_side_effects_confirmation_required=bool(risk_warnings),
+            can_retry_from_checkpoint=can_retry_from_checkpoint,
+            can_retry_as_new_task=can_retry_as_new_task,
+        )
+
 class FeatureItemRetryTaskResponse(BaseModel):
     feature_item: FeatureItemResponse
     task: TaskSubmitResponse
@@ -329,6 +385,7 @@ class TaskResponse(BaseModel):
     updated_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+    recovery: TaskRecoveryResponse | None = None
 
     @classmethod
     def from_record(
@@ -360,7 +417,25 @@ class TaskResponse(BaseModel):
             updated_at=task.updated_at,
             started_at=task.started_at,
             finished_at=task.finished_at,
+            recovery=TaskRecoveryResponse.from_task(task),
         )
+
+
+def _task_is_stale_running(task: TaskRecord) -> bool:
+    if task.status != TaskStatus.running:
+        return False
+    updated_at = task.updated_at
+    if updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - updated_at > timedelta(minutes=30)
+
+
+def _checkpoint_summary(task: TaskRecord) -> str | None:
+    checkpoint = task.checkpoint or []
+    if not checkpoint:
+        return None
+    noun = "message" if len(checkpoint) == 1 else "messages"
+    return f"{len(checkpoint)} checkpoint {noun} saved at {task.updated_at.isoformat()}"
 
 
 class TaskExecutionEventResponse(BaseModel):
