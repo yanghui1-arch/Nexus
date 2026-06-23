@@ -844,3 +844,99 @@ def test_task_stats_include_tool_checkpoint_and_error_fields(monkeypatch: pytest
         'latest_error': 'latest event error',
         'model': 'gpt-test',
     }
+
+def test_retry_task_from_checkpoint_dispatches_same_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify checkpoint retry queues and dispatches the existing task."""
+    now = datetime.now(timezone.utc)
+    task = _make_task(
+        question="retry me",
+        status=TaskStatus.failed,
+        created_at=now,
+        checkpoint=[{"role": "assistant", "content": "progress"}],
+    )
+    runner = SimpleNamespace(dispatch_task=AsyncMock(return_value=True))
+    captured: dict[str, Any] = {}
+
+    async def fake_get_for_user(session, task_id, **kwargs):
+        captured["user_id"] = kwargs["user_id"]
+        return task
+
+    async def fake_no_running(session, agent_instance_id, **kwargs):
+        captured["agent_instance_id"] = agent_instance_id
+        captured["exclude_task_id"] = kwargs["exclude_task_id"]
+        return None
+
+    async def fake_queue(session, task_id):
+        captured["queued_task_id"] = task_id
+        return task
+
+    async def fake_event(session, **kwargs):
+        captured["event"] = kwargs
+        return SimpleNamespace(id=uuid.uuid4())
+
+    monkeypatch.setattr(TaskRepository, "get_for_user", fake_get_for_user)
+    monkeypatch.setattr(TaskRepository, "get_running_for_agent_instance", fake_no_running)
+    monkeypatch.setattr(TaskRepository, "queue_checkpoint_retry", fake_queue)
+    monkeypatch.setattr(TaskRepository, "create_execution_event", fake_event)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(runner_obj=runner))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(f"/v1/tasks/{task.id}/retry-from-checkpoint")
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 202
+    assert response.json() == {
+        "task_id": str(task.id),
+        "agent_instance_id": str(task.agent_instance_id),
+        "category": task.category.value,
+        "status": TaskStatus.queued.value,
+    }
+    assert captured["queued_task_id"] == task.id
+    assert captured["exclude_task_id"] == task.id
+    assert captured["event"]["event_type"] == "RECOVERY"
+    runner.dispatch_task.assert_awaited_once_with(task.id)
+
+
+def test_retry_task_from_checkpoint_hides_unowned_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify retry access follows task ownership."""
+    task_id = uuid.uuid4()
+    runner = SimpleNamespace(dispatch_task=AsyncMock(return_value=True))
+    monkeypatch.setattr(TaskRepository, "get_for_user", AsyncMock(return_value=None))
+    queue_mock = AsyncMock()
+    monkeypatch.setattr(TaskRepository, "queue_checkpoint_retry", queue_mock)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(runner_obj=runner))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(f"/v1/tasks/{task_id}/retry-from-checkpoint")
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 404
+    queue_mock.assert_not_awaited()
+    runner.dispatch_task.assert_not_awaited()
+
+
+def test_retry_task_from_checkpoint_rejects_non_failed_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify only failed tasks can be retried."""
+    task = _make_task(
+        question="running",
+        status=TaskStatus.running,
+        created_at=datetime.now(timezone.utc),
+        checkpoint=[{"role": "assistant", "content": "progress"}],
+    )
+    runner = SimpleNamespace(dispatch_task=AsyncMock(return_value=True))
+    monkeypatch.setattr(TaskRepository, "get_for_user", AsyncMock(return_value=task))
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(runner_obj=runner))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(f"/v1/tasks/{task.id}/retry-from-checkpoint")
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Only failed tasks can be retried from checkpoint"
+    runner.dispatch_task.assert_not_awaited()
