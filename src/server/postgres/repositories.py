@@ -1178,7 +1178,7 @@ class TaskRepository:
         session: AsyncSession,
         *,
         task_id: uuid.UUID,
-        event_type: Literal["START", "PROCESS", "SAVE_CHECKPOINT", "COMPLETED", "FAILED", "EXCEED_ATTEMPTS"],
+        event_type: Literal["START", "PROCESS", "SAVE_CHECKPOINT", "RECOVERY", "COMPLETED", "FAILED", "EXCEED_ATTEMPTS"],
         agent: AgentName | None,
         message: str | None = None,
         safe_metadata: dict[str, object] | None = None,
@@ -1258,6 +1258,27 @@ class TaskRepository:
         task.finished_at = None
         task.dispatch_token = None
         task.lease_expires_at = None
+        await session.commit()
+        await session.refresh(task)
+        return task
+
+    @staticmethod
+    async def queue_checkpoint_retry(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+    ) -> TaskRecord | None:
+        """Queue an eligible failed task for checkpoint recovery."""
+        task = await session.get(TaskRecord, task_id)
+        if task is None or task.status != TaskStatus.failed or not task.checkpoint:
+            return None
+
+        now = utc_now()
+        task.status = TaskStatus.queued
+        task.error = None
+        task.finished_at = None
+        task.dispatch_token = None
+        task.lease_expires_at = None
+        task.updated_at = now
         await session.commit()
         await session.refresh(task)
         return task
