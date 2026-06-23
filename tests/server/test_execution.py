@@ -180,11 +180,10 @@ def test_execute_agent_task_skips_non_redelivered_running_duplicate(monkeypatch)
     monkeypatch.setattr(workflows, "run_agent_workflow", fail_if_called)
     monkeypatch.setattr(state, "mark_failed", fail_if_called)
 
-    settings = SimpleNamespace(database_url="postgresql://test", celery_queue="test-queue")
     asyncio.run(
         execution_task.execute_agent_task(
             task_id=task_id,
-            settings=settings,
+            settings=SimpleNamespace(database_url="postgresql://test"),
             allow_running=False,
         )
     )
@@ -201,7 +200,6 @@ def test_execute_agent_task_logs_claim_failure_without_releasing_workspace(monke
     conflicting_task_id = uuid.uuid4()
     databases = []
     warnings = []
-    rescheduled = []
 
     class RuntimeDatabase(FakeDatabase):
         def __init__(self, database_url):
@@ -278,17 +276,11 @@ def test_execute_agent_task_logs_claim_failure_without_releasing_workspace(monke
     monkeypatch.setattr(workflows, "run_agent_workflow", fail_if_called)
     monkeypatch.setattr(state, "mark_failed", fail_if_called)
     monkeypatch.setattr(execution_task.logger, "warning", capture_warning)
-    monkeypatch.setattr(
-        execution_task,
-        "_reschedule_queued_delivery",
-        lambda requested_task_id, settings: rescheduled.append((requested_task_id, settings)),
-    )
 
-    settings = SimpleNamespace(database_url="postgresql://test", celery_queue="test-queue")
     asyncio.run(
         execution_task.execute_agent_task(
             task_id=task_id,
-            settings=settings,
+            settings=SimpleNamespace(database_url="postgresql://test"),
             allow_running=False,
         )
     )
@@ -302,7 +294,6 @@ def test_execute_agent_task_logs_claim_failure_without_releasing_workspace(monke
     assert conflicting_task_id in warning_args
     assert TaskStatus.queued.value in warning_args
     assert "idle" in warning_args
-    assert rescheduled == [(task_id, settings)]
 
 
 def test_load_binding_prefers_task_snapshot_over_workspace_context(monkeypatch):

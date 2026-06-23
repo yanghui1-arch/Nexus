@@ -6,7 +6,6 @@ from typing import Any
 
 from src.agents.base.agent import WorkTempStatus
 from src.logger import logger
-from src.server.celery.app import celery_app
 from src.server.config import Settings, get_settings
 from src.server.postgres.database import Database
 from src.server.postgres.models import TaskCategory, TaskRecord, TaskStatus
@@ -14,20 +13,6 @@ from src.server.postgres.repositories import TaskRepository
 
 from .state import ExecutionBinding
 from . import state, workflows
-
-
-CLAIM_CONFLICT_RETRY_COUNTDOWN_SECONDS = 30
-
-
-def _reschedule_queued_delivery(task_id: uuid.UUID, settings: Settings) -> None:
-    """Delay a queued task delivery after a claim conflict."""
-    celery_app.send_task(
-        "nexus.execute_agent_task",
-        kwargs={"task_id": str(task_id)},
-        queue=settings.celery_queue,
-        task_id=str(task_id),
-        countdown=CLAIM_CONFLICT_RETRY_COUNTDOWN_SECONDS,
-    )
 
 
 async def execute_agent_task(
@@ -214,11 +199,6 @@ async def execute_agent_task(
                     claim_snapshot.workspace_status,
                     claim_snapshot.workspace_updated_at,
                 )
-                if (
-                    claim_snapshot.task_status == TaskStatus.queued.value
-                    and claim_snapshot.conflicting_running_task_id is not None
-                ):
-                    _reschedule_queued_delivery(task_id, cfg)
             return
         task = running_task
 
