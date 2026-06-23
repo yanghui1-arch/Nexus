@@ -9,7 +9,7 @@ from src.server.postgres.repositories import FeatureItemRepository
 from src.server.runner import AgentTaskRunner
 from src.server.services import product_workflow_dispatch
 from src.server.services.product_workflow_publish import (
-    NoActiveTelaAgentInstanceError,
+    NoActiveCodingAgentInstanceError,
     publish_feature_item_task,
 )
 
@@ -65,7 +65,7 @@ class ProductWorkflowPoller(BackgroundService):
         for dispatch_group in dispatch_groups:
             if self._stop_event.is_set():
                 break
-            # Round-robin across workflow groups so one user's unavailable Tela
+            # Round-robin across workflow groups so one user's unavailable coding agent
             # does not block other users' pending feature items.
             published = await self._publish_one_feature_item_for_group(dispatch_group)
             if published:
@@ -88,7 +88,7 @@ class ProductWorkflowPoller(BackgroundService):
                 logger.warning("Skip feature item %s because its feature is missing.", item.id)
                 return False
             # Feature items inherit ownership from their proposal workspace. Use the
-            # proposal repo/project when choosing a Tela instance so product work
+            # proposal repo/project when choosing a coding agent so product work
             # is not published to an agent that belongs to another workspace.
             proposal = await FeatureItemRepository.get_proposal(session, item.id)
             if proposal is None:
@@ -104,9 +104,9 @@ class ProductWorkflowPoller(BackgroundService):
                     # concurrent publisher cannot overwrite an existing task.
                     require_unassigned=True,
                 )
-            except NoActiveTelaAgentInstanceError:
+            except NoActiveCodingAgentInstanceError:
                 logger.warning(
-                    "Skip feature item %s because no active Tela agent instance is available for user=%s repo=%s project=%s.",
+                    "Skip feature item %s because no active coding agent instance is available for user=%s repo=%s project=%s.",
                     item.id,
                     proposal.user_id,
                     proposal.repo,

@@ -691,13 +691,15 @@ def test_retry_feature_item_task_dispatches_new_task(monkeypatch) -> None:
         dispatch_task=AsyncMock(return_value=True),
     )
 
-    async def fake_list_tela(session, *, agent, user_id=None, github_repo=None, project=None, limit=1):
+    async def fake_list_agents(session, *, agent, user_id=None, github_repo=None, project=None, limit=1):
         captured["agent"] = agent
         captured["user_id"] = user_id
         captured["github_repo"] = github_repo
         captured["project"] = project
         captured["limit"] = limit
-        return [SimpleNamespace(id=tela_instance_id)]
+        if agent == AgentName.tela:
+            return [SimpleNamespace(id=tela_instance_id)]
+        return []
 
     async def fake_assign_task(session, item_id, *, task_id, require_unassigned=True):
         captured["item_id"] = item_id
@@ -714,7 +716,7 @@ def test_retry_feature_item_task_dispatches_new_task(monkeypatch) -> None:
     monkeypatch.setattr(FeatureItemRepository, "get_feature", AsyncMock(return_value=feature))
     monkeypatch.setattr(FeatureItemRepository, "get_proposal", AsyncMock(return_value=proposal))
     monkeypatch.setattr(FeatureItemRepository, "list_by_feature", AsyncMock(return_value=[item]))
-    monkeypatch.setattr(AgentInstanceRepository, "list_by_active_task_load", fake_list_tela)
+    monkeypatch.setattr(AgentInstanceRepository, "list_by_active_task_load", fake_list_agents)
     monkeypatch.setattr(FeatureItemRepository, "assign_task", fake_assign_task)
 
     async def run_request() -> httpx.Response:
@@ -766,7 +768,7 @@ def test_retry_feature_item_task_rejects_non_failed_item(monkeypatch) -> None:
     assert response.json()["detail"] == "Only failed feature items can be retried"
 
 
-def test_retry_feature_item_task_rejects_when_no_tela(monkeypatch) -> None:
+def test_retry_feature_item_task_rejects_when_no_coding_agent(monkeypatch) -> None:
     user_id = uuid.uuid4()
     feature_id = uuid.uuid4()
     feature_item_id = uuid.uuid4()
@@ -785,4 +787,4 @@ def test_retry_feature_item_task_rejects_when_no_tela(monkeypatch) -> None:
     response = asyncio.run(run_request())
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "No active Tela agent instance is available"
+    assert response.json()["detail"] == "No active coding agent instance is available"

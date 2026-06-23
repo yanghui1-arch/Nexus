@@ -32,7 +32,7 @@ from src.server.services.proposal_planning import (
     start_proposal_planning,
 )
 from src.server.services.product_workflow_publish import (
-    NoActiveTelaAgentInstanceError,
+    NoActiveCodingAgentInstanceError,
     publish_feature_item_task,
 )
 from src.server.schemas import (
@@ -341,8 +341,8 @@ async def retry_feature_item_task(
                 # task_id with the newly submitted task.
                 require_unassigned=False,
             )
-        except NoActiveTelaAgentInstanceError as exc:
-            raise HTTPException(status_code=409, detail="No active Tela agent instance is available") from exc
+        except NoActiveCodingAgentInstanceError as exc:
+            raise HTTPException(status_code=409, detail="No active coding agent instance is available") from exc
         except TaskDispatchError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
     if assigned is None:

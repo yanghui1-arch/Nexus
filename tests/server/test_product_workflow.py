@@ -35,8 +35,8 @@ def _settings(**overrides):
     return SimpleNamespace(**values)
 
 
-def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
-    """Verify poll once publishes one feature item to tela."""
+def test_poll_once_publishes_one_feature_item_to_single_available_agent(monkeypatch):
+    """Verify poll once publishes one feature item to the only available coding agent."""
     item = SimpleNamespace(id="feature-item-id", title="Knowledge base", description="Add search.")
     feature = SimpleNamespace(project="nexus")
     proposal = SimpleNamespace(repo="owner/repo", project="nexus", user_id=uuid.uuid4())
@@ -48,7 +48,7 @@ def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
     tela_instance_id = uuid.uuid4()
     tela = SimpleNamespace(id=tela_instance_id)
     runner = FakeRunner()
-    captured = {}
+    captured = {"agent_calls": []}
     calls = {"groups": 0, "item": 0}
 
     async def fake_groups(session):
@@ -64,12 +64,10 @@ def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
 
     async def fake_list_agents(session, *, agent, user_id, github_repo, project, limit):
         """Provide a fake list agents."""
-        captured["agent"] = agent
-        captured["user_id"] = user_id
-        captured["github_repo"] = github_repo
-        captured["project"] = project
-        captured["limit"] = limit
-        return [tela]
+        captured["agent_calls"].append((agent, user_id, github_repo, project, limit))
+        if agent == AgentName.tela:
+            return [tela]
+        return []
 
     async def fake_get_feature(session, item_id):
         """Provide a fake get feature."""
@@ -105,11 +103,11 @@ def test_poll_once_publishes_one_feature_item_to_tela(monkeypatch):
     result = asyncio.run(poller.poll_once())
 
     assert result == 1
-    assert captured["agent"] == AgentName.tela
-    assert captured["user_id"] == proposal.user_id
-    assert captured["github_repo"] == "owner/repo"
-    assert captured["project"] == "nexus"
-    assert captured["limit"] == 1
+    assert captured["agent_calls"] == [
+        (AgentName.tela, proposal.user_id, "owner/repo", "nexus", 1),
+        (AgentName.sophie, proposal.user_id, "owner/repo", "nexus", 1),
+        (AgentName.jules, proposal.user_id, "owner/repo", "nexus", 1),
+    ]
     assert captured["dispatch_group"] == (proposal.user_id, "owner/repo", "nexus")
     assert captured["feature_item_id"] == "feature-item-id"
     assert captured["proposal_item_id"] == "feature-item-id"
@@ -144,7 +142,7 @@ def test_poll_once_skips_when_no_feature_item(monkeypatch):
 
 
 def test_poll_once_skips_blocked_group_and_continues_with_other_workspaces(monkeypatch):
-    """Verify one user's unavailable Tela does not block other workflow groups."""
+    """Verify one user's unavailable coding agents do not block other workflow groups."""
     blocked_user = uuid.uuid4()
     ready_user = uuid.uuid4()
     blocked_group = FeatureItemDispatchGroup(user_id=blocked_user, repo="blocked/repo", project="blocked")
@@ -179,11 +177,11 @@ def test_poll_once_skips_blocked_group_and_continues_with_other_workspaces(monke
         return None
 
     async def fake_list_agents(session, *, agent, user_id, github_repo, project, limit):
-        """Return no Tela for the blocked group and one Tela for the ready group."""
+        """Return no coding agents for the blocked group and one Tela for the ready group."""
         captured["agent_calls"].append((agent, user_id, github_repo, project, limit))
-        if user_id == blocked_user:
-            return []
-        return [ready_tela]
+        if user_id == ready_user and agent == AgentName.tela:
+            return [ready_tela]
+        return []
 
     async def fake_get_feature(session, item_id):
         """Treat both feature items as valid."""
@@ -224,7 +222,11 @@ def test_poll_once_skips_blocked_group_and_continues_with_other_workspaces(monke
     assert captured["assign"] == ("ready-item", "coding-task-id")
     assert captured["agent_calls"] == [
         (AgentName.tela, blocked_user, "blocked/repo", "blocked", 1),
+        (AgentName.sophie, blocked_user, "blocked/repo", "blocked", 1),
+        (AgentName.jules, blocked_user, "blocked/repo", "blocked", 1),
         (AgentName.tela, ready_user, "ready/repo", "ready", 1),
+        (AgentName.sophie, ready_user, "ready/repo", "ready", 1),
+        (AgentName.jules, ready_user, "ready/repo", "ready", 1),
     ]
     payload = runner.create_task_record.await_args.args[0]
     assert payload.agent_instance_id == ready_tela.id
