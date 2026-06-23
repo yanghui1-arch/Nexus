@@ -1275,6 +1275,7 @@ class TaskRepository:
         now = utc_now()
         task.status = TaskStatus.queued
         task.error = None
+        task.started_at = None
         task.finished_at = None
         task.dispatch_token = None
         task.lease_expires_at = None
