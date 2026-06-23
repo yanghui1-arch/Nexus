@@ -861,11 +861,6 @@ def test_retry_task_from_checkpoint_dispatches_same_task(monkeypatch: pytest.Mon
         captured["user_id"] = kwargs["user_id"]
         return task
 
-    async def fake_no_running(session, agent_instance_id, **kwargs):
-        captured["agent_instance_id"] = agent_instance_id
-        captured["exclude_task_id"] = kwargs["exclude_task_id"]
-        return None
-
     async def fake_queue(session, task_id):
         captured["queued_task_id"] = task_id
         return task
@@ -875,7 +870,6 @@ def test_retry_task_from_checkpoint_dispatches_same_task(monkeypatch: pytest.Mon
         return SimpleNamespace(id=uuid.uuid4())
 
     monkeypatch.setattr(TaskRepository, "get_for_user", fake_get_for_user)
-    monkeypatch.setattr(TaskRepository, "get_running_for_agent_instance", fake_no_running)
     monkeypatch.setattr(TaskRepository, "queue_checkpoint_retry", fake_queue)
     monkeypatch.setattr(TaskRepository, "create_execution_event", fake_event)
 
@@ -894,7 +888,6 @@ def test_retry_task_from_checkpoint_dispatches_same_task(monkeypatch: pytest.Mon
         "status": TaskStatus.queued.value,
     }
     assert captured["queued_task_id"] == task.id
-    assert captured["exclude_task_id"] == task.id
     assert captured["event"]["event_type"] == "PROCESS"
     assert captured["event"]["safe_metadata"] == {"source": "retry_from_checkpoint"}
     runner.dispatch_task.assert_awaited_once_with(task.id)
@@ -942,6 +935,7 @@ def test_retry_task_from_checkpoint_rejects_non_failed_task(monkeypatch: pytest.
     assert response.json()["detail"] == "Only failed tasks can be retried from checkpoint"
     runner.dispatch_task.assert_not_awaited()
 
+
 def test_retry_task_from_checkpoint_rejects_missing_checkpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify failed tasks need a saved checkpoint for retry."""
     task = _make_task(question="no checkpoint", status=TaskStatus.failed, created_at=datetime.now(timezone.utc))
@@ -960,21 +954,19 @@ def test_retry_task_from_checkpoint_rejects_missing_checkpoint(monkeypatch: pyte
     runner.dispatch_task.assert_not_awaited()
 
 
-def test_retry_task_from_checkpoint_conflicts_with_running_task(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify retry is blocked when the agent instance is occupied."""
-    now = datetime.now(timezone.utc)
+def test_retry_task_from_checkpoint_allows_busy_agent_instance(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify retry still queues when the agent instance is occupied."""
     task = _make_task(
         question="retry me",
         status=TaskStatus.failed,
-        created_at=now,
+        created_at=datetime.now(timezone.utc),
         checkpoint=[{"role": "assistant", "content": "progress"}],
     )
-    running_task = _make_task(question="busy", status=TaskStatus.running, created_at=now)
     runner = SimpleNamespace(dispatch_task=AsyncMock(return_value=True))
+    queue_mock = AsyncMock(return_value=task)
     monkeypatch.setattr(TaskRepository, "get_for_user", AsyncMock(return_value=task))
-    monkeypatch.setattr(TaskRepository, "get_running_for_agent_instance", AsyncMock(return_value=running_task))
-    queue_mock = AsyncMock()
     monkeypatch.setattr(TaskRepository, "queue_checkpoint_retry", queue_mock)
+    monkeypatch.setattr(TaskRepository, "create_execution_event", AsyncMock(return_value=SimpleNamespace(id=uuid.uuid4())))
 
     async def run_request() -> httpx.Response:
         transport = httpx.ASGITransport(app=_build_app(runner_obj=runner))
@@ -983,10 +975,9 @@ def test_retry_task_from_checkpoint_conflicts_with_running_task(monkeypatch: pyt
 
     response = asyncio.run(run_request())
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == "Agent instance already has a running task"
-    queue_mock.assert_not_awaited()
-    runner.dispatch_task.assert_not_awaited()
+    assert response.status_code == 202
+    queue_mock.assert_awaited_once()
+    runner.dispatch_task.assert_awaited_once_with(task.id)
 
 
 def test_retry_task_from_checkpoint_returns_dispatch_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -999,7 +990,6 @@ def test_retry_task_from_checkpoint_returns_dispatch_failure(monkeypatch: pytest
     )
     runner = SimpleNamespace(dispatch_task=AsyncMock(side_effect=tasks_routes.TaskDispatchError("Dispatch failed: broker")))
     monkeypatch.setattr(TaskRepository, "get_for_user", AsyncMock(return_value=task))
-    monkeypatch.setattr(TaskRepository, "get_running_for_agent_instance", AsyncMock(return_value=None))
     monkeypatch.setattr(TaskRepository, "queue_checkpoint_retry", AsyncMock(return_value=task))
     monkeypatch.setattr(TaskRepository, "create_execution_event", AsyncMock(return_value=SimpleNamespace(id=uuid.uuid4())))
 

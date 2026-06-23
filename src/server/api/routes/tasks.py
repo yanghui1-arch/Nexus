@@ -309,18 +309,6 @@ async def retry_task_from_checkpoint(
             raise HTTPException(status_code=409, detail="Only failed tasks can be retried from checkpoint")
         if not task.checkpoint:
             raise HTTPException(status_code=409, detail="Task has no checkpoint to retry from")
-
-        running_task = await TaskRepository.get_running_for_agent_instance(
-            session,
-            task.agent_instance_id,
-            exclude_task_id=task.id,
-        )
-        if running_task is not None:
-            raise HTTPException(
-                status_code=409,
-                detail="Agent instance already has a running task",
-            )
-
         queued = await TaskRepository.queue_checkpoint_retry(session, task.id)
         if queued is None:
             raise HTTPException(status_code=409, detail="Task is no longer eligible for checkpoint retry")
