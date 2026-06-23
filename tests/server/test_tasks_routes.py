@@ -89,6 +89,7 @@ def _make_task(
     agent_instance_id: uuid.UUID | None = None,
     checkpoint: list[dict[str, Any] | str] | None = None,
     error: str | None = None,
+    source_task_id: uuid.UUID | None = None,
 ) -> Any:
     """Create a task route record."""
     started_at = created_at + timedelta(minutes=1)
@@ -107,6 +108,7 @@ def _make_task(
         project=project,
         external_issue_url=None,
         external_pull_request_url=None,
+        source_task_id=source_task_id,
         status=status,
         result=None,
         error=error,
@@ -175,6 +177,7 @@ def test_list_tasks_returns_newest_first(monkeypatch: pytest.MonkeyPatch) -> Non
         'project',
         'external_issue_url',
         'external_pull_request_url',
+        'source_task_id',
         'status',
         'result',
         'error',
@@ -236,6 +239,7 @@ def test_create_task_returns_category_from_persisted_task(monkeypatch: pytest.Mo
         'agent_instance_id': str(created_task.agent_instance_id),
         'category': created_task.category.value,
         'status': TaskStatus.queued.value,
+        'source_task_id': None,
     }
     runner.submit_task.assert_awaited_once()
     submission = runner.submit_task.await_args.args[0]
@@ -292,8 +296,93 @@ def test_create_task_accepts_assistant_agent(monkeypatch: pytest.MonkeyPatch) ->
         'agent_instance_id': str(created_task.agent_instance_id),
         'category': TaskCategory.review.value,
         'status': TaskStatus.queued.value,
+        'source_task_id': None,
     }
     runner.submit_task.assert_awaited_once()
+
+
+def test_retry_task_as_new_copies_minimal_source_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify retry creates a new task linked to the source task."""
+    now = datetime.now(timezone.utc)
+    source_task = _make_task(
+        question="retry this task",
+        status=TaskStatus.failed,
+        category=TaskCategory.coding,
+        created_at=now - timedelta(minutes=10),
+        repo="owner/source",
+        project="api",
+        agent=AgentName.tela,
+    )
+    source_task.external_issue_url = "https://github.com/owner/source/issues/7"
+    source_task.external_pull_request_url = "https://github.com/owner/source/pull/8"
+    new_task = _make_task(
+        question=source_task.question,
+        status=TaskStatus.queued,
+        category=source_task.category,
+        created_at=now,
+        repo=source_task.repo,
+        project=source_task.project,
+        agent=source_task.agent,
+        agent_instance_id=source_task.agent_instance_id,
+        source_task_id=source_task.id,
+    )
+    runner = SimpleNamespace(submit_task=AsyncMock(return_value=new_task.id))
+
+    async def fake_get_for_user(session, task_id, **kwargs):
+        assert task_id == source_task.id
+        assert kwargs == {"user_id": uuid.UUID("00000000-0000-0000-0000-000000000001")}
+        return source_task
+
+    async def fake_get(session, task_id, **kwargs):
+        assert task_id == new_task.id
+        return new_task
+
+    monkeypatch.setattr(TaskRepository, "get_for_user", fake_get_for_user)
+    monkeypatch.setattr(TaskRepository, "get", fake_get)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(runner_obj=runner))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(f"/v1/tasks/{source_task.id}/retry")
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 202
+    assert response.json() == {
+        "task_id": str(new_task.id),
+        "agent_instance_id": str(source_task.agent_instance_id),
+        "category": source_task.category.value,
+        "status": TaskStatus.queued.value,
+        "source_task_id": str(source_task.id),
+    }
+    runner.submit_task.assert_awaited_once()
+    submission = runner.submit_task.await_args.args[0]
+    assert submission.agent_instance_id == source_task.agent_instance_id
+    assert submission.agent == source_task.agent
+    assert submission.question == source_task.question
+    assert submission.repo == source_task.repo
+    assert submission.project == source_task.project
+    assert submission.external_issue_url == source_task.external_issue_url
+    assert submission.external_pull_request_url is None
+    assert submission.source_task_id == source_task.id
+
+
+def test_retry_task_as_new_hides_unowned_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify retry follows task ownership checks."""
+    task_id = uuid.uuid4()
+    runner = SimpleNamespace(submit_task=AsyncMock())
+
+    monkeypatch.setattr(TaskRepository, "get_for_user", AsyncMock(return_value=None))
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(runner_obj=runner))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(f"/v1/tasks/{task_id}/retry")
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 404
+    runner.submit_task.assert_not_awaited()
 
 
 def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -351,6 +440,7 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
             'project': expected_task.project,
             'external_issue_url': None,
             'external_pull_request_url': None,
+            'source_task_id': None,
             'status': expected_task.status.value,
             'result': None,
             'error': None,
