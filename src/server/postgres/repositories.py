@@ -934,7 +934,6 @@ class TaskRepository:
         project: str | None,
         external_issue_url: str | None,
         external_pull_request_url: str | None = None,
-        checkpoint: list[ChatCompletionMessageParam] | None = None,
     ) -> TaskRecord:
         """Create a pending tracking record."""
         task = TaskRecord(
@@ -946,7 +945,6 @@ class TaskRepository:
             project=project,
             external_issue_url=external_issue_url,
             external_pull_request_url=external_pull_request_url,
-            checkpoint=checkpoint,
             status=TaskStatus.queued,
         )
         session.add(task)
@@ -965,7 +963,6 @@ class TaskRepository:
         project: str | None,
         external_issue_url: str | None,
         external_pull_request_url: str | None = None,
-        checkpoint: list[ChatCompletionMessageParam] | None = None,
     ) -> TaskRecord:
         """Create a new database record."""
         task = await TaskRepository.create_pending(
@@ -978,7 +975,6 @@ class TaskRepository:
             project=project,
             external_issue_url=external_issue_url,
             external_pull_request_url=external_pull_request_url,
-            checkpoint=checkpoint,
         )
         await session.commit()
         await session.refresh(task)

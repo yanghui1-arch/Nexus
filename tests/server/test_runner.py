@@ -163,7 +163,7 @@ def test_create_task_record_uses_review_category_for_assistant(monkeypatch) -> N
     assert captured["agent"] == AgentName.assistant
     assert captured["category"] == TaskCategory.review
     assert captured["external_pull_request_url"] == "https://github.com/owner/repo/pull/12"
-    assert captured["checkpoint"] is None
+    assert "checkpoint" not in captured
 
 
 @pytest.mark.parametrize(
