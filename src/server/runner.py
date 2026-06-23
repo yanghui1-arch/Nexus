@@ -232,7 +232,7 @@ class AgentTaskRunner:
             project=workspace.project,
             external_issue_url=submission.external_issue_url,
             external_pull_request_url=submission.external_pull_request_url,
-            checkpoint=submission.checkpoint,
+            checkpoint=getattr(submission, "checkpoint", None),
         )
         logger.info(f"Agent `{instance.agent.name}` has workspace `{workspace.workspace_key}`")
         return task
