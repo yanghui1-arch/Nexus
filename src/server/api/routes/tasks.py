@@ -291,6 +291,61 @@ async def update_task_status(
     return TaskResponse.from_record(updated)
 
 
+@router.post("/{task_id}/retry-from-checkpoint", response_model=TaskSubmitResponse, status_code=202)
+async def retry_task_from_checkpoint(
+    request: Request,
+    task_id: uuid.UUID,
+    user: UserRecord = Depends(get_current_user),
+) -> TaskSubmitResponse:
+    """Explicitly retry a failed task from its saved checkpoint."""
+    runner: AgentTaskRunner = request.app.state.runner
+    database: Database = request.app.state.database
+
+    async with database.session() as session:
+        task = await TaskRepository.get_for_user(session, task_id, user_id=user.id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        if task.status != TaskStatus.failed:
+            raise HTTPException(status_code=409, detail="Only failed tasks can be retried from checkpoint")
+        if not task.checkpoint:
+            raise HTTPException(status_code=409, detail="Task has no checkpoint to retry from")
+
+        running_task = await TaskRepository.get_running_for_agent_instance(
+            session,
+            task.agent_instance_id,
+            exclude_task_id=task.id,
+        )
+        if running_task is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Agent instance already has a running task",
+            )
+
+        queued = await TaskRepository.queue_checkpoint_retry(session, task.id)
+        if queued is None:
+            raise HTTPException(status_code=409, detail="Task is no longer eligible for checkpoint retry")
+        await TaskRepository.create_execution_event(
+            session,
+            task_id=task.id,
+            event_type="PROCESS",
+            agent=task.agent,
+            message="Retry from checkpoint requested by user.",
+            safe_metadata={"source": "retry_from_checkpoint"},
+        )
+
+    try:
+        await runner.dispatch_task(task.id)
+    except TaskDispatchError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return TaskSubmitResponse(
+        task_id=task.id,
+        agent_instance_id=task.agent_instance_id,
+        category=task.category,
+        status=TaskStatus.queued,
+    )
+
+
 @router.post("/{task_id}/consult", response_model=TaskConsultResponse)
 async def consult_task(
     request: Request,
