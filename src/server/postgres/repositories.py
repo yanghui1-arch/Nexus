@@ -1178,7 +1178,7 @@ class TaskRepository:
         session: AsyncSession,
         *,
         task_id: uuid.UUID,
-        event_type: Literal["START", "PROCESS", "SAVE_CHECKPOINT", "RECOVERY", "COMPLETED", "FAILED", "EXCEED_ATTEMPTS"],
+        event_type: Literal["START", "PROCESS", "SAVE_CHECKPOINT", "COMPLETED", "FAILED", "EXCEED_ATTEMPTS"],
         agent: AgentName | None,
         message: str | None = None,
         safe_metadata: dict[str, object] | None = None,

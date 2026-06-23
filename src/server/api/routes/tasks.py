@@ -327,7 +327,7 @@ async def retry_task_from_checkpoint(
         await TaskRepository.create_execution_event(
             session,
             task_id=task.id,
-            event_type="RECOVERY",
+            event_type="PROCESS",
             agent=task.agent,
             message="Retry from checkpoint requested by user.",
             safe_metadata={"source": "retry_from_checkpoint"},

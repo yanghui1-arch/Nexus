@@ -895,7 +895,8 @@ def test_retry_task_from_checkpoint_dispatches_same_task(monkeypatch: pytest.Mon
     }
     assert captured["queued_task_id"] == task.id
     assert captured["exclude_task_id"] == task.id
-    assert captured["event"]["event_type"] == "RECOVERY"
+    assert captured["event"]["event_type"] == "PROCESS"
+    assert captured["event"]["safe_metadata"] == {"source": "retry_from_checkpoint"}
     runner.dispatch_task.assert_awaited_once_with(task.id)
 
 
