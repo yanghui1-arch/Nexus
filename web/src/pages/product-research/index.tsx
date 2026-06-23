@@ -232,6 +232,10 @@ export default function ProductResearchPage() {
   }
 
   async function handleRecoverPlanning(currentProposalId: string): Promise<void> {
+    if (!window.confirm(t('productResearch.planningRecoverConfirm'))) {
+      return;
+    }
+
     startTransition(() => {
       setRecoveringPlanningProposalId(currentProposalId);
     });
