@@ -53,7 +53,7 @@ export function useProcessTracking({
         taskViews.filter(
           task =>
             task.agentInstanceId === selectedAgentId &&
-            task.status === 'running',
+            (task.status === 'running' || task.status === 'failed'),
         ),
       ),
     [selectedAgentId, taskViews],

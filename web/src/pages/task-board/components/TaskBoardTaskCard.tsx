@@ -6,11 +6,13 @@ import { timeAgo, type WorkspaceTaskView } from '@/lib/workspace-task-view';
 type TaskBoardTaskCardProps = {
   task: WorkspaceTaskView;
   onOpenReview: (taskId: string) => void;
+  onOpenTaskDetail: (taskId: string) => void;
 };
 
 export function TaskBoardTaskCard({
   task,
   onOpenReview,
+  onOpenTaskDetail,
 }: TaskBoardTaskCardProps) {
   const { t } = useTranslation();
   const canOpenReview =
@@ -48,6 +50,17 @@ export function TaskBoardTaskCard({
 
       <div className="mt-2 flex justify-end">
         <div className="flex items-center gap-1">
+          {task.status === 'failed' ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              className="h-7 px-2 text-xs"
+              onClick={() => onOpenTaskDetail(task.id)}
+            >
+              {t('taskBoard.openRecovery')}
+            </Button>
+          ) : null}
           {canOpenReview ? (
             <Button
               type="button"
