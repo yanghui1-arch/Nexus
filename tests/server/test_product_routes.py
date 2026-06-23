@@ -9,11 +9,13 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import httpx
+import pytest
 from fastapi import FastAPI
 
 from src.server.api.dependencies import get_current_user
 from src.server.api.routes.product import router as product_router
 from src.server.postgres.models import AgentName, ProductProposalStatus
+from src.server.runner import TaskDispatchError
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
     FeatureItemRepository,
@@ -96,6 +98,12 @@ def _planning_run(**overrides: Any) -> Any:
 async def _fake_user_workspaces(session, *, user_id):
     """Return fake workspaces for the current user."""
     return [SimpleNamespace(github_repo="owner/repo", project="nexus")]
+
+
+async def _post_retry_planning(app: FastAPI, proposal_id: uuid.UUID) -> httpx.Response:
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        return await client.post(f"/v1/product/proposals/{proposal_id}/retry-planning")
 
 
 def test_create_proposal_persists_owner(monkeypatch) -> None:
@@ -398,6 +406,32 @@ def test_get_proposal_hides_unscoped_record(monkeypatch) -> None:
     assert response.status_code == 404
 
 
+@pytest.mark.parametrize(
+    ("proposal_status", "owned", "expected_status", "expected_detail"),
+    [
+        (ProductProposalStatus.proposed, True, 409, "Only approved proposals can retry planning"),
+        (ProductProposalStatus.approved, False, 404, "Proposal not found"),
+    ],
+)
+def test_retry_planning_rejects_unrecoverable_proposals(
+    monkeypatch, proposal_status, owned, expected_status, expected_detail
+) -> None:
+    proposal_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    owner_id = user_id if owned else uuid.uuid4()
+
+    monkeypatch.setattr(
+        ProductProposalRepository,
+        "get",
+        AsyncMock(return_value=_proposal(id=proposal_id, user_id=owner_id, status=proposal_status)),
+    )
+    monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
+
+    response = asyncio.run(_post_retry_planning(_build_app(user_id=user_id), proposal_id))
+
+    assert response.status_code == expected_status
+    assert response.json()["detail"] == expected_detail
+
 def test_retry_planning_dispatches_new_task_for_failed_run(monkeypatch) -> None:
     proposal_id = uuid.uuid4()
     user_id = uuid.uuid4()
@@ -446,12 +480,7 @@ def test_retry_planning_dispatches_new_task_for_failed_run(monkeypatch) -> None:
     monkeypatch.setattr(ProposalPlanningRunRepository, "get_latest_by_proposal", fake_get_latest_by_proposal)
     monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
 
-    async def run_request() -> httpx.Response:
-        transport = httpx.ASGITransport(app=_build_app(runner=runner, user_id=user_id))
-        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-            return await client.post(f"/v1/product/proposals/{proposal_id}/retry-planning")
-
-    response = asyncio.run(run_request())
+    response = asyncio.run(_post_retry_planning(_build_app(runner=runner, user_id=user_id), proposal_id))
 
     assert response.status_code == 200
     assert response.json()["latest_planning_run"]["task_id"] == str(planning_task_id)
@@ -476,16 +505,73 @@ def test_retry_planning_rejects_when_planning_is_already_running(monkeypatch) ->
     monkeypatch.setattr(ProposalPlanningRunRepository, "get_latest_by_proposal", fake_get_latest_by_proposal)
     monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
 
-    async def run_request() -> httpx.Response:
-        transport = httpx.ASGITransport(app=_build_app(user_id=user_id))
-        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-            return await client.post(f"/v1/product/proposals/{proposal_id}/retry-planning")
-
-    response = asyncio.run(run_request())
+    response = asyncio.run(_post_retry_planning(_build_app(user_id=user_id), proposal_id))
 
     assert response.status_code == 409
     assert response.json()["detail"] == "Planning is already in progress"
 
+
+@pytest.mark.parametrize(
+    ("run_status", "marc_instances", "expected_detail"),
+    [
+        ("completed", [SimpleNamespace(id=uuid.uuid4())], "Planning is already completed"),
+    ],
+)
+def test_retry_planning_rejects_non_dispatchable_recovery(
+    monkeypatch, run_status, marc_instances, expected_detail
+) -> None:
+    proposal_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+
+    monkeypatch.setattr(
+        ProductProposalRepository,
+        "get",
+        AsyncMock(return_value=_proposal(id=proposal_id, user_id=user_id, status=ProductProposalStatus.approved)),
+    )
+    monkeypatch.setattr(
+        ProposalPlanningRunRepository,
+        "get_latest_by_proposal",
+        AsyncMock(return_value=_planning_run(proposal_id=proposal_id, status=run_status)),
+    )
+    monkeypatch.setattr(TaskRepository, "get", AsyncMock(return_value=SimpleNamespace(id=uuid.uuid4())))
+    monkeypatch.setattr(AgentInstanceRepository, "list_by_active_task_load", AsyncMock(return_value=marc_instances))
+    monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
+
+    response = asyncio.run(_post_retry_planning(_build_app(user_id=user_id), proposal_id))
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == expected_detail
+
+
+def test_retry_planning_returns_dispatch_failure(monkeypatch) -> None:
+    proposal_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    planning_task_id = uuid.uuid4()
+    runner = SimpleNamespace(
+        create_task_record=AsyncMock(return_value=SimpleNamespace(id=planning_task_id)),
+        dispatch_task=AsyncMock(side_effect=TaskDispatchError("broker unavailable")),
+    )
+
+    monkeypatch.setattr(
+        ProductProposalRepository,
+        "get",
+        AsyncMock(return_value=_proposal(id=proposal_id, user_id=user_id, status=ProductProposalStatus.approved)),
+    )
+    monkeypatch.setattr(
+        ProposalPlanningRunRepository,
+        "get_latest_by_proposal",
+        AsyncMock(return_value=_planning_run(proposal_id=proposal_id, status="failed")),
+    )
+    monkeypatch.setattr(TaskRepository, "get", AsyncMock(return_value=SimpleNamespace(id=uuid.uuid4())))
+    monkeypatch.setattr(AgentInstanceRepository, "list_by_active_task_load", AsyncMock(return_value=[SimpleNamespace(id=uuid.uuid4())]))
+    monkeypatch.setattr(ProposalPlanningRunRepository, "create_pending", AsyncMock())
+    monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
+
+    response = asyncio.run(_post_retry_planning(_build_app(runner=runner, user_id=user_id), proposal_id))
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "broker unavailable"
+    runner.dispatch_task.assert_awaited_once_with(planning_task_id)
 
 def test_retry_planning_dispatches_new_task_when_run_record_is_missing(monkeypatch) -> None:
     proposal_id = uuid.uuid4()
@@ -518,12 +604,7 @@ def test_retry_planning_dispatches_new_task_when_run_record_is_missing(monkeypat
     monkeypatch.setattr(ProposalPlanningRunRepository, "create_pending", fake_create_pending)
     monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
 
-    async def run_request() -> httpx.Response:
-        transport = httpx.ASGITransport(app=_build_app(runner=runner, user_id=user_id))
-        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-            return await client.post(f"/v1/product/proposals/{proposal_id}/retry-planning")
-
-    response = asyncio.run(run_request())
+    response = asyncio.run(_post_retry_planning(_build_app(runner=runner, user_id=user_id), proposal_id))
 
     assert response.status_code == 200
     runner.dispatch_task.assert_awaited_once_with(planning_task_id)
@@ -568,12 +649,7 @@ def test_retry_planning_dispatches_new_task_when_planning_task_is_missing(monkey
     monkeypatch.setattr(ProposalPlanningRunRepository, "create_pending", fake_create_pending)
     monkeypatch.setattr(WorkspaceRepository, "list_for_user", _fake_user_workspaces)
 
-    async def run_request() -> httpx.Response:
-        transport = httpx.ASGITransport(app=_build_app(runner=runner, user_id=user_id))
-        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-            return await client.post(f"/v1/product/proposals/{proposal_id}/retry-planning")
-
-    response = asyncio.run(run_request())
+    response = asyncio.run(_post_retry_planning(_build_app(runner=runner, user_id=user_id), proposal_id))
 
     assert response.status_code == 200
     runner.dispatch_task.assert_awaited_once_with(new_task_id)
