@@ -285,6 +285,7 @@ class TaskSubmitResponse(BaseModel):
     agent_instance_id: uuid.UUID
     category: TaskCategory
     status: TaskStatus
+    source_task_id: uuid.UUID | None = None
 
 
 class FeatureItemRetryTaskResponse(BaseModel):
@@ -322,6 +323,7 @@ class TaskResponse(BaseModel):
     project: str | None
     external_issue_url: str | None
     external_pull_request_url: str | None
+    source_task_id: uuid.UUID | None
     status: TaskStatus
     result: str | None
     error: str | None
@@ -353,6 +355,7 @@ class TaskResponse(BaseModel):
             project=resolved_project,
             external_issue_url=getattr(task, "external_issue_url", None),
             external_pull_request_url=getattr(task, "external_pull_request_url", None),
+            source_task_id=getattr(task, "source_task_id", None),
             status=task.status,
             result=task.result,
             error=task.error,

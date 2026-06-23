@@ -31,6 +31,7 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
         "question",
         "external_issue_url",
         "external_pull_request_url",
+        "source_task_id",
         "status",
         "resume_status",
         "checkpoint",
@@ -214,6 +215,10 @@ class Database:
                     "ALTER TABLE task ADD COLUMN IF NOT EXISTS external_pull_request_url VARCHAR(1024)"
                 )
             )
+            await conn.execute(
+                text("ALTER TABLE task ADD COLUMN IF NOT EXISTS source_task_id UUID REFERENCES task(id) ON DELETE SET NULL")
+            )
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_task_source_task_id ON task (source_task_id)"))
             await conn.execute(
                 text(
                     "CREATE UNIQUE INDEX IF NOT EXISTS uq_task_one_running_per_agent_instance "
