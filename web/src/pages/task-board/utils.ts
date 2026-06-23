@@ -10,6 +10,7 @@ export const TASK_BOARD_STATUS_ORDER = [
   'queued',
   'running',
   'waiting_for_review',
+  'failed',
   'merged',
 ] as const satisfies readonly ApiTaskStatus[];
 

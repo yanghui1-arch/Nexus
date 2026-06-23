@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronsUpDown, SendHorizontal } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import type { ApiTaskExecutionEvent } from '@/api/types';
 import { ExecutionTimeline } from '@/pages/process-tracking/components/ExecutionTimeline';
 import type {
@@ -70,7 +71,8 @@ export function ProcessTrackingPanel({
 
   const hasAgents = agents.length > 0;
   const hasTasks = tasksForAgent.length > 0;
-  const canSubmit = Boolean(selectedTask) && input.trim().length > 0 && !isSending;
+  const canConsult = selectedTask?.status === 'running';
+  const canSubmit = Boolean(selectedTask) && canConsult && input.trim().length > 0 && !isSending;
 
   useEffect(() => {
     if (messages.length === 0 && !isSending) return;
@@ -151,7 +153,7 @@ export function ProcessTrackingPanel({
               </Dialog>
 
               <p className="text-xs text-muted-foreground">
-                {hasTasks ? t('processTracking.runningTasksAvailable', { count: tasksForAgent.length }) : t('processTracking.noRunningTasks')}
+                {hasTasks ? t('processTracking.trackableTasksAvailable', { count: tasksForAgent.length }) : t('processTracking.noTrackableTasks')}
               </p>
             </div>
           </div>
@@ -181,6 +183,12 @@ export function ProcessTrackingPanel({
             </dl>
 
             {selectedTask?.error ? <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{selectedTask.error}</div> : null}
+
+            {selectedTask?.status === 'failed' ? (
+              <Button asChild size="sm" variant="destructive" className="mt-4">
+                <Link to={`/task/${selectedTask.id}`}>{t('processTracking.openRecovery')}</Link>
+              </Button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -190,7 +198,11 @@ export function ProcessTrackingPanel({
           <div className="shrink-0">
           <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">{t('processTracking.chat')}</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {selectedTask ? t('processTracking.chatHintReady') : t('processTracking.chatHintEmpty')}
+            {selectedTask?.status === 'failed'
+              ? t('processTracking.chatHintFailed')
+              : selectedTask
+                ? t('processTracking.chatHintReady')
+                : t('processTracking.chatHintEmpty')}
           </p>
         </div>
 
@@ -223,7 +235,7 @@ export function ProcessTrackingPanel({
 
         <form onSubmit={onSubmit} className="shrink-0 flex flex-col gap-2">
           <div className="flex items-center gap-2">
-            <Input value={input} onChange={e => onInputChange(e.target.value)} placeholder={selectedTask ? t('processTracking.inputPlaceholderReady') : t('processTracking.inputPlaceholderEmpty')} disabled={!selectedTask || isSending} />
+            <Input value={input} onChange={e => onInputChange(e.target.value)} placeholder={canConsult ? t('processTracking.inputPlaceholderReady') : t('processTracking.inputPlaceholderEmpty')} disabled={!canConsult || isSending} />
             <Button type="submit" size="icon" aria-label={t('processTracking.consultTask')} disabled={!canSubmit}>
               <SendHorizontal />
             </Button>
