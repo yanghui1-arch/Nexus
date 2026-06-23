@@ -4,6 +4,7 @@ import type {
   ApiTaskConsultRequest,
   ApiTaskConsultResponse,
   ApiTaskCreateRequest,
+  ApiTaskRetryRequest,
   ApiTaskExecutionEvent,
   ApiTaskCategory,
   ApiTaskStatus,
@@ -41,6 +42,16 @@ export function consultTask(
   payload: ApiTaskConsultRequest,
 ): Promise<ApiTaskConsultResponse> {
   return apiRequest<ApiTaskConsultResponse>(`/v1/tasks/${taskId}/consult`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function retryTask(
+  taskId: string,
+  payload: ApiTaskRetryRequest,
+): Promise<ApiTaskSubmitResponse> {
+  return apiRequest<ApiTaskSubmitResponse>(`/v1/tasks/${taskId}/retry`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });

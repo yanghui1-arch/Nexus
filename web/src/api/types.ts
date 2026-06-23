@@ -12,6 +12,24 @@ export type ApiTaskStatus =
 
 export type ApiWorkspaceStatus = 'idle' | 'running' | 'inactive';
 
+export interface ApiTaskRecovery {
+  visible: boolean;
+  has_checkpoint: boolean;
+  checkpoint_summary: string | null;
+  failure_summary: string | null;
+  recommended_action: string;
+  unrecoverable_reasons: string[];
+  risk_warnings: string[];
+  duplicate_side_effects_confirmation_required: boolean;
+  can_retry_from_checkpoint: boolean;
+  can_retry_as_new_task: boolean;
+}
+
+export interface ApiTaskRetryRequest {
+  from_checkpoint: boolean;
+  confirm_duplicate_side_effects: boolean;
+}
+
 export interface ApiTaskCreateRequest {
   agent_instance_id: string;
   agent: ApiAgentKind;
@@ -54,6 +72,7 @@ export interface ApiTask {
   updated_at: string;
   started_at: string | null;
   finished_at: string | null;
+  recovery: ApiTaskRecovery | null;
 }
 
 export interface ApiTaskExecutionEvent {
