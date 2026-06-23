@@ -28,6 +28,7 @@ def configure_empty_project_checkout(mock_sandbox):
     mock_sandbox.run_shell = AsyncMock(side_effect=[
         {"success": True, "stdout": "new", "stderr": ""},
         {"success": True, "stdout": "", "stderr": ""},
+        {"success": True, "stdout": "", "stderr": ""},
     ])
     mock_sandbox.read_file = AsyncMock(return_value={"success": False, "content": None})
     mock_sandbox.list_files = AsyncMock(return_value={"success": False, "files": []})
@@ -362,7 +363,6 @@ class TestSophieToolAccess:
                 async with sophie as s:
                     assert "WebFetch" in s.tool_kits
                     assert "web_search_agent" in s.tool_kits
-
 
 
 

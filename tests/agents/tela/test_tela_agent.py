@@ -51,6 +51,7 @@ def configure_empty_project_checkout(mock_sandbox):
         {"success": True, "stdout": "", "stderr": ""},
         {"success": True, "stdout": "", "stderr": ""},
         {"success": True, "stdout": "", "stderr": ""},
+        {"success": True, "stdout": "", "stderr": ""},
     ])
     mock_sandbox.read_file = AsyncMock(return_value={"success": False, "content": None})
     mock_sandbox.list_files = AsyncMock(return_value={"success": False, "files": []})
@@ -184,7 +185,7 @@ class TestContextManager:
         mock_http.post.assert_awaited_once()
         post_url = mock_http.post.call_args[0][0]
         assert "owner/repo/forks" in post_url
-        clone_call = mock_sandbox.run_shell.call_args_list[1][0][0]
+        clone_call = mock_sandbox.run_shell.call_args_list[2][0][0]
         assert "git clone" in clone_call
 
     async def test_enter_skips_fork_creation_when_exists(self):
@@ -300,6 +301,7 @@ class TestGithubTools:
         sandbox = AsyncMock()
         sandbox.run_shell = AsyncMock(side_effect=[
             {"success": True, "stdout": "new", "stderr": ""},   # test -d .git
+            {"success": True, "stdout": "", "stderr": ""},       # remove stale checkout
             {"success": True, "stdout": "", "stderr": ""},       # git clone
         ])
         kit = GithubTools(sandbox)
@@ -308,18 +310,21 @@ class TestGithubTools:
             local_path="/workspace/myproject",
         )
         assert result["success"] is True
-        clone_call = sandbox.run_shell.call_args_list[1][0][0]
+        remove_call = sandbox.run_shell.call_args_list[1][0][0]
+        clone_call = sandbox.run_shell.call_args_list[2][0][0]
+        assert "rm -rf" in remove_call
         assert "git clone" in clone_call
         assert "/workspace/myproject" in clone_call
 
-    async def test_fetch_pulls_when_already_cloned(self):
-        """Verify fetch pulls when already cloned."""
+    async def test_fetch_resets_when_already_cloned(self):
+        """Verify fetch cleans and resets when already cloned."""
         sandbox = AsyncMock()
         sandbox.recreate = AsyncMock()
         sandbox.run_shell = AsyncMock(side_effect=[
             {"success": True, "stdout": "exists", "stderr": ""},                         # test -d .git
             {"success": True, "stdout": "https://github.com/owner/repo\n", "stderr": ""},  # origin remote
-            {"success": True, "stdout": "", "stderr": ""},                                # git fetch/checkout/pull
+            {"success": True, "stdout": "", "stderr": ""},                                # clean checkout
+            {"success": True, "stdout": "", "stderr": ""},                                # fetch/reset
         ])
         kit = GithubTools(sandbox)
         result = await kit.fetch_from_github(
@@ -327,8 +332,12 @@ class TestGithubTools:
             local_path="/workspace/myproject",
         )
         assert result["success"] is True
-        pull_call = sandbox.run_shell.call_args_list[2][0][0]
-        assert "pull" in pull_call
+        clean_call = sandbox.run_shell.call_args_list[2][0][0]
+        reset_call = sandbox.run_shell.call_args_list[3][0][0]
+        assert "reset --hard" in clean_call
+        assert "clean -ffdx" in clean_call
+        assert "checkout -B main origin/main" in reset_call
+        assert "pull" not in reset_call
         sandbox.recreate.assert_not_awaited()
 
     async def test_fetch_sets_upstream_remote_after_clone(self):
@@ -336,6 +345,7 @@ class TestGithubTools:
         sandbox = AsyncMock()
         sandbox.run_shell = AsyncMock(side_effect=[
             {"success": True, "stdout": "new", "stderr": ""},   # test -d .git
+            {"success": True, "stdout": "", "stderr": ""},       # remove stale checkout
             {"success": True, "stdout": "", "stderr": ""},       # git clone
             {"success": True, "stdout": "", "stderr": ""},       # git remote add upstream
             {"success": True, "stdout": "", "stderr": ""},       # sync main with upstream
@@ -346,10 +356,10 @@ class TestGithubTools:
             local_path="/workspace/myproject",
             upstream_url="https://github.com/owner/repo",
         )
-        upstream_cmd = sandbox.run_shell.call_args_list[2][0][0]
+        upstream_cmd = sandbox.run_shell.call_args_list[3][0][0]
         assert "remote" in upstream_cmd and "upstream" in upstream_cmd
         assert "https://github.com/owner/repo" in upstream_cmd
-        sync_call = sandbox.run_shell.call_args_list[3][0][0]
+        sync_call = sandbox.run_shell.call_args_list[4][0][0]
         assert "fetch upstream main" in sync_call
 
     async def test_fetch_syncs_main_with_upstream_when_already_cloned(self):
@@ -359,7 +369,8 @@ class TestGithubTools:
         sandbox.run_shell = AsyncMock(side_effect=[
             {"success": True, "stdout": "exists", "stderr": ""},                          # test -d .git
             {"success": True, "stdout": "https://github.com/Nexus-Tela/repo\n", "stderr": ""},  # origin remote
-            {"success": True, "stdout": "", "stderr": ""},                                 # fetch upstream + sync main
+            {"success": True, "stdout": "", "stderr": ""},                                 # clean checkout
+            {"success": True, "stdout": "", "stderr": ""},                                 # fetch upstream + remote setup
             {"success": True, "stdout": "", "stderr": ""},                                 # sync_main_branch
         ])
         kit = GithubTools(sandbox)
@@ -372,7 +383,9 @@ class TestGithubTools:
 
         assert result["success"] is True
         assert "Synchronized 'main' with upstream" in result["message"]
-        sync_call = sandbox.run_shell.call_args_list[3][0][0]
+        clean_call = sandbox.run_shell.call_args_list[2][0][0]
+        sync_call = sandbox.run_shell.call_args_list[4][0][0]
+        assert "clean -ffdx" in clean_call
         assert "fetch upstream main" in sync_call
         assert "reset --hard upstream/main" in sync_call
         sandbox.recreate.assert_not_awaited()
@@ -382,6 +395,7 @@ class TestGithubTools:
         sandbox = AsyncMock()
         sandbox.run_shell = AsyncMock(side_effect=[
             {"success": True, "stdout": "new", "stderr": ""},   # test -d .git
+            {"success": True, "stdout": "", "stderr": ""},      # remove stale checkout
             {"success": True, "stdout": "", "stderr": ""},      # git clone
             {"success": True, "stdout": "", "stderr": ""},      # git remote add upstream
             {"success": True, "stdout": "", "stderr": ""},      # sync_main_branch
@@ -396,9 +410,9 @@ class TestGithubTools:
 
         assert result["success"] is True
         assert "synchronized 'main' with upstream" in result["message"].lower()
-        clone_call = sandbox.run_shell.call_args_list[1][0][0]
+        clone_call = sandbox.run_shell.call_args_list[2][0][0]
         assert "git clone" in clone_call
-        sync_call = sandbox.run_shell.call_args_list[3][0][0]
+        sync_call = sandbox.run_shell.call_args_list[4][0][0]
         assert "fetch upstream main" in sync_call
 
     async def test_fetch_uses_repo_url_as_given(self):
@@ -407,6 +421,7 @@ class TestGithubTools:
         sandbox.run_shell = AsyncMock(side_effect=[
             {"success": True, "stdout": "new", "stderr": ""},
             {"success": True, "stdout": "", "stderr": ""},
+            {"success": True, "stdout": "", "stderr": ""},
         ])
         kit = GithubTools(sandbox)
         authenticated_url = "https://x-access-token:ghp_secret@github.com/owner/repo"
@@ -414,7 +429,7 @@ class TestGithubTools:
             repo_url=authenticated_url,
             local_path="/workspace/myproject",
         )
-        clone_call = sandbox.run_shell.call_args_list[1][0][0]
+        clone_call = sandbox.run_shell.call_args_list[2][0][0]
         assert authenticated_url in clone_call
 
     async def test_fetch_recreates_sandbox_when_origin_remote_missing(self):
@@ -424,6 +439,7 @@ class TestGithubTools:
         sandbox.run_shell = AsyncMock(side_effect=[
             {"success": True, "stdout": "exists", "stderr": ""},  # test -d .git
             {"success": False, "stdout": "", "stderr": "missing"}, # git remote get-url
+            {"success": True, "stdout": "", "stderr": ""},         # remove stale checkout
             {"success": True, "stdout": "", "stderr": ""},         # git clone
         ])
         kit = GithubTools(sandbox)
@@ -434,7 +450,7 @@ class TestGithubTools:
 
         assert result["success"] is True
         sandbox.recreate.assert_awaited_once()
-        clone_call = sandbox.run_shell.call_args_list[2][0][0]
+        clone_call = sandbox.run_shell.call_args_list[3][0][0]
         assert "git clone" in clone_call
 
     async def test_fetch_recreates_sandbox_when_origin_remote_mismatched(self):
@@ -444,6 +460,7 @@ class TestGithubTools:
         sandbox.run_shell = AsyncMock(side_effect=[
             {"success": True, "stdout": "exists", "stderr": ""},                           # test -d .git
             {"success": True, "stdout": "https://github.com/other/repo\n", "stderr": ""},  # git remote get-url
+            {"success": True, "stdout": "", "stderr": ""},                                  # remove stale checkout
             {"success": True, "stdout": "", "stderr": ""},                                  # git clone
         ])
         kit = GithubTools(sandbox)
@@ -454,7 +471,7 @@ class TestGithubTools:
 
         assert result["success"] is True
         sandbox.recreate.assert_awaited_once()
-        clone_call = sandbox.run_shell.call_args_list[2][0][0]
+        clone_call = sandbox.run_shell.call_args_list[3][0][0]
         assert "git clone" in clone_call
 
     async def test_pr_pushes_via_sandbox(self):

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shlex
+
 import httpx
 
 from mwin import track
@@ -42,13 +44,34 @@ class GithubTools:
         self._sandbox = sandbox
         self._nexus_task_context = nexus_task_context
 
+    async def _clean_existing_checkout(self, local_path: str) -> dict:
+        """Remove leftover checkout state before syncing a reused sandbox."""
+        quoted_path = shlex.quote(local_path)
+        return await self._sandbox.run_shell(
+            f"(git -C {quoted_path} merge --abort >/dev/null 2>&1 || true) && "
+            f"(git -C {quoted_path} rebase --abort >/dev/null 2>&1 || true) && "
+            f"git -C {quoted_path} reset --hard && "
+            f"git -C {quoted_path} clean -ffdx"
+        )
+
+    async def _remove_non_git_checkout(self, local_path: str) -> dict:
+        """Remove a stale non-git checkout directory under /workspace."""
+        quoted_path = shlex.quote(local_path)
+        return await self._sandbox.run_shell(
+            f"case {quoted_path} in "
+            f"/workspace/*) rm -rf -- {quoted_path} ;; "
+            f"*) echo 'Refusing to remove checkout outside /workspace' >&2; exit 1 ;; "
+            f"esac"
+        )
+
     async def _sync_main_branch(self, local_path: str) -> dict:
         """Synchronize local main branches with remotes."""
+        quoted_path = shlex.quote(local_path)
         return await self._sandbox.run_shell(
-            f"git -C '{local_path}' fetch upstream main && "
-            f"git -C '{local_path}' checkout main && "
-            f"git -C '{local_path}' reset --hard upstream/main && "
-            f"git -C '{local_path}' push origin main --force-with-lease"
+            f"git -C {quoted_path} fetch upstream main && "
+            f"git -C {quoted_path} checkout main && "
+            f"git -C {quoted_path} reset --hard upstream/main && "
+            f"git -C {quoted_path} push origin main --force-with-lease"
         )
 
     @track(step_type="tool")
@@ -60,8 +83,36 @@ class GithubTools:
         token: str | None = None,
         upstream_url: str | None = None,
     ) -> dict:
-        """Fetch from github.
-        repo_url should always be authenticated_url if github_token is provided.
+        """Prepare a GitHub repository checkout inside the sandbox.
+
+        The checkout is intentionally treated as disposable state. If
+        ``local_path`` already contains the expected Git repository, this method
+        aborts any in-progress merge or rebase, discards tracked changes, removes
+        untracked and ignored files, fetches the requested branch, and resets the
+        local branch to the matching remote ref. This makes reused Docker
+        workspaces converge to a clean remote state before an agent starts work.
+
+        If ``local_path`` does not contain a Git repository, any stale directory
+        at that path is removed when it is under ``/workspace`` and the
+        repository is cloned from ``repo_url``. If the existing checkout points
+        at a different origin URL, the sandbox is recreated before cloning.
+
+        Args:
+            repo_url: Clone URL for the repository. Pass an authenticated URL
+                when private repository access is required.
+            local_path: Absolute sandbox path where the repository should exist.
+            branch: Branch to prepare. Defaults to ``main``.
+            token: Unused compatibility parameter. Authentication is expected to
+                be embedded in ``repo_url`` when needed.
+            upstream_url: Optional upstream repository URL for fork workflows.
+                When provided with ``branch="main"``, the local main branch is
+                reset to ``upstream/main`` and pushed to ``origin/main`` with
+                ``--force-with-lease``.
+
+        Returns:
+            A dictionary with ``success``, ``path``, ``branch``, and ``message``
+            keys describing the checkout result. ``success`` is false when a Git
+            command fails.
         """
 
         authenticated_url = repo_url
@@ -69,13 +120,19 @@ class GithubTools:
         result: dict | None = None
         message = ""
 
+        quoted_path = shlex.quote(local_path)
+        quoted_git_dir = shlex.quote(f"{local_path}/.git")
+        quoted_branch = shlex.quote(branch)
+        quoted_repo_url = shlex.quote(authenticated_url)
+        quoted_upstream_url = shlex.quote(upstream_url) if upstream_url else None
+
         check = await self._sandbox.run_shell(
-            f"test -d '{local_path}/.git' && echo exists || echo new"
+            f"test -d {quoted_git_dir} && echo exists || echo new"
         )
 
         if "exists" in check.get("stdout", ""):
             remote_result = await self._sandbox.run_shell(
-                f"git -C '{local_path}' config --get remote.origin.url"
+                f"git -C {quoted_path} config --get remote.origin.url"
             )
             existing_remote = remote_result.get("stdout", "").strip()
             existing_remote_canonical = existing_remote
@@ -90,30 +147,47 @@ class GithubTools:
                 await self._sandbox.recreate()
                 check = {"stdout": "new"}
             else:
+                clean_result = await self._clean_existing_checkout(local_path)
+                if not clean_result.get("success", False):
+                    return {
+                        "success": False,
+                        "path": local_path,
+                        "branch": branch,
+                        "message": clean_result.get("stderr", "failed to clean checkout"),
+                    }
+
                 if upstream_url and branch == "main":
                     await self._sandbox.run_shell(
-                        f"git -C '{local_path}' fetch --all && "
-                        f"git -C '{local_path}' remote add upstream '{upstream_url}' 2>/dev/null || "
-                        f"git -C '{local_path}' remote set-url upstream '{upstream_url}'"
+                        f"git -C {quoted_path} fetch --all && "
+                        f"(git -C {quoted_path} remote add upstream {quoted_upstream_url} 2>/dev/null || "
+                        f"git -C {quoted_path} remote set-url upstream {quoted_upstream_url})"
                     )
                     result = await self._sync_main_branch(local_path)
                     message = f"Synchronized 'main' with upstream at {local_path}"
                 else:
                     result = await self._sandbox.run_shell(
-                        f"git -C '{local_path}' fetch --all && "
-                        f"git -C '{local_path}' checkout {branch} && "
-                        f"git -C '{local_path}' pull origin {branch}"
+                        f"git -C {quoted_path} fetch origin {quoted_branch} && "
+                        f"git -C {quoted_path} checkout -B {quoted_branch} origin/{quoted_branch} && "
+                        f"git -C {quoted_path} reset --hard origin/{quoted_branch}"
                     )
-                    message = f"Pulled latest on branch '{branch}' at {local_path}"
+                    message = f"Reset branch '{branch}' to origin/{branch} at {local_path}"
 
         if "new" in check.get("stdout", ""):
+            remove_result = await self._remove_non_git_checkout(local_path)
+            if not remove_result.get("success", False):
+                return {
+                    "success": False,
+                    "path": local_path,
+                    "branch": branch,
+                    "message": remove_result.get("stderr", "failed to remove stale checkout"),
+                }
             result = await self._sandbox.run_shell(
-                f"git clone --branch {branch} '{authenticated_url}' '{local_path}'"
+                f"git clone --branch {quoted_branch} {quoted_repo_url} {quoted_path}"
             )
             if result.get("success", False) and upstream_url:
                 await self._sandbox.run_shell(
-                    f"git -C '{local_path}' remote add upstream '{upstream_url}' 2>/dev/null || "
-                    f"git -C '{local_path}' remote set-url upstream '{upstream_url}'"
+                    f"(git -C {quoted_path} remote add upstream {quoted_upstream_url} 2>/dev/null || "
+                    f"git -C {quoted_path} remote set-url upstream {quoted_upstream_url})"
                 )
                 if branch == "main":
                     result = await self._sync_main_branch(local_path)
