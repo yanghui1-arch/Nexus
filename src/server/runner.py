@@ -228,7 +228,7 @@ class AgentTaskRunner:
             repo=workspace.github_repo,
             project=workspace.project,
             external_issue_url=submission.external_issue_url,
-            external_pull_request_url=getattr(submission, "external_pull_request_url", None),
+            external_pull_request_url=submission.external_pull_request_url,
         )
         logger.info(f"Agent `{instance.agent.name}` has workspace `{workspace.workspace_key}`")
         return task
