@@ -398,7 +398,23 @@
         "started": "开始时间",
         "finished": "结束时间",
         "result": "结果",
-        "failedToLoad": "加载任务失败。"
+        "failedToLoad": "加载任务失败。",
+        "recovery": {
+          "title": "Recovery",
+          "description": "该任务可能可以恢复。重试前请确认 checkpoint、失败原因和潜在副作用。",
+          "failureSummary": "失败摘要",
+          "checkpointSummary": "Checkpoint 摘要",
+          "recommendedAction": "推荐动作",
+          "unrecoverableReasons": "不可恢复原因",
+          "riskWarnings": "风险提示",
+          "retryFromCheckpoint": "Retry from checkpoint",
+          "retryAsNewTask": "Retry as new task",
+          "confirmTitle": "确认潜在重复外部副作用",
+          "confirmDescription": "恢复或重试可能重复提交评论、提交、分支、PR 或调用外部系统。确认后才会继续。",
+          "confirmRetry": "确认并重试",
+          "cancel": "取消",
+          "retryFailed": "重试任务失败。"
+        }
       },
       "notFound": {
         "pageTitle": "页面未找到",
@@ -810,7 +826,23 @@
         "started": "Started",
         "finished": "Finished",
         "result": "Result",
-        "failedToLoad": "Failed to load task."
+        "failedToLoad": "Failed to load task.",
+        "recovery": {
+          "title": "Recovery",
+          "description": "This task may be recoverable. Review checkpoint state, failure context, and side-effect risks before retrying.",
+          "failureSummary": "Failure summary",
+          "checkpointSummary": "Checkpoint summary",
+          "recommendedAction": "Recommended action",
+          "unrecoverableReasons": "Unrecoverable reasons",
+          "riskWarnings": "Risk warnings",
+          "retryFromCheckpoint": "Retry from checkpoint",
+          "retryAsNewTask": "Retry as new task",
+          "confirmTitle": "Confirm potential duplicate external side effects",
+          "confirmDescription": "Recovery or retry may repeat comments, commits, branches, pull requests, or calls to external systems. Confirm before continuing.",
+          "confirmRetry": "Confirm retry",
+          "cancel": "Cancel",
+          "retryFailed": "Failed to retry task."
+        }
       },
       "notFound": {
         "pageTitle": "Page not found",
