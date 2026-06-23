@@ -18,6 +18,7 @@ import {
 import { getTaskById } from '@/data/mockWorkflows';
 import { usePolling } from '@/lib/usePolling';
 import { ExecutionTimeline } from '@/pages/process-tracking/components/ExecutionTimeline';
+import { TaskRecoveryPanel } from '@/pages/TaskRecoveryPanel';
 
 type LegacyTask = NonNullable<ReturnType<typeof getTaskById>>;
 
@@ -250,6 +251,7 @@ export default function TaskDetailPage() {
         ) : null}
       </CardContent>
       </Card>
+      <TaskRecoveryPanel task={task} onRetried={refreshTask} />
       <div className="min-h-[420px] max-w-3xl">
         <ExecutionTimeline events={timelineEvents} isLoading={isLoadingTimeline} />
       </div>
