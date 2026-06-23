@@ -299,6 +299,23 @@ class TaskConsultResponse(BaseModel):
     timestamp: datetime
 
 
+class TaskRecoveryAssessmentResponse(BaseModel):
+    task_id: uuid.UUID
+    recoverable: bool
+    unrecoverable_reasons: list[str] = Field(default_factory=list)
+    recommended_actions: list[str] = Field(default_factory=list)
+    risk_summary: list[str] = Field(default_factory=list)
+    checkpoint_exists: bool
+    checkpoint_updated_at: datetime | None
+    checkpoint_message_count: int
+    recent_events: list[TaskExecutionEventResponse] = Field(default_factory=list)
+    agent_instance_available: bool
+    repo_available: bool
+    project_available: bool
+    running_task_conflict: bool
+    conflicting_task_id: uuid.UUID | None = None
+
+
 class TaskStatusUpdateRequest(BaseModel):
     status: TaskStatus
 
