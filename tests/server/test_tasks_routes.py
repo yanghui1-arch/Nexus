@@ -940,3 +940,75 @@ def test_retry_task_from_checkpoint_rejects_non_failed_task(monkeypatch: pytest.
     assert response.status_code == 409
     assert response.json()["detail"] == "Only failed tasks can be retried from checkpoint"
     runner.dispatch_task.assert_not_awaited()
+
+def test_retry_task_from_checkpoint_rejects_missing_checkpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify failed tasks need a saved checkpoint for retry."""
+    task = _make_task(question="no checkpoint", status=TaskStatus.failed, created_at=datetime.now(timezone.utc))
+    runner = SimpleNamespace(dispatch_task=AsyncMock(return_value=True))
+    monkeypatch.setattr(TaskRepository, "get_for_user", AsyncMock(return_value=task))
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(runner_obj=runner))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(f"/v1/tasks/{task.id}/retry-from-checkpoint")
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Task has no checkpoint to retry from"
+    runner.dispatch_task.assert_not_awaited()
+
+
+def test_retry_task_from_checkpoint_conflicts_with_running_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify retry is blocked when the agent instance is occupied."""
+    now = datetime.now(timezone.utc)
+    task = _make_task(
+        question="retry me",
+        status=TaskStatus.failed,
+        created_at=now,
+        checkpoint=[{"role": "assistant", "content": "progress"}],
+    )
+    running_task = _make_task(question="busy", status=TaskStatus.running, created_at=now)
+    runner = SimpleNamespace(dispatch_task=AsyncMock(return_value=True))
+    monkeypatch.setattr(TaskRepository, "get_for_user", AsyncMock(return_value=task))
+    monkeypatch.setattr(TaskRepository, "get_running_for_agent_instance", AsyncMock(return_value=running_task))
+    queue_mock = AsyncMock()
+    monkeypatch.setattr(TaskRepository, "queue_checkpoint_retry", queue_mock)
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(runner_obj=runner))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(f"/v1/tasks/{task.id}/retry-from-checkpoint")
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Agent instance already has a running task"
+    queue_mock.assert_not_awaited()
+    runner.dispatch_task.assert_not_awaited()
+
+
+def test_retry_task_from_checkpoint_returns_dispatch_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify broker failures are returned to the user."""
+    task = _make_task(
+        question="retry me",
+        status=TaskStatus.failed,
+        created_at=datetime.now(timezone.utc),
+        checkpoint=[{"role": "assistant", "content": "progress"}],
+    )
+    runner = SimpleNamespace(dispatch_task=AsyncMock(side_effect=tasks_routes.TaskDispatchError("Dispatch failed: broker")))
+    monkeypatch.setattr(TaskRepository, "get_for_user", AsyncMock(return_value=task))
+    monkeypatch.setattr(TaskRepository, "get_running_for_agent_instance", AsyncMock(return_value=None))
+    monkeypatch.setattr(TaskRepository, "queue_checkpoint_retry", AsyncMock(return_value=task))
+    monkeypatch.setattr(TaskRepository, "create_execution_event", AsyncMock(return_value=SimpleNamespace(id=uuid.uuid4())))
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app(runner_obj=runner))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(f"/v1/tasks/{task.id}/retry-from-checkpoint")
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Dispatch failed: broker"
+    runner.dispatch_task.assert_awaited_once_with(task.id)
