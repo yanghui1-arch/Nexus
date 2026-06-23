@@ -14,6 +14,8 @@ from src.logger import logger
 from src.server.celery.app import celery_app
 from src.server.config import Settings
 from src.server.postgres.database import Database
+from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
+
 from src.server.postgres.models import AgentName, FeatureItemStatus, TaskCategory, TaskRecord, TaskStatus
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
@@ -44,6 +46,7 @@ class TaskSubmission:
     question: str
     external_issue_url: str | None = None
     external_pull_request_url: str | None = None
+    checkpoint: list[ChatCompletionMessageParam] | None = None
 
     def __post_init__(self) -> None:
         """Normalize user-facing text while preserving a small validation guard."""
@@ -229,6 +232,7 @@ class AgentTaskRunner:
             project=workspace.project,
             external_issue_url=submission.external_issue_url,
             external_pull_request_url=submission.external_pull_request_url,
+            checkpoint=submission.checkpoint,
         )
         logger.info(f"Agent `{instance.agent.name}` has workspace `{workspace.workspace_key}`")
         return task

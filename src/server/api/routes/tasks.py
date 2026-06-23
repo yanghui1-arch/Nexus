@@ -33,7 +33,9 @@ from src.server.schemas import (
     TaskExecutionEventResponse,
     TaskExecutionStatsResponse,
     TaskMessage,
+    TaskRecoveryResponse,
     TaskResponse,
+    TaskRetryRequest,
     TaskStatusUpdateRequest,
     TaskSubmitResponse,
     TaskWorkItemResponse,
@@ -198,6 +200,59 @@ async def get_task(
         workspace = await WorkspaceRepository.get_by_agent_instance_id(session, task.agent_instance_id)
     repo, project = _resolved_task_repo_project(task, workspace)
     return TaskResponse.from_record(task, repo=repo, project=project)
+
+
+@router.post("/{task_id}/retry", response_model=TaskSubmitResponse, status_code=202)
+async def retry_task(
+    request: Request,
+    task_id: uuid.UUID,
+    payload: TaskRetryRequest,
+    user: UserRecord = Depends(get_current_user),
+) -> TaskSubmitResponse:
+    """Retry a failed or recoverable task as a newly queued task."""
+    runner: AgentTaskRunner = request.app.state.runner
+    database: Database = request.app.state.database
+    async with database.session() as session:
+        task = await TaskRepository.get_for_user(session, task_id, user_id=user.id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        recovery = TaskRecoveryResponse.from_task(task)
+        if recovery is None:
+            raise HTTPException(status_code=409, detail="Task is not eligible for recovery")
+        if recovery.duplicate_side_effects_confirmation_required and not payload.confirm_duplicate_side_effects:
+            raise HTTPException(status_code=409, detail="Retry requires duplicate side effects confirmation")
+        if payload.from_checkpoint and not recovery.can_retry_from_checkpoint:
+            raise HTTPException(status_code=409, detail="Task has no checkpoint to retry from")
+        if not payload.from_checkpoint and not recovery.can_retry_as_new_task:
+            raise HTTPException(status_code=409, detail="Task cannot be retried as a new task")
+
+    try:
+        new_task_id = await runner.submit_task(
+            TaskSubmission(
+                agent_instance_id=task.agent_instance_id,
+                agent=task.agent,
+                question=task.question,
+                external_issue_url=task.external_issue_url,
+                external_pull_request_url=task.external_pull_request_url,
+                checkpoint=task.checkpoint if payload.from_checkpoint else None,
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except TaskDispatchError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    async with database.session() as session:
+        new_task = await TaskRepository.get(session, new_task_id)
+    if new_task is None:
+        raise HTTPException(status_code=500, detail="Retried task could not be loaded")
+
+    return TaskSubmitResponse(
+        task_id=new_task_id,
+        agent_instance_id=new_task.agent_instance_id,
+        category=new_task.category,
+        status=TaskStatus.queued,
+    )
 
 
 @router.get("/{task_id}/events", response_model=list[TaskExecutionEventResponse])
