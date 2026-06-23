@@ -8,8 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
-type RecoveryMode = 'checkpoint' | 'new';
-
 type RecoveryPanelProps = {
   task: ApiTask;
   onRetried: () => Promise<void>;
@@ -18,15 +16,15 @@ type RecoveryPanelProps = {
 export function TaskRecoveryPanel({ task, onRetried }: RecoveryPanelProps) {
   const { t } = useTranslation();
   const recovery = task.recovery;
-  const [confirmMode, setConfirmMode] = useState<RecoveryMode | null>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
 
   if (!recovery?.visible) return null;
 
-  const startRetry = async (mode: RecoveryMode) => {
-    if (recovery.duplicate_side_effects_confirmation_required && confirmMode !== mode) {
-      setConfirmMode(mode);
+  const startRetry = async () => {
+    if (recovery.duplicate_side_effects_confirmation_required && !isConfirming) {
+      setIsConfirming(true);
       return;
     }
 
@@ -34,10 +32,10 @@ export function TaskRecoveryPanel({ task, onRetried }: RecoveryPanelProps) {
     setRetryError(null);
     try {
       await retryTask(task.id, {
-        from_checkpoint: mode === 'checkpoint',
+        from_checkpoint: false,
         confirm_duplicate_side_effects: recovery.duplicate_side_effects_confirmation_required,
       });
-      setConfirmMode(null);
+      setIsConfirming(false);
       await onRetried();
     } catch (error) {
       setRetryError(getErrorDetail(error, t('taskDetail.recovery.retryFailed')));
@@ -62,15 +60,12 @@ export function TaskRecoveryPanel({ task, onRetried }: RecoveryPanelProps) {
         <List title={t('taskDetail.recovery.riskWarnings')} items={recovery.risk_warnings} />
         {retryError ? <p className="text-sm text-destructive">{retryError}</p> : null}
         <div className="flex flex-wrap gap-2">
-          <Button type="button" onClick={() => startRetry('checkpoint')} disabled={!recovery.can_retry_from_checkpoint || isRetrying}>
-            <RotateCcw className="size-4" />{t('taskDetail.recovery.retryFromCheckpoint')}
-          </Button>
-          <Button type="button" variant="outline" onClick={() => startRetry('new')} disabled={!recovery.can_retry_as_new_task || isRetrying}>
-            {t('taskDetail.recovery.retryAsNewTask')}
+          <Button type="button" onClick={startRetry} disabled={!recovery.can_retry_as_new_task || isRetrying}>
+            <RotateCcw className="size-4" />{t('taskDetail.recovery.retryAsNewTask')}
           </Button>
         </div>
       </CardContent>
-      <Dialog open={confirmMode !== null} onOpenChange={open => !open && setConfirmMode(null)}>
+      <Dialog open={isConfirming} onOpenChange={open => !open && setIsConfirming(false)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t('taskDetail.recovery.confirmTitle')}</DialogTitle>
@@ -78,8 +73,8 @@ export function TaskRecoveryPanel({ task, onRetried }: RecoveryPanelProps) {
           </DialogHeader>
           <List title={t('taskDetail.recovery.riskWarnings')} items={recovery.risk_warnings} />
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setConfirmMode(null)} disabled={isRetrying}>{t('taskDetail.recovery.cancel')}</Button>
-            <Button type="button" onClick={() => confirmMode && startRetry(confirmMode)} disabled={isRetrying}>{t('taskDetail.recovery.confirmRetry')}</Button>
+            <Button type="button" variant="outline" onClick={() => setIsConfirming(false)} disabled={isRetrying}>{t('taskDetail.recovery.cancel')}</Button>
+            <Button type="button" onClick={startRetry} disabled={isRetrying}>{t('taskDetail.recovery.confirmRetry')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

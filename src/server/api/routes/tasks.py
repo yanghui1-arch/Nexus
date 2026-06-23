@@ -221,9 +221,9 @@ async def retry_task(
             raise HTTPException(status_code=409, detail="Task is not eligible for recovery")
         if recovery.duplicate_side_effects_confirmation_required and not payload.confirm_duplicate_side_effects:
             raise HTTPException(status_code=409, detail="Retry requires duplicate side effects confirmation")
-        if payload.from_checkpoint and not recovery.can_retry_from_checkpoint:
-            raise HTTPException(status_code=409, detail="Task has no checkpoint to retry from")
-        if not payload.from_checkpoint and not recovery.can_retry_as_new_task:
+        if payload.from_checkpoint:
+            raise HTTPException(status_code=409, detail="Retry from checkpoint is not supported")
+        if not recovery.can_retry_as_new_task:
             raise HTTPException(status_code=409, detail="Task cannot be retried as a new task")
 
     try:
@@ -238,8 +238,6 @@ async def retry_task(
                 ),
                 session=session,
             )
-            if payload.from_checkpoint:
-                new_task.checkpoint = task.checkpoint
             await session.commit()
             await session.refresh(new_task)
         new_task_id = new_task.id

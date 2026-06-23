@@ -316,20 +316,16 @@ class TaskRecoveryResponse(BaseModel):
         unrecoverable_reasons: list[str] = []
         if task.status not in {TaskStatus.failed, TaskStatus.running} and not has_checkpoint:
             unrecoverable_reasons.append("Task is not failed, stale running, or checkpointed.")
-        can_retry_from_checkpoint = has_checkpoint and not unrecoverable_reasons
+        can_retry_from_checkpoint = False
         can_retry_as_new_task = task.status in {TaskStatus.failed, TaskStatus.running}
         risk_warnings = [
             "Retrying may repeat external side effects such as GitHub comments, commits, branches, or pull requests."
         ]
         if task.external_pull_request_url:
             risk_warnings.append("This task is already linked to a pull request; verify the retry should touch the same PR.")
-        recommended_action = (
-            "Retry from checkpoint to preserve completed context."
-            if can_retry_from_checkpoint
-            else "Retry as a new task after reviewing the failure."
-        )
+        recommended_action = "Retry as a new task after reviewing the failure."
         if stale_running:
-            recommended_action = "Task appears stale; retry from checkpoint if progress should be preserved."
+            recommended_action = "Task appears stale; retry as a new task if it is no longer making progress."
         return cls(
             visible=True,
             has_checkpoint=has_checkpoint,
