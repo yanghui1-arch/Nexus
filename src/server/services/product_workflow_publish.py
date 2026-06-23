@@ -7,9 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.logger import logger
 from src.server.postgres.models import AgentName, FeatureItemRecord, ProductProposalRecord
-from src.server.postgres.repositories import AgentInstanceRepository, FeatureItemRepository, TaskRepository
-from src.server.runner import AgentTaskRunner
-from src.server.schemas import AgentKind, TaskCreateRequest
+from src.server.postgres.repositories import AgentInstanceRepository, FeatureItemRepository
+from src.server.runner import AgentTaskRunner, TaskSubmission
 
 
 class NoActiveTelaAgentInstanceError(RuntimeError):
@@ -41,21 +40,25 @@ async def publish_feature_item_task(
     if not tela_instances:
         raise NoActiveTelaAgentInstanceError
     agent_instance_id = tela_instances[0].id
-    task_id = await runner.submit_task(
-        TaskCreateRequest(
+    # Bind the feature item before dispatch so worker failures can always resolve
+    # the feature item by task_id and sync it to failed.
+    task = await runner.create_task_record(
+        TaskSubmission(
             agent_instance_id=agent_instance_id,
-            agent=AgentKind.tela,
+            agent=AgentName.tela,
             question=build_feature_item_coding_question(item),
             external_issue_url=None,
-        )
+        ),
+        session=session,
     )
     assigned = await FeatureItemRepository.assign_task(
-        session, item.id, task_id=task_id, require_unassigned=require_unassigned
+        session, item.id, task_id=task.id, require_unassigned=require_unassigned
     )
     if assigned is None:
-        await TaskRepository.set_closed(session, task_id)
-        logger.warning("Feature item %s was already assigned before publishing task %s.", item.id, task_id)
-    return assigned, task_id, agent_instance_id
+        logger.warning("Feature item %s was already assigned before publishing task %s.", item.id, task.id)
+        return assigned, task.id, agent_instance_id
+    await runner.dispatch_task(task.id)
+    return assigned, task.id, agent_instance_id
 
 
 def build_feature_item_coding_question(item: Any) -> str:

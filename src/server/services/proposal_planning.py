@@ -10,8 +10,7 @@ from src.server.postgres.repositories import (
     ProductProposalRepository,
     ProposalPlanningRunRepository,
 )
-from src.server.runner import AgentTaskRunner
-from src.server.schemas import AgentKind, TaskCreateRequest
+from src.server.runner import AgentTaskRunner, TaskSubmission
 
 
 class ProposalPlanningError(Exception):
@@ -80,23 +79,23 @@ async def start_proposal_planning(
     if not marc_instances:
         raise NoActiveMarcAgentInstanceError
 
-    planning_request = TaskCreateRequest(
+    planning_submission = TaskSubmission(
         agent_instance_id=marc_instances[0].id,
-        agent=AgentKind.marc,
+        agent=AgentName.marc,
         question=_build_planning_question(proposal),
         external_issue_url=None,
     )
     # Persist both the planning task row and its tracking row before dispatch.
     # This keeps the approved proposal observable even if broker dispatch or
     # worker execution fails immediately afterwards.
-    planning_task = await runner.create_task_record(planning_request, session=session)
+    planning_task = await runner.create_task_record(planning_submission, session=session)
     await ProposalPlanningRunRepository.create_pending(
         session,
         proposal_id=proposal.id,
         task_id=planning_task.id,
     )
     await session.commit()
-    await runner.dispatch_planning_task(planning_task.id)
+    await runner.dispatch_task(planning_task.id)
     refreshed_proposal = await ProductProposalRepository.get(session, proposal.id)
     if refreshed_proposal is None:
         raise ProposalNotFoundAfterPlanningStartError

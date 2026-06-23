@@ -7,7 +7,7 @@ import pytest
 
 from src.agents.base.agent import BaseAgentResponse
 from src.server.celery.execution import agents, prompt_helper, state, task as execution_task, workflows
-from src.server.postgres.models import GithubPullRequestFeedbackKind, TaskCategory, TaskStatus, TaskWorkItemStatus
+from src.server.postgres.models import GithubPullRequestFeedbackKind, TaskCategory, TaskExecutionEventRecord, TaskStatus, TaskWorkItemStatus
 from src.server.postgres.repositories import (
     AgentInstanceRepository,
     ProductProposalRepository,
@@ -1588,3 +1588,109 @@ def test_mark_waiting_for_review_fails_planning_run_when_plan_is_invalid(monkeyp
         "task_failed": ("task-id", "missing feature items"),
         "run_failed": ("planning-run-id", "missing feature items"),
     }
+
+
+
+def _patch_execute_agent_task_happy_path(monkeypatch, task_id, run_agent_workflow):
+    """Patch execute_agent_task dependencies for progress callback tests."""
+
+    class RuntimeDatabase(FakeDatabase):
+        def __init__(self, database_url):
+            super().__init__()
+
+        async def connect(self):
+            return None
+
+        async def disconnect(self):
+            return None
+
+    async def fake_load_task(database, requested_task_id):
+        return make_task(id=requested_task_id, status=TaskStatus.queued, agent_instance_id=uuid.uuid4())
+
+    async def fake_load_binding(database, task):
+        return SimpleNamespace(
+            github_repo="owner/repo",
+            project="workspace",
+            user_id=uuid.uuid4(),
+            workspace_key="workspace-key",
+        )
+
+    async def fake_mark_task_running(*args, **kwargs):
+        return make_task(id=task_id, status=TaskStatus.running, agent_instance_id=uuid.uuid4())
+
+    monkeypatch.setattr(execution_task, "Database", RuntimeDatabase)
+    monkeypatch.setattr(state, "load_task", fake_load_task)
+    monkeypatch.setattr(state, "load_binding", fake_load_binding)
+    monkeypatch.setattr(state, "mark_workspace_running", AsyncMock())
+    monkeypatch.setattr(state, "mark_task_running", fake_mark_task_running)
+    monkeypatch.setattr(state, "mark_post_execution_wait_state", AsyncMock())
+    monkeypatch.setattr(state, "release_workspace", AsyncMock())
+    monkeypatch.setattr(workflows, "run_agent_workflow", run_agent_workflow)
+
+
+def test_execute_agent_task_writes_lifecycle_events(monkeypatch):
+    """Verify agent progress creates structured lifecycle events."""
+    task_id = uuid.uuid4()
+    events = []
+
+    async def fake_run_agent_workflow(**kwargs):
+        for process in ["START", "PROCESS", "SAVE_CHECKPOINT", "COMPLETED", "FAILED", "EXCEED_ATTEMPTS"]:
+            status = {
+                "process": process,
+                "agent_content": f"{process} message",
+                "current_use_tool": ["shell"] if process == "PROCESS" else None,
+                "current_use_tool_args": [{"cmd": "secret"}] if process == "PROCESS" else None,
+            }
+            if process == "SAVE_CHECKPOINT":
+                status["context"] = [{"role": "assistant", "content": "safe point"}]
+            kwargs["on_progress"](status)
+
+    async def fake_create_execution_event(session, **kwargs):
+        events.append(kwargs)
+        return TaskExecutionEventRecord(**kwargs)
+
+    _patch_execute_agent_task_happy_path(monkeypatch, task_id, fake_run_agent_workflow)
+    update_checkpoint = AsyncMock()
+    monkeypatch.setattr(TaskRepository, "update_checkpoint", update_checkpoint)
+    monkeypatch.setattr(TaskRepository, "create_execution_event", fake_create_execution_event)
+
+    asyncio.run(execution_task.execute_agent_task(task_id=task_id, settings=SimpleNamespace(database_url="test")))
+
+    assert [event["event_type"] for event in events] == [
+        "START",
+        "PROCESS",
+        "COMPLETED",
+        "FAILED",
+        "EXCEED_ATTEMPTS",
+    ]
+    assert events[1]["safe_metadata"] == {
+        "process": "PROCESS",
+        "current_use_tool": ["shell"],
+        "has_tool_args": True,
+    }
+    update_checkpoint.assert_awaited_once()
+    assert update_checkpoint.await_args.kwargs["checkpoint"] == [{"role": "assistant", "content": "safe point"}]
+
+
+
+def test_execute_agent_task_logs_lifecycle_event_failures(monkeypatch):
+    """Verify lifecycle event failures do not fail task execution."""
+    task_id = uuid.uuid4()
+
+    async def fake_run_agent_workflow(**kwargs):
+        kwargs["on_progress"]({"process": "START", "agent_content": "started", "current_use_tool": None, "current_use_tool_args": None})
+
+    async def fail_create_execution_event(*args, **kwargs):
+        raise RuntimeError("event store unavailable")
+
+    mark_failed = AsyncMock()
+    logged_exceptions = []
+    _patch_execute_agent_task_happy_path(monkeypatch, task_id, fake_run_agent_workflow)
+    monkeypatch.setattr(state, "mark_failed", mark_failed)
+    monkeypatch.setattr(TaskRepository, "create_execution_event", fail_create_execution_event)
+    monkeypatch.setattr(execution_task.logger, "exception", lambda *args, **kwargs: logged_exceptions.append(args))
+
+    asyncio.run(execution_task.execute_agent_task(task_id=task_id, settings=SimpleNamespace(database_url="test")))
+
+    mark_failed.assert_not_awaited()
+    assert any("Lifecycle event persistence failed" in args[0] for args in logged_exceptions)

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronsUpDown, SendHorizontal } from 'lucide-react';
+import type { ApiTaskExecutionEvent } from '@/api/types';
+import { ExecutionTimeline } from '@/pages/process-tracking/components/ExecutionTimeline';
 import type {
   WorkspaceAgentOption,
   WorkspaceConsultMessageView,
@@ -27,6 +29,8 @@ type ProcessTrackingPanelProps = {
   agents: WorkspaceAgentOption[];
   tasksForAgent: WorkspaceTaskView[];
   messages: WorkspaceConsultMessageView[];
+  timelineEvents: ApiTaskExecutionEvent[];
+  isLoadingTimeline: boolean;
   selectedAgentId: string;
   selectedTaskId: string;
   selectedTask?: WorkspaceTaskView;
@@ -47,6 +51,8 @@ export function ProcessTrackingPanel({
   agents,
   tasksForAgent,
   messages,
+  timelineEvents,
+  isLoadingTimeline,
   selectedAgentId,
   selectedTaskId,
   selectedTask,
@@ -179,8 +185,9 @@ export function ProcessTrackingPanel({
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 px-6 py-5">
-        <div className="shrink-0">
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_360px] gap-4 px-6 py-5">
+        <div className="flex min-h-0 flex-col gap-4">
+          <div className="shrink-0">
           <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">{t('processTracking.chat')}</p>
           <p className="mt-1 text-sm text-muted-foreground">
             {selectedTask ? t('processTracking.chatHintReady') : t('processTracking.chatHintEmpty')}
@@ -222,6 +229,9 @@ export function ProcessTrackingPanel({
             </Button>
           </div>
         </form>
+        </div>
+
+        <ExecutionTimeline events={timelineEvents} isLoading={isLoadingTimeline} />
       </div>
     </div>
   );

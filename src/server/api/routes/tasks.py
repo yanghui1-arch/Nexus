@@ -13,6 +13,7 @@ from src.server.api.dependencies import get_current_user
 from src.server.config import get_settings
 from src.server.postgres.database import Database
 from src.server.postgres.models import (
+    AgentName,
     TaskCategory,
     TaskStatus,
     UserRecord,
@@ -24,12 +25,14 @@ from src.server.postgres.repositories import (
     TaskWorkItemRepository,
     WorkspaceRepository,
 )
-from src.server.runner import AgentTaskRunner, TaskDispatchError
+from src.server.runner import AgentTaskRunner, TaskDispatchError, TaskSubmission
 from src.server.schemas import (
     TaskConsultRequest,
     TaskConsultResponse,
     TaskCreateRequest,
     TaskExecutionEventResponse,
+    TaskExecutionStatsResponse,
+    TaskMessage,
     TaskResponse,
     TaskStatusUpdateRequest,
     TaskSubmitResponse,
@@ -71,7 +74,15 @@ async def create_task(
         raise HTTPException(status_code=404, detail="Agent instance not found")
 
     try:
-        task_id = await runner.submit_task(payload)
+        task_id = await runner.submit_task(
+            TaskSubmission(
+                agent_instance_id=payload.agent_instance_id,
+                agent=AgentName(payload.agent.value),
+                question=payload.question,
+                external_issue_url=payload.external_issue_url,
+                external_pull_request_url=payload.external_pull_request_url,
+            )
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except TaskDispatchError as exc:
@@ -130,6 +141,48 @@ async def list_tasks(
     return responses
 
 
+@router.get("/{task_id}/messages", response_model=list[TaskMessage])
+async def list_task_messages(
+    request: Request,
+    task_id: uuid.UUID,
+    limit: int = Query(default=200, ge=1, le=1000),
+    user: UserRecord = Depends(get_current_user),
+) -> list[TaskMessage]:
+    """List execution messages for a task owned by the current user."""
+    database: Database = request.app.state.database
+    async with database.session() as session:
+        task = await TaskRepository.get_for_user(session, task_id, user_id=user.id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        events = await TaskExecutionEventRepository.list_by_task(session, task_id, limit=limit)
+    return [
+        TaskMessage(
+            timestamp=event.created_at.isoformat(),
+            status=event.event_type,
+            description=event.message,
+            data=None,
+            meta=event.safe_metadata,
+        )
+        for event in events
+    ]
+
+
+@router.get("/{task_id}/stats", response_model=TaskExecutionStatsResponse)
+async def get_task_stats(
+    request: Request,
+    task_id: uuid.UUID,
+    user: UserRecord = Depends(get_current_user),
+) -> TaskExecutionStatsResponse:
+    """Return aggregate execution statistics for a task owned by the current user."""
+    database: Database = request.app.state.database
+    async with database.session() as session:
+        task = await TaskRepository.get_for_user(session, task_id, user_id=user.id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        events = await TaskExecutionEventRepository.list_by_task(session, task_id)
+    return TaskExecutionStatsResponse.from_events(events, task=task)
+
+
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(
     request: Request,
@@ -139,13 +192,10 @@ async def get_task(
     """Return one task owned by the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
-        task = await TaskRepository.get(session, task_id)
+        task = await TaskRepository.get_for_user(session, task_id, user_id=user.id)
         if task is None:
             raise HTTPException(status_code=404, detail="Task not found")
-        instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
         workspace = await WorkspaceRepository.get_by_agent_instance_id(session, task.agent_instance_id)
-    if instance is None or instance.user_id != user.id:
-        raise HTTPException(status_code=404, detail="Task not found")
     repo, project = _resolved_task_repo_project(task, workspace)
     return TaskResponse.from_record(task, repo=repo, project=project)
 

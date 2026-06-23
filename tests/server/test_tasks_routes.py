@@ -88,6 +88,7 @@ def _make_task(
     agent: AgentName = AgentName.sophie,
     agent_instance_id: uuid.UUID | None = None,
     checkpoint: list[dict[str, Any] | str] | None = None,
+    error: str | None = None,
 ) -> Any:
     """Create a task route record."""
     started_at = created_at + timedelta(minutes=1)
@@ -108,7 +109,7 @@ def _make_task(
         external_pull_request_url=None,
         status=status,
         result=None,
-        error=None,
+        error=error,
         checkpoint=checkpoint,
         created_at=created_at,
         updated_at=created_at + timedelta(minutes=2),
@@ -237,6 +238,11 @@ def test_create_task_returns_category_from_persisted_task(monkeypatch: pytest.Mo
         'status': TaskStatus.queued.value,
     }
     runner.submit_task.assert_awaited_once()
+    submission = runner.submit_task.await_args.args[0]
+    assert submission.agent_instance_id == created_task.agent_instance_id
+    assert submission.agent == AgentName(created_task.agent.value)
+    assert submission.question == created_task.question
+    assert submission.external_issue_url is None
 
 
 def test_create_task_accepts_assistant_agent(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -725,3 +731,116 @@ def test_consult_task_returns_process_reply(monkeypatch: pytest.MonkeyPatch) -> 
         {'role': 'user', 'content': 'Original task request'},
         {'role': 'assistant', 'content': 'Checkpointed progress'},
     ]
+
+
+def test_task_stats_return_unknown_empty_state_for_existing_task_without_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify tasks with no execution events return zero/unknown statistics."""
+    now = datetime.now(timezone.utc)
+    task = _make_task(question='empty stats', status=TaskStatus.queued, created_at=now)
+
+    async def fake_get_for_user(session, task_id, **kwargs):
+        """Provide a fake owned task."""
+        assert task_id == task.id
+        assert kwargs == {'user_id': uuid.UUID('00000000-0000-0000-0000-000000000001')}
+        return task
+
+    async def fake_list_events(session, task_id, **kwargs):
+        """Provide no execution events."""
+        assert task_id == task.id
+        return []
+
+    monkeypatch.setattr(TaskRepository, 'get_for_user', fake_get_for_user)
+    monkeypatch.setattr(TaskExecutionEventRepository, 'list_by_task', fake_list_events)
+
+    async def run_request() -> httpx.Response:
+        """Run the request test body."""
+        transport = httpx.ASGITransport(app=_build_app())
+        async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
+            return await client.get(f'/v1/tasks/{task.id}/stats')
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 200
+    assert response.json() == {
+        'event_count': 0,
+        'total_tokens': 0,
+        'first_event_at': None,
+        'last_event_at': None,
+        'duration_seconds': None,
+        'tool_call_count': 0,
+        'last_checkpoint_at': None,
+        'latest_error': None,
+        'model': 'unknown',
+    }
+
+
+def test_task_stats_include_tool_checkpoint_and_error_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify task stats include requested observability aggregate fields."""
+    now = datetime.now(timezone.utc)
+    task = _make_task(
+        question='observe stats',
+        status=TaskStatus.failed,
+        created_at=now - timedelta(minutes=10),
+        checkpoint=[{'role': 'assistant', 'content': 'checkpoint'}],
+        error='task failed',
+    )
+    task.updated_at = now - timedelta(minutes=1)
+    events = [
+        SimpleNamespace(
+            event_type='llm_response',
+            message='model replied',
+            tokens=10,
+            model='gpt-test',
+            created_at=now - timedelta(minutes=4),
+        ),
+        SimpleNamespace(
+            event_type='tool_call',
+            message='ran tool',
+            tokens=2,
+            model='gpt-test',
+            created_at=now - timedelta(minutes=3),
+        ),
+        SimpleNamespace(
+            event_type='error',
+            message='latest event error',
+            tokens=None,
+            model='gpt-test',
+            created_at=now - timedelta(minutes=2),
+        ),
+    ]
+
+    async def fake_get_for_user(session, task_id, **kwargs):
+        """Provide a fake owned task."""
+        assert task_id == task.id
+        return task
+
+    async def fake_list_events(session, task_id, **kwargs):
+        """Provide execution events."""
+        assert task_id == task.id
+        return events
+
+    monkeypatch.setattr(TaskRepository, 'get_for_user', fake_get_for_user)
+    monkeypatch.setattr(TaskExecutionEventRepository, 'list_by_task', fake_list_events)
+
+    async def run_request() -> httpx.Response:
+        """Run the request test body."""
+        transport = httpx.ASGITransport(app=_build_app())
+        async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
+            return await client.get(f'/v1/tasks/{task.id}/stats')
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 200
+    assert response.json() == {
+        'event_count': 3,
+        'total_tokens': 12,
+        'first_event_at': events[0].created_at.isoformat().replace('+00:00', 'Z'),
+        'last_event_at': events[-1].created_at.isoformat().replace('+00:00', 'Z'),
+        'duration_seconds': 120.0,
+        'tool_call_count': 1,
+        'last_checkpoint_at': task.updated_at.isoformat().replace('+00:00', 'Z'),
+        'latest_error': 'latest event error',
+        'model': 'gpt-test',
+    }

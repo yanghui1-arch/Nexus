@@ -150,7 +150,7 @@ def test_approve_proposal_dispatches_planning_task(monkeypatch) -> None:
     captured = {}
     runner = SimpleNamespace(
         create_task_record=AsyncMock(return_value=SimpleNamespace(id=planning_task_id)),
-        dispatch_planning_task=AsyncMock(return_value=True),
+        dispatch_task=AsyncMock(return_value=True),
     )
     state = {"get_calls": 0}
 
@@ -220,12 +220,12 @@ def test_approve_proposal_dispatches_planning_task(monkeypatch) -> None:
     }
     payload = runner.create_task_record.await_args.args[0]
     assert payload.agent_instance_id == marc_instance_id
-    assert payload.agent.value == "marc"
+    assert payload.agent == AgentName.marc
     assert f"Proposal ID: {proposal_id}" in payload.question
     assert "Title: Add RAG capability" in payload.question
     assert "Summary: Improve answer quality with retrieval." in payload.question
     assert "Answer: Build RAG in small slices." in payload.question
-    runner.dispatch_planning_task.assert_awaited_once_with(planning_task_id)
+    runner.dispatch_task.assert_awaited_once_with(planning_task_id)
     assert response.json()["latest_planning_run"]["task_id"] == str(planning_task_id)
 
 
@@ -244,7 +244,7 @@ def test_approve_proposal_marks_source_pm_task_merged(monkeypatch) -> None:
     captured = {}
     runner = SimpleNamespace(
         create_task_record=AsyncMock(return_value=SimpleNamespace(id=planning_task_id)),
-        dispatch_planning_task=AsyncMock(return_value=True),
+        dispatch_task=AsyncMock(return_value=True),
     )
     state = {"get_calls": 0}
 
@@ -412,7 +412,7 @@ def test_retry_planning_dispatches_new_task_for_failed_run(monkeypatch) -> None:
     captured = {}
     runner = SimpleNamespace(
         create_task_record=AsyncMock(return_value=SimpleNamespace(id=planning_task_id)),
-        dispatch_planning_task=AsyncMock(return_value=True),
+        dispatch_task=AsyncMock(return_value=True),
     )
     state = {"get_calls": 0}
 
@@ -457,8 +457,8 @@ def test_retry_planning_dispatches_new_task_for_failed_run(monkeypatch) -> None:
     assert response.json()["latest_planning_run"]["task_id"] == str(planning_task_id)
     payload = runner.create_task_record.await_args.args[0]
     assert payload.agent_instance_id == marc_instance_id
-    assert payload.agent.value == "marc"
-    runner.dispatch_planning_task.assert_awaited_once_with(planning_task_id)
+    assert payload.agent == AgentName.marc
+    runner.dispatch_task.assert_awaited_once_with(planning_task_id)
 
 
 def test_retry_planning_rejects_when_planning_is_already_running(monkeypatch) -> None:
@@ -494,7 +494,7 @@ def test_retry_planning_dispatches_new_task_when_run_record_is_missing(monkeypat
     planning_task_id = uuid.uuid4()
     runner = SimpleNamespace(
         create_task_record=AsyncMock(return_value=SimpleNamespace(id=planning_task_id)),
-        dispatch_planning_task=AsyncMock(return_value=True),
+        dispatch_task=AsyncMock(return_value=True),
     )
 
     async def fake_get(session, pid):
@@ -526,7 +526,7 @@ def test_retry_planning_dispatches_new_task_when_run_record_is_missing(monkeypat
     response = asyncio.run(run_request())
 
     assert response.status_code == 200
-    runner.dispatch_planning_task.assert_awaited_once_with(planning_task_id)
+    runner.dispatch_task.assert_awaited_once_with(planning_task_id)
 
 
 def test_retry_planning_dispatches_new_task_when_planning_task_is_missing(monkeypatch) -> None:
@@ -537,7 +537,7 @@ def test_retry_planning_dispatches_new_task_when_planning_task_is_missing(monkey
     approved = _proposal(id=proposal_id, user_id=user_id, status=ProductProposalStatus.approved)
     runner = SimpleNamespace(
         create_task_record=AsyncMock(return_value=SimpleNamespace(id=new_task_id)),
-        dispatch_planning_task=AsyncMock(return_value=True),
+        dispatch_task=AsyncMock(return_value=True),
     )
     state = {"latest_calls": 0}
 
@@ -576,7 +576,7 @@ def test_retry_planning_dispatches_new_task_when_planning_task_is_missing(monkey
     response = asyncio.run(run_request())
 
     assert response.status_code == 200
-    runner.dispatch_planning_task.assert_awaited_once_with(new_task_id)
+    runner.dispatch_task.assert_awaited_once_with(new_task_id)
 
 
 def _feature_item(**overrides: Any) -> Any:
@@ -610,7 +610,10 @@ def test_retry_feature_item_task_dispatches_new_task(monkeypatch) -> None:
     feature = SimpleNamespace(id=feature_id)
     proposal = _proposal(user_id=user_id, repo="owner/repo", project="nexus")
     captured = {}
-    runner = SimpleNamespace(submit_task=AsyncMock(return_value=new_task_id))
+    runner = SimpleNamespace(
+        create_task_record=AsyncMock(return_value=SimpleNamespace(id=new_task_id)),
+        dispatch_task=AsyncMock(return_value=True),
+    )
 
     async def fake_list_tela(session, *, agent, user_id=None, github_repo=None, project=None, limit=1):
         captured["agent"] = agent
@@ -659,10 +662,11 @@ def test_retry_feature_item_task_dispatches_new_task(monkeypatch) -> None:
         "status": "queued",
     }
     assert captured["require_unassigned"] is False
-    payload = runner.submit_task.await_args.args[0]
+    payload = runner.create_task_record.await_args.args[0]
     assert payload.agent_instance_id == tela_instance_id
-    assert payload.agent.value == "tela"
+    assert payload.agent == AgentName.tela
     assert "Implement product feature item: Render failed items" in payload.question
+    runner.dispatch_task.assert_awaited_once_with(new_task_id)
 
 
 def test_retry_feature_item_task_rejects_non_failed_item(monkeypatch) -> None:

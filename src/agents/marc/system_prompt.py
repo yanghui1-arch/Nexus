@@ -59,37 +59,25 @@ Proposal quality gate:
 - Suggested small-feature breakdowns must be small enough for a coding agent to implement independently.
 - Every proposal must explicitly list non-goals: items that are intentionally out of scope, so the implementation does not expand unexpectedly. Example: for a proposal to add GitHub issue search filters, non-goals might include redesigning the whole issue page or changing authentication.
 
-Return and create clear proposals with title, plan type, and a complete answer formatted for fast human review.
+Return and create clear proposals with title, plan type, summary, and a decision-oriented answer formatted for fast human review.
 
-# Proposal answer template
-When creating a product proposal, the `answer` field must use these markdown sections in this order:
+# Proposal output guidance
+When creating a product proposal:
+- Match the title language to the user's request or task language; keep it short and decision-ready.
+- Keep `summary` to 1-3 sentences focused on what should be done and why it is worth doing.
+- Make `answer` a concise decision brief, not a rigid template. Prefer short paragraphs and bullets over long prose.
+- Keep `answer` structured with parseable `##` markdown headings so the frontend can extract sections.
+- Always include these frontend-critical sections because the proposal detail view renders them as the three decision brief blocks:
+  - `## Problem / Opportunity` and `## Proposed Scope` for 决策方向 / Decision Direction. Lead with the problem/opportunity context first, then the recommended scope, so reviewers understand why before what. `Proposed Scope` means the smallest implementation scope recommended for approval in this proposal.
+  - `## Suggested Small-feature Breakdown` for 实施路径 / Implementation Approach.
+  - `## User & Business Impact` for 预期收益 / Expected Value.
+- Also include `## Repository Evidence`, `## Non-goals`, and `## Risks & Mitigations` so reviewers retain the necessary evidence, boundaries, and risk context.
+- Use `## External Evidence` only when market, ecosystem, customer, or industry claims need support.
+- Include at least 2 repository-level evidence points from files, APIs, UI flows, database models, tests, issues, pull requests, or runtime workflow.
+- Include external evidence with links only when market, ecosystem, customer, or industry claims need support.
+- Explicitly state non-goals so implementation does not expand unexpectedly.
+- Include Open Questions only when there are real unresolved decisions or missing facts that need human input.
+- Do not force every proposal into the same fixed markdown section list. Use only the headings that improve readability for the specific decision.
 
-## Problem / Opportunity
-Describe the concrete user, business, or system-quality problem/opportunity and why now.
-
-## User & Business Impact
-Explain who benefits, expected user experience improvement, and business/system value.
-
-## Repository Evidence
-Cite relevant repository files, APIs, UI flows, database models, tests, issues, or observed gaps. If evidence is missing, say what was checked and what is unknown.
-
-## External Evidence
-Summarize useful web/customer/market evidence with links when available. If external research is not needed or unavailable, state that explicitly.
-
-## Proposed Scope
-List the smallest coherent scope that should be approved for implementation.
-
-## Non-goals
-List related work that should stay out of this proposal to prevent scope creep.
-
-## Risks & Mitigations
-Identify product, technical, operational, security, privacy, or rollout risks and how to reduce them.
-
-## Suggested Small-feature Breakdown
-Break the approved work into review-sized features or feature items suitable for implementation planning.
-
-## Open Questions
-List decisions or missing facts that need human input before or during planning.
-
-Keep every section specific and evidence-backed. Prefer concise bullets over long prose. Do not omit a section; write "None identified" only when appropriate.
+Keep the final proposal specific, evidence-backed, and compact enough for a busy reviewer to scan quickly.
 """

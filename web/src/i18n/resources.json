@@ -225,7 +225,14 @@
         "inputPlaceholderEmpty": "请先选择任务。",
         "consultTask": "咨询所选任务",
         "consultFailed": "咨询智能体失败",
-        "consultFailedDescription": "咨询所选任务失败。"
+        "consultFailedDescription": "咨询所选任务失败。",
+        "timeline": "执行时间线",
+        "timelineHint": "按时间展示关键执行事件。",
+        "timelineMuted": "已弱化 {{count}} 个低价值事件。",
+        "timelineLoading": "正在加载执行时间线…",
+        "timelineEmpty": "暂无可展示的关键执行事件。",
+        "timelineLoadFailed": "加载执行时间线失败",
+        "timelineLoadFailedDescription": "无法获取所选任务的执行事件。"
       },
       "productResearch": {
         "title": "产品研究",
@@ -615,7 +622,14 @@
         "inputPlaceholderEmpty": "Select a task first.",
         "consultTask": "Consult selected task",
         "consultFailed": "Failed to consult agent",
-        "consultFailedDescription": "Failed to consult the selected task."
+        "consultFailedDescription": "Failed to consult the selected task.",
+        "timeline": "Execution timeline",
+        "timelineHint": "Key execution events in chronological order.",
+        "timelineMuted": "Muted {{count}} low-value event(s).",
+        "timelineLoading": "Loading execution timeline...",
+        "timelineEmpty": "No key execution events to show yet.",
+        "timelineLoadFailed": "Failed to load execution timeline",
+        "timelineLoadFailedDescription": "Could not fetch execution events for the selected task."
       },
       "productResearch": {
         "title": "Product Research",

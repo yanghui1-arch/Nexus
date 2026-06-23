@@ -41,7 +41,6 @@ from src.server.postgres.models import (
     WorkspaceStatus,
 )
 
-
 def utc_now() -> datetime:
     """Return the current UTC timestamp."""
     return datetime.now(timezone.utc)
@@ -1175,6 +1174,33 @@ class TaskRepository:
         return task
 
     @staticmethod
+    async def create_execution_event(
+        session: AsyncSession,
+        *,
+        task_id: uuid.UUID,
+        event_type: Literal["START", "PROCESS", "SAVE_CHECKPOINT", "COMPLETED", "FAILED", "EXCEED_ATTEMPTS"],
+        agent: AgentName | None,
+        message: str | None = None,
+        safe_metadata: dict[str, object] | None = None,
+        tokens: int | None = None,
+        model: str | None = None,
+    ) -> TaskExecutionEventRecord:
+        """Create a structured task execution event."""
+        event = TaskExecutionEventRecord(
+            task_id=task_id,
+            event_type=event_type,
+            agent=agent,
+            message=message,
+            safe_metadata=safe_metadata,
+            tokens=tokens,
+            model=model,
+        )
+        session.add(event)
+        await session.commit()
+        await session.refresh(event)
+        return event
+
+    @staticmethod
     async def get_running_for_agent_instance(
         session: AsyncSession,
         agent_instance_id: uuid.UUID,
@@ -2025,6 +2051,26 @@ class AssistantEventRepository:
         query = query.order_by(
             AssistantEventRecord.created_at.desc(),
         ).limit(limit)
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+
+class TaskExecutionEventRepository:
+    @staticmethod
+    async def list_by_task(
+        session: AsyncSession,
+        task_id: uuid.UUID,
+        *,
+        limit: int | None = None,
+    ) -> list[TaskExecutionEventRecord]:
+        """List execution events for a task timeline."""
+        query = (
+            select(TaskExecutionEventRecord)
+            .where(TaskExecutionEventRecord.task_id == task_id)
+            .order_by(TaskExecutionEventRecord.created_at.asc(), TaskExecutionEventRecord.id.asc())
+        )
+        if limit is not None:
+            query = query.limit(limit)
         result = await session.execute(query)
         return list(result.scalars().all())
 

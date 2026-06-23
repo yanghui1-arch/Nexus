@@ -28,9 +28,14 @@ fake_celery_module = types.ModuleType("celery")
 fake_celery_module.Celery = _FakeCelery
 sys.modules.setdefault("celery", fake_celery_module)
 
-from src.server.postgres.models import AgentName, TaskCategory, TaskStatus
-from src.server.postgres.repositories import AgentInstanceRepository, TaskRepository, WorkspaceRepository
-from src.server.runner import AgentTaskRunner, TaskDispatchError
+from src.server.postgres.models import AgentName, FeatureItemStatus, TaskCategory, TaskStatus
+from src.server.postgres.repositories import (
+    AgentInstanceRepository,
+    FeatureItemRepository,
+    TaskRepository,
+    WorkspaceRepository,
+)
+from src.server.runner import AgentTaskRunner, TaskDispatchError, TaskSubmission
 
 
 class FakeDatabase:
@@ -89,14 +94,14 @@ def test_create_task_record_snapshots_workspace_repo_project(monkeypatch) -> Non
         settings=SimpleNamespace(),
         database=SimpleNamespace(),
     )
-    request = SimpleNamespace(
+    submission = TaskSubmission(
         agent_instance_id=agent_instance_id,
-        agent=SimpleNamespace(value="sophie"),
+        agent=AgentName.sophie,
         question="implement the change",
         external_issue_url="https://github.com/owner/repo/issues/1",
     )
 
-    task = asyncio.run(runner._create_task_record(object(), request))
+    task = asyncio.run(runner._create_task_record(object(), submission))
 
     assert task.id is not None
     assert captured["agent"] == AgentName.sophie
@@ -146,7 +151,7 @@ def test_create_task_record_uses_review_category_for_assistant(monkeypatch) -> N
     )
     request = SimpleNamespace(
         agent_instance_id=agent_instance_id,
-        agent=SimpleNamespace(value="assistant"),
+        agent=AgentName.assistant,
         question="review owner/repo#12",
         external_issue_url=None,
         external_pull_request_url="https://github.com/owner/repo/pull/12",
@@ -204,15 +209,15 @@ def test_create_task_record_requires_workspace_repo_and_project(
         settings=SimpleNamespace(),
         database=SimpleNamespace(),
     )
-    request = SimpleNamespace(
+    submission = TaskSubmission(
         agent_instance_id=agent_instance_id,
-        agent=SimpleNamespace(value=agent_name),
+        agent=AgentName(agent_name),
         question="implement the change",
         external_issue_url=None,
     )
 
     with pytest.raises(ValueError, match="workspace repo and project are required for task submission"):
-        asyncio.run(runner._create_task_record(object(), request))
+        asyncio.run(runner._create_task_record(object(), submission))
 
 
 def test_dispatch_or_fail_marks_task_failed_when_publish_raises(monkeypatch) -> None:
@@ -251,3 +256,35 @@ def test_dispatch_or_fail_marks_task_failed_when_publish_raises(monkeypatch) -> 
     runner._mark_dispatch_failed.assert_awaited_once()
     assert captured["task_id"] == task_id
     assert "broker unavailable" in captured["error"]
+
+
+def test_mark_dispatch_failed_syncs_coding_feature_item(monkeypatch) -> None:
+    """Verify dispatch failure marks linked feature items failed for coding tasks."""
+    task_id = uuid.uuid4()
+    task = SimpleNamespace(id=task_id, category=TaskCategory.coding, finished_at=object())
+    captured = {}
+
+    async def fake_set_failed(session, requested_task_id, *, error):
+        """Return the failed coding task."""
+        captured["task_failed"] = (requested_task_id, error)
+        return task
+
+    async def fake_set_status_by_task_id(session, requested_task_id, *, status, updated_at):
+        """Capture linked feature item failure state."""
+        captured["feature_item_failed"] = (requested_task_id, status, updated_at)
+        return []
+
+    monkeypatch.setattr(TaskRepository, "set_failed", fake_set_failed)
+    monkeypatch.setattr(FeatureItemRepository, "set_status_by_task_id", fake_set_status_by_task_id)
+
+    runner = AgentTaskRunner(
+        settings=SimpleNamespace(),
+        database=FakeDatabase(),
+    )
+
+    asyncio.run(runner._mark_dispatch_failed(task_id, error="Dispatch failed: broker unavailable"))
+
+    assert captured == {
+        "task_failed": (task_id, "Dispatch failed: broker unavailable"),
+        "feature_item_failed": (task_id, FeatureItemStatus.failed, task.finished_at),
+    }
