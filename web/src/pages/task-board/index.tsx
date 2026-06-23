@@ -22,6 +22,10 @@ export default function TaskBoardPage() {
     navigate(`/code-review/nexus/tasks/${taskId}`);
   };
 
+  const openTaskDetail = (taskId: string) => {
+    navigate(`/task/${taskId}`);
+  };
+
   return (
     <section className="space-y-4">
       <TaskBoardRepoSelect
@@ -39,6 +43,7 @@ export default function TaskBoardPage() {
               tasks={groupedTasks[status]}
               isLoading={isLoading}
               onOpenReview={openReview}
+              onOpenTaskDetail={openTaskDetail}
             />
           ))}
         </div>

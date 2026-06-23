@@ -11,6 +11,7 @@ type TaskBoardColumnProps = {
   tasks: WorkspaceTaskView[];
   isLoading: boolean;
   onOpenReview: (taskId: string) => void;
+  onOpenTaskDetail: (taskId: string) => void;
 };
 
 export function TaskBoardColumn({
@@ -18,6 +19,7 @@ export function TaskBoardColumn({
   tasks,
   isLoading,
   onOpenReview,
+  onOpenTaskDetail,
 }: TaskBoardColumnProps) {
   const { t } = useTranslation();
   const statusMeta = STATUS_META[status];
@@ -56,6 +58,7 @@ export function TaskBoardColumn({
                   key={task.id}
                   task={task}
                   onOpenReview={onOpenReview}
+                  onOpenTaskDetail={onOpenTaskDetail}
                 />
               ))}
             </div>
