@@ -182,6 +182,7 @@ def test_list_tasks_returns_newest_first(monkeypatch: pytest.MonkeyPatch) -> Non
         'updated_at',
         'started_at',
         'finished_at',
+        'recovery',
     }
 
 
@@ -358,6 +359,7 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
             'updated_at': expected_task.updated_at.isoformat().replace('+00:00', 'Z'),
             'started_at': expected_task.started_at.isoformat().replace('+00:00', 'Z'),
             'finished_at': None,
+            'recovery': None,
         }
     ]
     assert captured == {
@@ -1015,3 +1017,103 @@ def test_retry_task_from_checkpoint_returns_dispatch_failure(monkeypatch: pytest
     assert response.status_code == 503
     assert response.json()["detail"] == "Dispatch failed: broker"
     runner.dispatch_task.assert_awaited_once_with(task.id)
+
+
+def test_get_task_includes_recovery_for_failed_checkpointed_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify task detail includes recovery guidance for failed checkpointed tasks."""
+    now = datetime.now(timezone.utc)
+    task = _make_task(
+        question="recover failed task",
+        status=TaskStatus.failed,
+        created_at=now,
+        checkpoint=[{"role": "assistant", "content": "progress"}],
+        error="Tool timeout",
+    )
+
+    async def fake_get_for_user(session, task_id, **kwargs):
+        """Provide a fake owned task."""
+        assert task_id == task.id
+        return task
+
+    monkeypatch.setattr(TaskRepository, "get_for_user", fake_get_for_user)
+    monkeypatch.setattr(WorkspaceRepository, "get_by_agent_instance_id", AsyncMock(return_value=None))
+
+    async def run_request() -> httpx.Response:
+        """Run the request test body."""
+        transport = httpx.ASGITransport(app=_build_app())
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.get(f"/v1/tasks/{task.id}")
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 200
+    recovery = response.json()["recovery"]
+    assert recovery["visible"] is True
+    assert recovery["has_checkpoint"] is True
+    assert recovery["failure_summary"] == "Tool timeout"
+    assert recovery["can_retry_from_checkpoint"] is False
+    assert recovery["duplicate_side_effects_confirmation_required"] is True
+
+
+def test_retry_task_requires_confirmation_and_submits_fresh_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify generic retry task confirmation and fresh task submission."""
+    now = datetime.now(timezone.utc)
+    task = _make_task(
+        question="retry me",
+        status=TaskStatus.failed,
+        created_at=now,
+        checkpoint=[{"role": "assistant", "content": "progress"}],
+        error="failed",
+    )
+    retried_task = _make_task(question=task.question, status=TaskStatus.queued, created_at=now)
+    retried_task.id = uuid.uuid4()
+    retried_task.agent_instance_id = task.agent_instance_id
+    captured: dict[str, Any] = {}
+
+    async def fake_get_for_user(session, task_id, **kwargs):
+        """Provide a fake owned task."""
+        assert task_id == task.id
+        return task
+
+    async def fake_create_task_record(submission, **kwargs):
+        """Capture retry task creation."""
+        captured["submission"] = submission
+        captured["create_session"] = kwargs["session"]
+        return retried_task
+
+    async def fake_dispatch_task(task_id):
+        """Capture retry dispatch."""
+        captured["dispatch_task_id"] = task_id
+        return True
+
+    runner = SimpleNamespace(
+        create_task_record=AsyncMock(side_effect=fake_create_task_record),
+        dispatch_task=AsyncMock(side_effect=fake_dispatch_task),
+    )
+    session_obj = SimpleNamespace(commit=AsyncMock(), refresh=AsyncMock())
+    monkeypatch.setattr(TaskRepository, "get_for_user", fake_get_for_user)
+
+    async def run_request(payload: dict[str, Any]) -> httpx.Response:
+        """Run the request test body."""
+        transport = httpx.ASGITransport(app=_build_app(session_obj=session_obj, runner_obj=runner))
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post(f"/v1/tasks/{task.id}/retry", json=payload)
+
+    checkpoint_retry = asyncio.run(run_request({"from_checkpoint": True, "confirm_duplicate_side_effects": True}))
+    rejected = asyncio.run(run_request({}))
+    accepted = asyncio.run(run_request({"confirm_duplicate_side_effects": True}))
+
+    assert checkpoint_retry.status_code == 409
+    assert checkpoint_retry.json()["detail"] == "Retry from checkpoint is not supported"
+    assert rejected.status_code == 409
+    assert accepted.status_code == 202
+    assert accepted.json()["task_id"] == str(retried_task.id)
+    submission = captured["submission"]
+    assert submission.question == task.question
+    assert not hasattr(submission, "checkpoint")
+    assert captured["create_session"] is session_obj
+    assert retried_task.checkpoint is None
+    assert captured["dispatch_task_id"] == retried_task.id
+    session_obj.commit.assert_awaited_once()
+    session_obj.refresh.assert_awaited_once_with(retried_task)
+
