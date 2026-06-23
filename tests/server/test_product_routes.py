@@ -660,6 +660,7 @@ def test_retry_feature_item_task_dispatches_new_task(monkeypatch) -> None:
         "agent_instance_id": str(tela_instance_id),
         "category": "coding",
         "status": "queued",
+        "source_task_id": None,
     }
     assert captured["require_unassigned"] is False
     payload = runner.create_task_record.await_args.args[0]
