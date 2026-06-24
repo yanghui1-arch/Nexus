@@ -26,6 +26,7 @@ from src.server.postgres.repositories import (
     WorkspaceRepository,
 )
 from src.server.runner import AgentTaskRunner, TaskDispatchError, TaskSubmission
+from src.server.services.task_recovery import assess_task_recovery
 from src.server.schemas import (
     TaskConsultRequest,
     TaskConsultResponse,
@@ -33,6 +34,7 @@ from src.server.schemas import (
     TaskExecutionEventResponse,
     TaskExecutionStatsResponse,
     TaskMessage,
+    TaskRecoveryAssessmentResponse,
     TaskResponse,
     TaskStatusUpdateRequest,
     TaskSubmitResponse,
@@ -57,6 +59,7 @@ def _resolved_task_repo_project(task, workspace) -> tuple[str | None, str | None
     repo = task.repo or (workspace.github_repo if workspace is not None else None)
     project = task.project if task.project is not None else (workspace.project if workspace is not None else None)
     return repo, project
+
 
 
 @router.post("", response_model=TaskSubmitResponse, status_code=202)
@@ -165,6 +168,35 @@ async def list_task_messages(
         )
         for event in events
     ]
+
+
+@router.get("/{task_id}/recovery-assessment", response_model=TaskRecoveryAssessmentResponse)
+async def get_task_recovery_assessment(
+    request: Request,
+    task_id: uuid.UUID,
+    user: UserRecord = Depends(get_current_user),
+) -> TaskRecoveryAssessmentResponse:
+    """Return recovery readiness metadata for a task without checkpoint contents."""
+    database: Database = request.app.state.database
+    async with database.session() as session:
+        task = await TaskRepository.get_for_user(session, task_id, user_id=user.id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        instance = await AgentInstanceRepository.get(session, task.agent_instance_id)
+        workspace = await WorkspaceRepository.get_by_agent_instance_id(session, task.agent_instance_id)
+        events = await TaskExecutionEventRepository.list_by_task(session, task_id, limit=5)
+        running_conflict = await TaskRepository.get_running_for_agent_instance(
+            session,
+            task.agent_instance_id,
+            exclude_task_id=task.id,
+        )
+    return assess_task_recovery(
+        task=task,
+        events=events,
+        agent_instance=instance,
+        workspace=workspace,
+        running_conflict=running_conflict,
+    )
 
 
 @router.get("/{task_id}/stats", response_model=TaskExecutionStatsResponse)

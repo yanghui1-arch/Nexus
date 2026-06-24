@@ -1015,3 +1015,100 @@ def test_retry_task_from_checkpoint_returns_dispatch_failure(monkeypatch: pytest
     assert response.status_code == 503
     assert response.json()["detail"] == "Dispatch failed: broker"
     runner.dispatch_task.assert_awaited_once_with(task.id)
+
+
+def test_task_recovery_assessment_reports_recoverable_checkpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify recovery assessment exposes metadata without checkpoint contents."""
+    now = datetime.now(timezone.utc)
+    task = _make_task(
+        question='resume this task',
+        status=TaskStatus.failed,
+        created_at=now - timedelta(minutes=20),
+        checkpoint=[{'role': 'user', 'content': 'secret checkpoint text'}],
+        error='worker crashed',
+    )
+    event = SimpleNamespace(
+        id=uuid.uuid4(),
+        task_id=task.id,
+        event_type='FAILED',
+        agent=task.agent,
+        message='worker crashed near checkpoint',
+        safe_metadata={'phase': 'tool'},
+        tokens=None,
+        model='gpt-test',
+        created_at=now - timedelta(minutes=1),
+    )
+
+    async def fake_get_for_user(session, task_id, **kwargs):
+        assert task_id == task.id
+        return task
+
+    monkeypatch.setattr(TaskRepository, 'get_for_user', fake_get_for_user)
+    monkeypatch.setattr(AgentInstanceRepository, 'get', AsyncMock(return_value=SimpleNamespace(is_active=True)))
+    monkeypatch.setattr(WorkspaceRepository, 'get_by_agent_instance_id', AsyncMock(return_value=None))
+    monkeypatch.setattr(TaskExecutionEventRepository, 'list_by_task', AsyncMock(return_value=[event]))
+    monkeypatch.setattr(TaskRepository, 'get_running_for_agent_instance', AsyncMock(return_value=None))
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app())
+        async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
+            return await client.get(f'/v1/tasks/{task.id}/recovery-assessment')
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['recoverable'] is True
+    assert payload['checkpoint_exists'] is True
+    assert payload['checkpoint_message_count'] == 1
+    assert payload['checkpoint_updated_at'] == task.updated_at.isoformat().replace('+00:00', 'Z')
+    assert payload['unrecoverable_reasons'] == []
+    assert payload['recommended_actions'] == ['Resume the task from the latest checkpoint']
+    assert payload['recent_events'][0]['message'] == event.message
+    assert 'secret checkpoint text' not in response.text
+
+
+def test_task_recovery_assessment_reports_blockers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify recovery assessment reports unavailable resources and conflicts."""
+    now = datetime.now(timezone.utc)
+    task = _make_task(
+        question='blocked task',
+        status=TaskStatus.queued,
+        created_at=now,
+        repo='',
+        project=None,
+        checkpoint=None,
+    )
+    conflict = _make_task(question='already running', status=TaskStatus.running, created_at=now)
+
+    async def fake_get_for_user(session, task_id, **kwargs):
+        assert task_id == task.id
+        return task
+
+    monkeypatch.setattr(TaskRepository, 'get_for_user', fake_get_for_user)
+    monkeypatch.setattr(AgentInstanceRepository, 'get', AsyncMock(return_value=SimpleNamespace(is_active=False)))
+    monkeypatch.setattr(WorkspaceRepository, 'get_by_agent_instance_id', AsyncMock(return_value=None))
+    monkeypatch.setattr(TaskExecutionEventRepository, 'list_by_task', AsyncMock(return_value=[]))
+    monkeypatch.setattr(TaskRepository, 'get_running_for_agent_instance', AsyncMock(return_value=conflict))
+
+    async def run_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=_build_app())
+        async with httpx.AsyncClient(transport=transport, base_url='http://testserver') as client:
+            return await client.get(f'/v1/tasks/{task.id}/recovery-assessment')
+
+    response = asyncio.run(run_request())
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['recoverable'] is False
+    assert payload['checkpoint_exists'] is False
+    assert payload['checkpoint_message_count'] == 0
+    assert payload['checkpoint_updated_at'] is None
+    assert payload['running_task_conflict'] is True
+    assert payload['conflicting_task_id'] == str(conflict.id)
+    assert 'No checkpoint is available for replay' in payload['unrecoverable_reasons']
+    assert 'Agent instance is inactive or unavailable' in payload['unrecoverable_reasons']
+    assert 'Repository context is unavailable' in payload['unrecoverable_reasons']
+    assert 'Agent instance already has another running task' in payload['unrecoverable_reasons']
+    assert 'Project context is unavailable' in payload['risk_summary']
+
