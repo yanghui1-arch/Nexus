@@ -26,6 +26,7 @@ from src.server.postgres.repositories import (
     WorkspaceRepository,
 )
 from src.server.runner import AgentTaskRunner, TaskDispatchError, TaskSubmission
+from src.server.services.task_recovery import assess_task_recovery
 from src.server.schemas import (
     TaskConsultRequest,
     TaskConsultResponse,
@@ -59,73 +60,6 @@ def _resolved_task_repo_project(task, workspace) -> tuple[str | None, str | None
     project = task.project if task.project is not None else (workspace.project if workspace is not None else None)
     return repo, project
 
-
-def _build_recovery_assessment(
-    *,
-    task,
-    events,
-    agent_instance,
-    workspace,
-    running_conflict,
-) -> TaskRecoveryAssessmentResponse:
-    checkpoint_count = len(task.checkpoint) if isinstance(task.checkpoint, list) else 0
-    checkpoint_exists = checkpoint_count > 0
-    repo, project = _resolved_task_repo_project(task, workspace)
-    agent_available = agent_instance is not None and bool(agent_instance.is_active)
-    repo_available = bool(repo)
-    project_available = bool(project)
-    terminal_without_failure = {TaskStatus.waiting_for_review, TaskStatus.merged, TaskStatus.closed}
-
-    reasons: list[str] = []
-    risks: list[str] = []
-    actions: list[str] = []
-    if task.status in terminal_without_failure:
-        reasons.append(f"Task status {task.status.value} does not require recovery")
-    if not checkpoint_exists:
-        reasons.append("No checkpoint is available for replay")
-    if not agent_available:
-        reasons.append("Agent instance is inactive or unavailable")
-    if not repo_available:
-        reasons.append("Repository context is unavailable")
-    if running_conflict is not None:
-        reasons.append("Agent instance already has another running task")
-    if task.error:
-        risks.append("Previous failure may recur: " + task.error[:240])
-    if events:
-        latest = max(events, key=lambda event: event.created_at)
-        if latest.message:
-            risks.append("Latest event: " + latest.message[:240])
-    if not project_available:
-        risks.append("Project context is unavailable")
-
-    recoverable = not reasons
-    if recoverable:
-        actions.append("Resume the task from the latest checkpoint")
-    else:
-        actions.append("Start a new task after resolving unrecoverable reasons")
-    if running_conflict is not None:
-        actions.append("Wait for the conflicting running task to finish")
-    if not agent_available:
-        actions.append("Reactivate or replace the agent instance")
-    if not repo_available:
-        actions.append("Set a repository on the task or workspace")
-
-    return TaskRecoveryAssessmentResponse(
-        task_id=task.id,
-        recoverable=recoverable,
-        unrecoverable_reasons=reasons,
-        recommended_actions=actions,
-        risk_summary=risks,
-        checkpoint_exists=checkpoint_exists,
-        checkpoint_updated_at=task.updated_at if checkpoint_exists else None,
-        checkpoint_message_count=checkpoint_count,
-        recent_events=[TaskExecutionEventResponse.from_record(event) for event in events],
-        agent_instance_available=agent_available,
-        repo_available=repo_available,
-        project_available=project_available,
-        running_task_conflict=running_conflict is not None,
-        conflicting_task_id=running_conflict.id if running_conflict is not None else None,
-    )
 
 
 @router.post("", response_model=TaskSubmitResponse, status_code=202)
@@ -256,7 +190,7 @@ async def get_task_recovery_assessment(
             task.agent_instance_id,
             exclude_task_id=task.id,
         )
-    return _build_recovery_assessment(
+    return assess_task_recovery(
         task=task,
         events=events,
         agent_instance=instance,
