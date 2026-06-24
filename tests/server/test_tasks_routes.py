@@ -1049,7 +1049,6 @@ def test_get_task_includes_recovery_for_failed_checkpointed_task(monkeypatch: py
     assert recovery["visible"] is True
     assert recovery["has_checkpoint"] is True
     assert recovery["failure_summary"] == "Tool timeout"
-    assert recovery["can_retry_from_checkpoint"] is False
     assert recovery["duplicate_side_effects_confirmation_required"] is True
 
 

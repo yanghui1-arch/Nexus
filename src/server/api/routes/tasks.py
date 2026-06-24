@@ -222,8 +222,6 @@ async def retry_task(
             raise HTTPException(status_code=409, detail="Task is not eligible for recovery")
         if recovery.duplicate_side_effects_confirmation_required and not payload.confirm_duplicate_side_effects:
             raise HTTPException(status_code=409, detail="Retry requires duplicate side effects confirmation")
-        if not recovery.can_retry_as_new_task:
-            raise HTTPException(status_code=409, detail="Task cannot be retried as a new task")
 
     try:
         async with database.session() as session:

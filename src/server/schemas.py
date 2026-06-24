@@ -294,29 +294,20 @@ class TaskRetryRequest(BaseModel):
 class TaskRecoveryResponse(BaseModel):
     visible: bool
     has_checkpoint: bool
-    checkpoint_summary: str | None
     failure_summary: str | None
     recommended_action: str
     unrecoverable_reasons: list[str] = Field(default_factory=list)
     risk_warnings: list[str] = Field(default_factory=list)
     duplicate_side_effects_confirmation_required: bool
-    can_retry_from_checkpoint: bool
-    can_retry_as_new_task: bool
 
 
     @classmethod
     def from_task(cls, task: TaskRecord) -> "TaskRecoveryResponse" | None:
-        has_checkpoint = bool(task.checkpoint)
         stale_running = _task_is_stale_running(task)
-        visible = task.status == TaskStatus.failed or stale_running or has_checkpoint
+        visible = task.status == TaskStatus.failed or stale_running
         if not visible:
             return None
 
-        unrecoverable_reasons: list[str] = []
-        if task.status not in {TaskStatus.failed, TaskStatus.running} and not has_checkpoint:
-            unrecoverable_reasons.append("Task is not failed, stale running, or checkpointed.")
-        can_retry_from_checkpoint = False
-        can_retry_as_new_task = task.status in {TaskStatus.failed, TaskStatus.running}
         risk_warnings = [
             "Retrying may repeat external side effects such as GitHub comments, commits, branches, or pull requests."
         ]
@@ -327,15 +318,11 @@ class TaskRecoveryResponse(BaseModel):
             recommended_action = "Task appears stale; retry as a new task if it is no longer making progress."
         return cls(
             visible=True,
-            has_checkpoint=has_checkpoint,
-            checkpoint_summary=_checkpoint_summary(task),
+            has_checkpoint=bool(task.checkpoint),
             failure_summary=task.error,
             recommended_action=recommended_action,
-            unrecoverable_reasons=unrecoverable_reasons,
             risk_warnings=risk_warnings,
             duplicate_side_effects_confirmation_required=bool(risk_warnings),
-            can_retry_from_checkpoint=can_retry_from_checkpoint,
-            can_retry_as_new_task=can_retry_as_new_task,
         )
 
 class FeatureItemRetryTaskResponse(BaseModel):
@@ -430,20 +417,13 @@ class TaskDetailResponse(TaskResponse):
 
 
 def _task_is_stale_running(task: TaskRecord) -> bool:
+    """Return true for running tasks that look stuck and safe to surface for retry."""
     if task.status != TaskStatus.running:
         return False
     updated_at = task.updated_at
     if updated_at.tzinfo is None:
         updated_at = updated_at.replace(tzinfo=timezone.utc)
     return datetime.now(timezone.utc) - updated_at > timedelta(minutes=30)
-
-
-def _checkpoint_summary(task: TaskRecord) -> str | None:
-    checkpoint = task.checkpoint or []
-    if not checkpoint:
-        return None
-    noun = "message" if len(checkpoint) == 1 else "messages"
-    return f"{len(checkpoint)} checkpoint {noun} saved at {task.updated_at.isoformat()}"
 
 
 class TaskExecutionEventResponse(BaseModel):

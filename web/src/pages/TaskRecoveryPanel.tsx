@@ -52,14 +52,14 @@ export function TaskRecoveryPanel({ task, onRetried }: RecoveryPanelProps) {
       <CardContent className="space-y-4 text-sm">
         <div className="grid gap-3 md:grid-cols-2">
           <Block title={t('taskDetail.recovery.failureSummary')}>{recovery.failure_summary || '-'}</Block>
-          <Block title={t('taskDetail.recovery.checkpointSummary')}>{recovery.checkpoint_summary || '-'}</Block>
+          <Block title={t('taskDetail.recovery.checkpointStatus')}>{recovery.has_checkpoint ? t('taskDetail.recovery.checkpointAvailable') : t('taskDetail.recovery.checkpointUnavailable')}</Block>
         </div>
         <Block title={t('taskDetail.recovery.recommendedAction')}>{recovery.recommended_action}</Block>
         <List title={t('taskDetail.recovery.unrecoverableReasons')} items={recovery.unrecoverable_reasons} />
         <List title={t('taskDetail.recovery.riskWarnings')} items={recovery.risk_warnings} />
         {retryError ? <p className="text-sm text-destructive">{retryError}</p> : null}
         <div className="flex flex-wrap gap-2">
-          <Button type="button" onClick={startRetry} disabled={!recovery.can_retry_as_new_task || isRetrying}>
+          <Button type="button" onClick={startRetry} disabled={isRetrying}>
             <RotateCcw className="size-4" />{t('taskDetail.recovery.retryAsNewTask')}
           </Button>
         </div>
