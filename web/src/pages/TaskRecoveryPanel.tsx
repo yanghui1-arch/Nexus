@@ -3,13 +3,13 @@ import { useTranslation } from 'react-i18next';
 import { RotateCcw, ShieldAlert } from 'lucide-react';
 import { getErrorDetail } from '@/api/client';
 import { retryTask } from '@/api/tasks';
-import type { ApiTask } from '@/api/types';
+import type { ApiTaskDetail } from '@/api/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 type RecoveryPanelProps = {
-  task: ApiTask;
+  task: ApiTaskDetail;
   onRetried: () => Promise<void>;
 };
 

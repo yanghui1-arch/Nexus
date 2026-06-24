@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { AlertCircle, GitBranch } from 'lucide-react';
 import { ApiError, getErrorDetail } from '@/api/client';
 import { getTask, getTaskEvents } from '@/api/tasks';
-import type { ApiTask, ApiTaskExecutionEvent } from '@/api/types';
+import type { ApiTaskDetail, ApiTaskExecutionEvent } from '@/api/types';
 import { useAppLayout } from '@/components/layout/AppLayout';
 import { Badge } from '@/components/ui/badge';
 import { STATUS_META } from '@/lib/workspace-task-view';
@@ -92,7 +92,7 @@ export default function TaskDetailPage() {
   const { t } = useTranslation();
   const legacyTask = useMemo(() => (taskId ? getTaskById(taskId) : undefined), [taskId]);
 
-  const [task, setTask] = useState<ApiTask | null>(null);
+  const [task, setTask] = useState<ApiTaskDetail | null>(null);
   const [useLegacyFallback, setUseLegacyFallback] = useState(
     Boolean(taskId && legacyTask && !isUuidLike(taskId)),
   );

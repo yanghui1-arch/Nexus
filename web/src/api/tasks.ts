@@ -5,6 +5,7 @@ import type {
   ApiTaskConsultResponse,
   ApiTaskCreateRequest,
   ApiTaskRetryRequest,
+  ApiTaskDetail,
   ApiTaskExecutionEvent,
   ApiTaskCategory,
   ApiTaskStatus,
@@ -24,8 +25,8 @@ export function listTasks(params: ListTasksParams = {}): Promise<ApiTask[]> {
   return apiRequest<ApiTask[]>(buildApiPath('/v1/tasks', params));
 }
 
-export function getTask(taskId: string): Promise<ApiTask> {
-  return apiRequest<ApiTask>(`/v1/tasks/${taskId}`);
+export function getTask(taskId: string): Promise<ApiTaskDetail> {
+  return apiRequest<ApiTaskDetail>(`/v1/tasks/${taskId}`);
 }
 
 export function createTask(

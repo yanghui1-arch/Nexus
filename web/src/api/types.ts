@@ -72,6 +72,9 @@ export interface ApiTask {
   updated_at: string;
   started_at: string | null;
   finished_at: string | null;
+}
+
+export interface ApiTaskDetail extends ApiTask {
   recovery: ApiTaskRecovery | null;
 }
 
