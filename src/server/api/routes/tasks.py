@@ -30,6 +30,7 @@ from src.server.schemas import (
     TaskConsultRequest,
     TaskConsultResponse,
     TaskCreateRequest,
+    TaskDetailResponse,
     TaskExecutionEventResponse,
     TaskExecutionStatsResponse,
     TaskMessage,
@@ -185,12 +186,12 @@ async def get_task_stats(
     return TaskExecutionStatsResponse.from_events(events, task=task)
 
 
-@router.get("/{task_id}", response_model=TaskResponse)
+@router.get("/{task_id}", response_model=TaskDetailResponse)
 async def get_task(
     request: Request,
     task_id: uuid.UUID,
     user: UserRecord = Depends(get_current_user),
-) -> TaskResponse:
+) -> TaskDetailResponse:
     """Return one task owned by the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
@@ -199,7 +200,7 @@ async def get_task(
             raise HTTPException(status_code=404, detail="Task not found")
         workspace = await WorkspaceRepository.get_by_agent_instance_id(session, task.agent_instance_id)
     repo, project = _resolved_task_repo_project(task, workspace)
-    return TaskResponse.from_record(task, repo=repo, project=project)
+    return TaskDetailResponse.from_record(task, repo=repo, project=project)
 
 
 @router.post("/{task_id}/retry", response_model=TaskSubmitResponse, status_code=202)

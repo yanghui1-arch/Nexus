@@ -381,7 +381,6 @@ class TaskResponse(BaseModel):
     updated_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
-    recovery: TaskRecoveryResponse | None = None
 
     @classmethod
     def from_record(
@@ -413,8 +412,22 @@ class TaskResponse(BaseModel):
             updated_at=task.updated_at,
             started_at=task.started_at,
             finished_at=task.finished_at,
-            recovery=TaskRecoveryResponse.from_task(task),
         )
+
+
+class TaskDetailResponse(TaskResponse):
+    recovery: TaskRecoveryResponse | None = None
+
+    @classmethod
+    def from_record(
+        cls,
+        task: TaskRecord,
+        *,
+        repo: str | None | object = ...,
+        project: str | None | object = ...,
+    ) -> "TaskDetailResponse":
+        response = TaskResponse.from_record(task, repo=repo, project=project)
+        return cls(**response.model_dump(), recovery=TaskRecoveryResponse.from_task(task))
 
 
 def _task_is_stale_running(task: TaskRecord) -> bool:

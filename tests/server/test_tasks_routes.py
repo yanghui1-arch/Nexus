@@ -182,7 +182,6 @@ def test_list_tasks_returns_newest_first(monkeypatch: pytest.MonkeyPatch) -> Non
         'updated_at',
         'started_at',
         'finished_at',
-        'recovery',
     }
 
 
@@ -359,7 +358,6 @@ def test_list_tasks_passes_filters_to_repository(monkeypatch: pytest.MonkeyPatch
             'updated_at': expected_task.updated_at.isoformat().replace('+00:00', 'Z'),
             'started_at': expected_task.started_at.isoformat().replace('+00:00', 'Z'),
             'finished_at': None,
-            'recovery': None,
         }
     ]
     assert captured == {
