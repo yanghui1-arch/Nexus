@@ -288,7 +288,6 @@ class TaskSubmitResponse(BaseModel):
 
 
 class TaskRetryRequest(BaseModel):
-    from_checkpoint: bool = False
     confirm_duplicate_side_effects: bool = False
 
 

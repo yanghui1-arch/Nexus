@@ -26,7 +26,6 @@ export interface ApiTaskRecovery {
 }
 
 export interface ApiTaskRetryRequest {
-  from_checkpoint: boolean;
   confirm_duplicate_side_effects: boolean;
 }
 

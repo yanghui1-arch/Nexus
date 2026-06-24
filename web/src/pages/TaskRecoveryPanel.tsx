@@ -32,7 +32,6 @@ export function TaskRecoveryPanel({ task, onRetried }: RecoveryPanelProps) {
     setRetryError(null);
     try {
       await retryTask(task.id, {
-        from_checkpoint: false,
         confirm_duplicate_side_effects: recovery.duplicate_side_effects_confirmation_required,
       });
       setIsConfirming(false);

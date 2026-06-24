@@ -1097,12 +1097,9 @@ def test_retry_task_requires_confirmation_and_submits_fresh_task(monkeypatch: py
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
             return await client.post(f"/v1/tasks/{task.id}/retry", json=payload)
 
-    checkpoint_retry = asyncio.run(run_request({"from_checkpoint": True, "confirm_duplicate_side_effects": True}))
     rejected = asyncio.run(run_request({}))
     accepted = asyncio.run(run_request({"confirm_duplicate_side_effects": True}))
 
-    assert checkpoint_retry.status_code == 409
-    assert checkpoint_retry.json()["detail"] == "Retry from checkpoint is not supported"
     assert rejected.status_code == 409
     assert accepted.status_code == 202
     assert accepted.json()["task_id"] == str(retried_task.id)
