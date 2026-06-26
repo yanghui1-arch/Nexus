@@ -1110,4 +1110,3 @@ def test_retry_task_requires_confirmation_and_submits_fresh_task(monkeypatch: py
     assert captured["dispatch_task_id"] == retried_task.id
     session_obj.commit.assert_awaited_once()
     session_obj.refresh.assert_awaited_once_with(retried_task)
-
