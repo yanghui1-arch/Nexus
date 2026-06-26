@@ -4,6 +4,8 @@ import type {
   ApiTaskConsultRequest,
   ApiTaskConsultResponse,
   ApiTaskCreateRequest,
+  ApiTaskRetryRequest,
+  ApiTaskDetail,
   ApiTaskExecutionEvent,
   ApiTaskCategory,
   ApiTaskStatus,
@@ -23,8 +25,8 @@ export function listTasks(params: ListTasksParams = {}): Promise<ApiTask[]> {
   return apiRequest<ApiTask[]>(buildApiPath('/v1/tasks', params));
 }
 
-export function getTask(taskId: string): Promise<ApiTask> {
-  return apiRequest<ApiTask>(`/v1/tasks/${taskId}`);
+export function getTask(taskId: string): Promise<ApiTaskDetail> {
+  return apiRequest<ApiTaskDetail>(`/v1/tasks/${taskId}`);
 }
 
 export function createTask(
@@ -41,6 +43,16 @@ export function consultTask(
   payload: ApiTaskConsultRequest,
 ): Promise<ApiTaskConsultResponse> {
   return apiRequest<ApiTaskConsultResponse>(`/v1/tasks/${taskId}/consult`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function retryTask(
+  taskId: string,
+  payload: ApiTaskRetryRequest,
+): Promise<ApiTaskSubmitResponse> {
+  return apiRequest<ApiTaskSubmitResponse>(`/v1/tasks/${taskId}/retry`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });

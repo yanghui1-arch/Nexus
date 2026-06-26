@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
 from typing import Any, Protocol
@@ -287,6 +287,44 @@ class TaskSubmitResponse(BaseModel):
     status: TaskStatus
 
 
+class TaskRetryRequest(BaseModel):
+    confirm_duplicate_side_effects: bool = False
+
+
+class TaskRecoveryResponse(BaseModel):
+    visible: bool
+    has_checkpoint: bool
+    failure_summary: str | None
+    recommended_action: str
+    unrecoverable_reasons: list[str] = Field(default_factory=list)
+    risk_warnings: list[str] = Field(default_factory=list)
+    duplicate_side_effects_confirmation_required: bool
+
+
+    @classmethod
+    def from_task(cls, task: TaskRecord) -> "TaskRecoveryResponse" | None:
+        stale_running = _task_is_stale_running(task)
+        visible = task.status == TaskStatus.failed or stale_running
+        if not visible:
+            return None
+
+        risk_warnings = [
+            "Retrying may repeat external side effects such as GitHub comments, commits, branches, or pull requests."
+        ]
+        if task.external_pull_request_url:
+            risk_warnings.append("This task is already linked to a pull request; verify the retry should touch the same PR.")
+        recommended_action = "Retry as a new task after reviewing the failure."
+        if stale_running:
+            recommended_action = "Task appears stale; retry as a new task if it is no longer making progress."
+        return cls(
+            visible=True,
+            has_checkpoint=bool(task.checkpoint),
+            failure_summary=task.error,
+            recommended_action=recommended_action,
+            risk_warnings=risk_warnings,
+            duplicate_side_effects_confirmation_required=bool(risk_warnings),
+        )
+
 class FeatureItemRetryTaskResponse(BaseModel):
     feature_item: FeatureItemResponse
     task: TaskSubmitResponse
@@ -361,6 +399,31 @@ class TaskResponse(BaseModel):
             started_at=task.started_at,
             finished_at=task.finished_at,
         )
+
+
+class TaskDetailResponse(TaskResponse):
+    recovery: TaskRecoveryResponse | None = None
+
+    @classmethod
+    def from_record(
+        cls,
+        task: TaskRecord,
+        *,
+        repo: str | None | object = ...,
+        project: str | None | object = ...,
+    ) -> "TaskDetailResponse":
+        response = TaskResponse.from_record(task, repo=repo, project=project)
+        return cls(**response.model_dump(), recovery=TaskRecoveryResponse.from_task(task))
+
+
+def _task_is_stale_running(task: TaskRecord) -> bool:
+    """Return true for running tasks that look stuck and safe to surface for retry."""
+    if task.status != TaskStatus.running:
+        return False
+    updated_at = task.updated_at
+    if updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - updated_at > timedelta(minutes=30)
 
 
 class TaskExecutionEventResponse(BaseModel):

@@ -30,10 +30,13 @@ from src.server.schemas import (
     TaskConsultRequest,
     TaskConsultResponse,
     TaskCreateRequest,
+    TaskDetailResponse,
     TaskExecutionEventResponse,
     TaskExecutionStatsResponse,
     TaskMessage,
+    TaskRecoveryResponse,
     TaskResponse,
+    TaskRetryRequest,
     TaskStatusUpdateRequest,
     TaskSubmitResponse,
     TaskWorkItemResponse,
@@ -183,12 +186,12 @@ async def get_task_stats(
     return TaskExecutionStatsResponse.from_events(events, task=task)
 
 
-@router.get("/{task_id}", response_model=TaskResponse)
+@router.get("/{task_id}", response_model=TaskDetailResponse)
 async def get_task(
     request: Request,
     task_id: uuid.UUID,
     user: UserRecord = Depends(get_current_user),
-) -> TaskResponse:
+) -> TaskDetailResponse:
     """Return one task owned by the current user."""
     database: Database = request.app.state.database
     async with database.session() as session:
@@ -197,7 +200,56 @@ async def get_task(
             raise HTTPException(status_code=404, detail="Task not found")
         workspace = await WorkspaceRepository.get_by_agent_instance_id(session, task.agent_instance_id)
     repo, project = _resolved_task_repo_project(task, workspace)
-    return TaskResponse.from_record(task, repo=repo, project=project)
+    return TaskDetailResponse.from_record(task, repo=repo, project=project)
+
+
+@router.post("/{task_id}/retry", response_model=TaskSubmitResponse, status_code=202)
+async def retry_task(
+    request: Request,
+    task_id: uuid.UUID,
+    payload: TaskRetryRequest,
+    user: UserRecord = Depends(get_current_user),
+) -> TaskSubmitResponse:
+    """Retry a failed or recoverable task as a newly queued task."""
+    runner: AgentTaskRunner = request.app.state.runner
+    database: Database = request.app.state.database
+    async with database.session() as session:
+        task = await TaskRepository.get_for_user(session, task_id, user_id=user.id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        recovery = TaskRecoveryResponse.from_task(task)
+        if recovery is None:
+            raise HTTPException(status_code=409, detail="Task is not eligible for recovery")
+        if recovery.duplicate_side_effects_confirmation_required and not payload.confirm_duplicate_side_effects:
+            raise HTTPException(status_code=409, detail="Retry requires duplicate side effects confirmation")
+
+    try:
+        async with database.session() as session:
+            new_task = await runner.create_task_record(
+                TaskSubmission(
+                    agent_instance_id=task.agent_instance_id,
+                    agent=task.agent,
+                    question=task.question,
+                    external_issue_url=task.external_issue_url,
+                    external_pull_request_url=task.external_pull_request_url,
+                ),
+                session=session,
+            )
+            await session.commit()
+            await session.refresh(new_task)
+        new_task_id = new_task.id
+        await runner.dispatch_task(new_task_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except TaskDispatchError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return TaskSubmitResponse(
+        task_id=new_task_id,
+        agent_instance_id=new_task.agent_instance_id,
+        category=new_task.category,
+        status=TaskStatus.queued,
+    )
 
 
 @router.get("/{task_id}/events", response_model=list[TaskExecutionEventResponse])
