@@ -122,22 +122,24 @@ export function WorkflowTable({ groupedTasks, activeTab, onTabChange }: Workflow
           return (
             <div
               key={row.status}
-              className="flex items-center gap-4 px-6 py-3.5 transition-colors hover:bg-gray-50/50"
+              className="flex min-w-0 items-center gap-4 px-6 py-3.5 transition-colors hover:bg-gray-50/50"
             >
-              <div className={cn('flex size-8 items-center justify-center rounded-full', row.iconBg)}>
+              <div className={cn('flex size-8 shrink-0 items-center justify-center rounded-full', row.iconBg)}>
                 <Icon className={cn('size-4', row.status === 'running' ? 'animate-spin' : '', row.color)} />
               </div>
-              <span className="w-36 text-sm font-medium text-[hsl(0,0%,8%)]">
-                {t(`taskBoard.${row.status}` as never)}
+              <span className="w-36 shrink-0 truncate text-sm font-medium text-[hsl(0,0%,8%)]">
+                {t(`status.${row.status}` as never)}
               </span>
-              <span className="w-8 text-center text-sm font-bold text-[hsl(0,0%,8%)]">
+              <span className="w-8 shrink-0 text-center text-sm font-bold text-[hsl(0,0%,8%)]">
                 {count}
               </span>
-              <span className="flex-1 text-sm text-gray-500">
+              <span className="min-w-0 flex-1 truncate text-sm text-gray-500">
                 {t(row.descriptionKey as never)}
               </span>
-              <AvatarStack count={Math.min(count, 7)} />
-              <button className="ml-auto flex size-8 items-center justify-center rounded-full border border-gray-200 text-gray-400 transition-colors hover:border-gray-300 hover:text-gray-600">
+              <div className="shrink-0">
+                <AvatarStack count={Math.min(count, 7)} />
+              </div>
+              <button className="ml-auto flex size-8 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-400 transition-colors hover:border-gray-300 hover:text-gray-600">
                 <ArrowRight className="size-3.5" />
               </button>
             </div>

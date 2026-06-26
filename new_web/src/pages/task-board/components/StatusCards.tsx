@@ -8,7 +8,7 @@ import { Sparkline } from './Sparkline';
 type StatusCardData = {
   status: TaskBoardStatus;
   count: number;
-  subtitle: string;
+  subtitlePrefix: string;
   subtitleKey: string;
   icon: LucideIcon;
   color: 'lime' | 'white' | 'orange' | 'red' | 'green';
@@ -25,7 +25,7 @@ const STATUS_CONFIG: Omit<StatusCardData, 'count' | 'sparklineData'>[] = [
   {
     status: 'queued',
     subtitleKey: 'taskBoard.sinceYesterday',
-    subtitle: '+3 since yesterday',
+    subtitlePrefix: '+3',
     icon: Clock,
     color: 'lime',
     sparklineColor: '#a3a3a3',
@@ -33,7 +33,7 @@ const STATUS_CONFIG: Omit<StatusCardData, 'count' | 'sparklineData'>[] = [
   {
     status: 'running',
     subtitleKey: 'taskBoard.active',
-    subtitle: '+4 active',
+    subtitlePrefix: '+4',
     icon: Loader2,
     color: 'white',
     sparklineColor: '#84cc16',
@@ -41,7 +41,7 @@ const STATUS_CONFIG: Omit<StatusCardData, 'count' | 'sparklineData'>[] = [
   {
     status: 'waiting_for_review',
     subtitleKey: 'taskBoard.overdue',
-    subtitle: '2 overdue',
+    subtitlePrefix: '2',
     icon: Users,
     color: 'orange',
     sparklineColor: '#f97316',
@@ -49,7 +49,7 @@ const STATUS_CONFIG: Omit<StatusCardData, 'count' | 'sparklineData'>[] = [
   {
     status: 'failed',
     subtitleKey: 'taskBoard.needAttention',
-    subtitle: '2 need attention',
+    subtitlePrefix: '2',
     icon: AlertTriangle,
     color: 'red',
     sparklineColor: '#ef4444',
@@ -57,7 +57,7 @@ const STATUS_CONFIG: Omit<StatusCardData, 'count' | 'sparklineData'>[] = [
   {
     status: 'merged',
     subtitleKey: 'taskBoard.thisWeekCount',
-    subtitle: '+18 this week',
+    subtitlePrefix: '+18',
     icon: CheckCircle2,
     color: 'green',
     sparklineColor: '#84cc16',
@@ -125,24 +125,28 @@ export function StatusCards({ groupedTasks, isLoading }: StatusCardsProps) {
           <div
             key={card.status}
             className={cn(
-              'rounded-2xl border p-5 transition-shadow hover:shadow-md',
+              'min-w-0 rounded-2xl border p-5 transition-shadow hover:shadow-md',
               getCardClasses(card.color),
             )}
           >
-            <div className="flex items-center gap-2 text-sm font-medium text-gray-600">
-              <div className={cn('flex size-7 items-center justify-center rounded-lg', getIconBgClasses(card.color))}>
+            <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-gray-600">
+              <div className={cn('flex size-7 shrink-0 items-center justify-center rounded-lg', getIconBgClasses(card.color))}>
                 <Icon className={cn('size-3.5', card.status === 'running' ? 'animate-spin' : '')} />
               </div>
-              <span>{t(`taskBoard.${card.status}` as never)}</span>
+              <span className="min-w-0 truncate">{t(`status.${card.status}` as never)}</span>
             </div>
             <div className="mt-3 flex items-end justify-between">
-              <div>
+              <div className="min-w-0">
                 <p className="text-3xl font-bold tracking-tight text-[hsl(0,0%,8%)]">
                   {isLoading ? '...' : card.count}
                 </p>
-                <p className="mt-1 text-xs text-gray-500">{card.subtitle}</p>
+                <p className="mt-1 truncate text-xs text-gray-500">
+                  {card.subtitlePrefix} {t(card.subtitleKey as never)}
+                </p>
               </div>
-              <Sparkline data={card.sparklineData} color={card.sparklineColor} width={80} height={32} />
+              <div className="shrink-0">
+                <Sparkline data={card.sparklineData} color={card.sparklineColor} width={80} height={32} />
+              </div>
             </div>
           </div>
         );
