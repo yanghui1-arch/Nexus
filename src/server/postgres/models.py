@@ -299,6 +299,7 @@ class TaskRecord(Base):
         default=TaskCategory.coding,
         server_default=TaskCategory.coding.value,
     )
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
     question: Mapped[str] = mapped_column(Text, nullable=False)
     # Snapshot the repo/project chosen at task submission time so later workspace
     # edits do not rewrite historical task execution context. Legacy rows may still

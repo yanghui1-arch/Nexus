@@ -89,9 +89,11 @@ def test_create_task_record_snapshots_workspace_repo_project(monkeypatch) -> Non
     monkeypatch.setattr(AgentInstanceRepository, "get", fake_get)
     monkeypatch.setattr(WorkspaceRepository, "ensure_for_agent_instance", fake_ensure)
     monkeypatch.setattr(TaskRepository, "create_pending", fake_create_pending)
+    title_generator = AsyncMock(return_value="Implement the change")
+    monkeypatch.setattr("src.server.runner.generate_task_title", title_generator)
 
     runner = AgentTaskRunner(
-        settings=SimpleNamespace(),
+        settings=SimpleNamespace(api_key="test-key", base_url="https://api.openai.com/v1"),
         database=SimpleNamespace(),
     )
     submission = TaskSubmission(
@@ -107,11 +109,17 @@ def test_create_task_record_snapshots_workspace_repo_project(monkeypatch) -> Non
     assert captured["agent"] == AgentName.sophie
     assert captured["agent_instance_id"] == agent_instance_id
     assert captured["category"] == TaskCategory.coding
+    assert captured["title"] == "Implement the change"
     assert captured["question"] == "implement the change"
     assert captured["repo"] == "owner/repo"
     assert captured["project"] == "nexus"
     assert captured["external_issue_url"] == "https://github.com/owner/repo/issues/1"
     assert captured["external_pull_request_url"] is None
+    title_generator.assert_awaited_once_with(
+        "implement the change",
+        api_key="test-key",
+        base_url="https://api.openai.com/v1",
+    )
 
 
 def test_create_task_record_uses_review_category_for_assistant(monkeypatch) -> None:
@@ -146,7 +154,7 @@ def test_create_task_record_uses_review_category_for_assistant(monkeypatch) -> N
     monkeypatch.setattr(TaskRepository, "create_pending", fake_create_pending)
 
     runner = AgentTaskRunner(
-        settings=SimpleNamespace(),
+        settings=SimpleNamespace(api_key=None, base_url="https://api.openai.com/v1"),
         database=SimpleNamespace(),
     )
     request = SimpleNamespace(
@@ -162,6 +170,7 @@ def test_create_task_record_uses_review_category_for_assistant(monkeypatch) -> N
     assert task.id is not None
     assert captured["agent"] == AgentName.assistant
     assert captured["category"] == TaskCategory.review
+    assert captured["title"] == "review owner/repo#12"
     assert captured["external_pull_request_url"] == "https://github.com/owner/repo/pull/12"
 
 

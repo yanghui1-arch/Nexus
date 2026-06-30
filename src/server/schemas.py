@@ -355,6 +355,7 @@ class TaskResponse(BaseModel):
     agent: str
     agent_instance_id: uuid.UUID
     category: TaskCategory
+    title: str | None
     question: str
     repo: str | None
     project: str | None
@@ -386,6 +387,7 @@ class TaskResponse(BaseModel):
             agent=task.agent.value,
             agent_instance_id=task.agent_instance_id,
             category=task.category,
+            title=task.title,
             question=task.question,
             repo=resolved_repo,
             project=resolved_project,

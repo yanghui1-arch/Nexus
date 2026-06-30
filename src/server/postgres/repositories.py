@@ -934,12 +934,14 @@ class TaskRepository:
         project: str | None,
         external_issue_url: str | None,
         external_pull_request_url: str | None = None,
+        title: str | None = None,
     ) -> TaskRecord:
         """Create a pending tracking record."""
         task = TaskRecord(
             agent=agent,
             agent_instance_id=agent_instance_id,
             category=category,
+            title=title,
             question=question,
             repo=repo,
             project=project,
@@ -963,6 +965,7 @@ class TaskRepository:
         project: str | None,
         external_issue_url: str | None,
         external_pull_request_url: str | None = None,
+        title: str | None = None,
     ) -> TaskRecord:
         """Create a new database record."""
         task = await TaskRepository.create_pending(
@@ -970,6 +973,7 @@ class TaskRepository:
             agent=agent,
             agent_instance_id=agent_instance_id,
             category=category,
+            title=title,
             question=question,
             repo=repo,
             project=project,

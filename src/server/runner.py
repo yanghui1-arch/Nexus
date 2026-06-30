@@ -22,6 +22,7 @@ from src.server.postgres.repositories import (
     TaskRepository,
     WorkspaceRepository,
 )
+from src.server.services.task_title import TASK_TITLE_MAX_LENGTH, generate_task_title
 
 
 class TaskDispatchError(RuntimeError):
@@ -217,6 +218,17 @@ class AgentTaskRunner:
         if not workspace.github_repo or not workspace.project:
             raise ValueError("workspace repo and project are required for task submission")
 
+        title = submission.question[:TASK_TITLE_MAX_LENGTH]
+        if self._settings.api_key:
+            try:
+                title = await generate_task_title(
+                    submission.question,
+                    api_key=self._settings.api_key,
+                    base_url=self._settings.base_url,
+                )
+            except Exception:
+                logger.exception("Task title generation failed; using the question fallback.")
+
         # Snapshot the workspace repo/project onto the task so later workspace edits do
         # not rewrite the historical execution context for already-submitted work.
         task = await TaskRepository.create_pending(
@@ -224,6 +236,7 @@ class AgentTaskRunner:
             agent=submission.agent,
             agent_instance_id=submission.agent_instance_id,
             category=category,
+            title=title,
             question=submission.question,
             repo=workspace.github_repo,
             project=workspace.project,

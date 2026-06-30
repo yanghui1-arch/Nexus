@@ -28,6 +28,7 @@ _REQUIRED_SCHEMA: dict[str, set[str]] = {
         "agent",
         "agent_instance_id",
         "category",
+        "title",
         "question",
         "external_issue_url",
         "external_pull_request_url",
@@ -202,6 +203,12 @@ class Database:
                 )
             )
             await conn.execute(text("UPDATE task SET category = 'coding' WHERE category IS NULL"))
+            await conn.execute(text("ALTER TABLE task ADD COLUMN IF NOT EXISTS title TEXT"))
+            if conn.dialect.name == "postgresql":
+                await conn.execute(
+                    text("ALTER TABLE task ALTER COLUMN title TYPE TEXT USING title::text")
+                )
+            await conn.execute(text("UPDATE task SET title = question WHERE title IS NULL"))
             await conn.execute(text("ALTER TABLE task ADD COLUMN IF NOT EXISTS checkpoint JSON"))
             await conn.execute(text("ALTER TABLE task ADD COLUMN IF NOT EXISTS dispatch_token VARCHAR(64)"))
             await conn.execute(text("ALTER TABLE task ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMPTZ"))
