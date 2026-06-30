@@ -44,6 +44,9 @@ class TaskSubmission:
     question: str
     external_issue_url: str | None = None
     external_pull_request_url: str | None = None
+    repo: str | None = None
+    project: str | None = None
+    source_task_id: uuid.UUID | None = None
 
     def __post_init__(self) -> None:
         """Normalize user-facing text while preserving a small validation guard."""
@@ -59,6 +62,14 @@ class TaskSubmission:
         if self.external_pull_request_url is not None:
             external_pull_request_url = self.external_pull_request_url.strip() or None
             object.__setattr__(self, "external_pull_request_url", external_pull_request_url)
+
+        if self.repo is not None:
+            repo = self.repo.strip() or None
+            object.__setattr__(self, "repo", repo)
+
+        if self.project is not None:
+            project = self.project.strip() or None
+            object.__setattr__(self, "project", project)
 
 
 def _task_category_for_agent(agent: AgentName) -> TaskCategory:
@@ -214,10 +225,12 @@ class AgentTaskRunner:
 
         category = _task_category_for_agent(submission.agent)
         workspace = await WorkspaceRepository.ensure_for_agent_instance(session, instance)
-        if not workspace.github_repo or not workspace.project:
+        repo = getattr(submission, "repo", None) or workspace.github_repo
+        project = getattr(submission, "project", None) or workspace.project
+        if not repo or not project:
             raise ValueError("workspace repo and project are required for task submission")
 
-        # Snapshot the workspace repo/project onto the task so later workspace edits do
+        # Snapshot the selected repo/project onto the task so later workspace edits do
         # not rewrite the historical execution context for already-submitted work.
         task = await TaskRepository.create_pending(
             session,
@@ -225,10 +238,11 @@ class AgentTaskRunner:
             agent_instance_id=submission.agent_instance_id,
             category=category,
             question=submission.question,
-            repo=workspace.github_repo,
-            project=workspace.project,
+            repo=repo,
+            project=project,
             external_issue_url=submission.external_issue_url,
             external_pull_request_url=submission.external_pull_request_url,
+            source_task_id=getattr(submission, "source_task_id", None),
         )
         logger.info(f"Agent `{instance.agent.name}` has workspace `{workspace.workspace_key}`")
         return task

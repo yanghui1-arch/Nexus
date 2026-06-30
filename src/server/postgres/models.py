@@ -309,6 +309,11 @@ class TaskRecord(Base):
     # Unlike repo/project, the external PR URL remains task-scoped because GitHub
     # feedback resumes the same task/PR conversation instead of a workspace-wide thread.
     external_pull_request_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    source_task_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("task.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     checkpoint: Mapped[list[ChatCompletionMessageParam] | None] = mapped_column(JSON, nullable=True)
     dispatch_token: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)

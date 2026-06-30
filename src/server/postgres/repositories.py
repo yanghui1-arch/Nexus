@@ -934,6 +934,7 @@ class TaskRepository:
         project: str | None,
         external_issue_url: str | None,
         external_pull_request_url: str | None = None,
+        source_task_id: uuid.UUID | None = None,
     ) -> TaskRecord:
         """Create a pending tracking record."""
         task = TaskRecord(
@@ -945,6 +946,7 @@ class TaskRepository:
             project=project,
             external_issue_url=external_issue_url,
             external_pull_request_url=external_pull_request_url,
+            source_task_id=source_task_id,
             status=TaskStatus.queued,
         )
         session.add(task)
@@ -963,6 +965,7 @@ class TaskRepository:
         project: str | None,
         external_issue_url: str | None,
         external_pull_request_url: str | None = None,
+        source_task_id: uuid.UUID | None = None,
     ) -> TaskRecord:
         """Create a new database record."""
         task = await TaskRepository.create_pending(
@@ -975,6 +978,7 @@ class TaskRepository:
             project=project,
             external_issue_url=external_issue_url,
             external_pull_request_url=external_pull_request_url,
+            source_task_id=source_task_id,
         )
         await session.commit()
         await session.refresh(task)

@@ -101,6 +101,52 @@ async def create_task(
         agent_instance_id=payload.agent_instance_id,
         category=task.category,
         status=TaskStatus.queued,
+        source_task_id=task.source_task_id,
+    )
+
+
+@router.post("/{task_id}/retry", response_model=TaskSubmitResponse, status_code=202)
+async def retry_task_as_new(
+    request: Request,
+    task_id: uuid.UUID,
+    user: UserRecord = Depends(get_current_user),
+) -> TaskSubmitResponse:
+    """Retry an existing task by creating a new task from its minimal context."""
+    runner: AgentTaskRunner = request.app.state.runner
+    database: Database = request.app.state.database
+    async with database.session() as session:
+        source_task = await TaskRepository.get_for_user(session, task_id, user_id=user.id)
+    if source_task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    try:
+        new_task_id = await runner.submit_task(
+            TaskSubmission(
+                agent_instance_id=source_task.agent_instance_id,
+                agent=source_task.agent,
+                question=source_task.question,
+                repo=source_task.repo,
+                project=source_task.project,
+                external_issue_url=source_task.external_issue_url,
+                source_task_id=source_task.id,
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except TaskDispatchError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    async with database.session() as session:
+        new_task = await TaskRepository.get(session, new_task_id)
+    if new_task is None:
+        raise HTTPException(status_code=500, detail="Created task could not be loaded")
+
+    return TaskSubmitResponse(
+        task_id=new_task_id,
+        agent_instance_id=new_task.agent_instance_id,
+        category=new_task.category,
+        status=TaskStatus.queued,
+        source_task_id=new_task.source_task_id,
     )
 
 
