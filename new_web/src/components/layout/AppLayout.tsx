@@ -176,17 +176,8 @@ export function AppLayout() {
       <div className="grid min-h-screen md:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="bg-[hsl(0,0%,6%)] md:sticky md:top-0 md:h-screen md:self-start md:overflow-hidden">
           <div className="flex h-full flex-col">
-            <div className="flex items-center gap-3 px-5 py-5">
-              <div className="flex size-10 items-center justify-center rounded-xl">
-                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-                  <path d="M18 4L22 14L32 18L22 22L18 32L14 22L4 18L14 14L18 4Z" fill="hsl(80,85%,55%)" />
-                  <path d="M18 10L20 16L26 18L20 20L18 26L16 20L10 18L16 16L18 10Z" fill="hsl(0,0%,6%)" />
-                </svg>
-              </div>
-              <div className="flex flex-col">
-                <p className="text-base font-bold text-white tracking-tight">{t('app.name')}</p>
-                <p className="text-xs text-gray-500">{t('app.tagline')}</p>
-              </div>
+            <div className="px-6 py-7">
+              <p className="text-lg font-bold tracking-tight text-white">{t('app.name')}</p>
             </div>
 
             <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-2">

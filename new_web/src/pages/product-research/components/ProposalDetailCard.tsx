@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
 import type { ApiFeature, ApiProductProposal } from '@/api/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -99,13 +98,6 @@ export function ProposalDetailCard({
   const showRetryPlanning = planningStatus === 'failed';
   const showRecoverPlanning =
     planningStatus === 'missing_run' || planningStatus === 'missing_task';
-  const showViewTask = Boolean(
-    planningRun?.task_id && (
-      planningStatus === 'queued' ||
-      planningStatus === 'running' ||
-      planningStatus === 'failed'
-    ),
-  );
   const planningMessage = planningStatus === 'failed'
     ? planningRun?.error ?? t('productResearch.planningFailedInlineFallback')
     : planningStatus === 'missing_run'
@@ -146,13 +138,6 @@ export function ProposalDetailCard({
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-2">
-              {showViewTask ? (
-                <Button asChild type="button" size="sm" variant="outline" className="h-8 rounded-lg">
-                  <Link to={`/task/${planningRun?.task_id}`}>
-                    {t('productResearch.planningViewTask')}
-                  </Link>
-                </Button>
-              ) : null}
               {showRecoverPlanning ? (
                 <Button
                   type="button"

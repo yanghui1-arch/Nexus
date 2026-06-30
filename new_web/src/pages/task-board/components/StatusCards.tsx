@@ -78,21 +78,6 @@ function generateSparklineData(count: number): number[] {
   return points;
 }
 
-function getCardClasses(color: StatusCardData['color']): string {
-  switch (color) {
-    case 'lime':
-      return 'bg-[hsl(80,85%,92%)] border-[hsl(80,60%,80%)]';
-    case 'white':
-      return 'bg-white border-gray-200/60';
-    case 'orange':
-      return 'bg-white border-gray-200/60';
-    case 'red':
-      return 'bg-white border-gray-200/60';
-    case 'green':
-      return 'bg-white border-gray-200/60';
-  }
-}
-
 function getIconBgClasses(color: StatusCardData['color']): string {
   switch (color) {
     case 'lime':
@@ -124,10 +109,7 @@ export function StatusCards({ groupedTasks, isLoading }: StatusCardsProps) {
         return (
           <div
             key={card.status}
-            className={cn(
-              'min-w-0 rounded-2xl border p-5 transition-shadow hover:shadow-md',
-              getCardClasses(card.color),
-            )}
+            className="min-w-0 rounded-2xl border border-gray-200/60 bg-white p-5"
           >
             <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-gray-600">
               <div className={cn('flex size-7 shrink-0 items-center justify-center rounded-lg', getIconBgClasses(card.color))}>

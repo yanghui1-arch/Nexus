@@ -115,7 +115,7 @@ export function ActivityFeed({ tasks, className, isLoading }: ActivityFeedProps)
     .slice(0, 20);
 
   return (
-    <div className={cn('flex min-h-0 flex-col overflow-hidden rounded-2xl border border-gray-200/60 bg-white', className)}>
+    <div className={cn('flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-gray-200/60 bg-white', className)}>
       <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-4">
         <h3 className="text-sm font-bold text-[hsl(0,0%,8%)]">{t('taskBoard.activityFeed')}</h3>
         <button className="text-xs font-medium text-gray-400 hover:text-gray-600">
@@ -123,7 +123,7 @@ export function ActivityFeed({ tasks, className, isLoading }: ActivityFeedProps)
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 divide-y divide-gray-50 overflow-y-auto">
+      <div className="min-h-0 min-w-0 flex-1 divide-y divide-gray-50 overflow-y-auto overflow-x-hidden">
         {activities.length === 0 ? (
           <div className="px-5 py-10 text-center text-xs text-gray-400">
             {isLoading ? '...' : t('taskBoard.noActivity')}
@@ -132,11 +132,11 @@ export function ActivityFeed({ tasks, className, isLoading }: ActivityFeedProps)
           activities.map(item => {
             const Icon = ICON_MAP[item.type];
             return (
-              <div key={item.id} className="flex gap-3 px-5 py-3.5 transition-colors hover:bg-gray-50/50">
+              <div key={item.id} className="flex min-w-0 max-w-full gap-3 overflow-hidden px-5 py-3.5 transition-colors hover:bg-gray-50/50">
                 <div className={cn('flex size-9 shrink-0 items-center justify-center rounded-full', item.iconBg)}>
                   <Icon className="size-4" />
                 </div>
-                <div className="min-w-0 flex-1">
+                <div className="w-0 min-w-0 flex-1 overflow-hidden">
                   <p className={cn('text-xs font-semibold', item.type === 'failed' ? 'text-red-600' : item.type === 'pr' ? 'text-purple-600' : 'text-[hsl(0,0%,8%)]')}>
                     {item.title}
                   </p>

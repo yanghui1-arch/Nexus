@@ -1,12 +1,12 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
 import {
   Clock,
   Loader2,
   Users,
   AlertTriangle,
   CheckCircle2,
-  ArrowRight,
+  ChevronRight,
   Funnel,
   X,
   type LucideIcon,
@@ -21,7 +21,7 @@ import {
   type TaskBoardStatusFilter,
   type TaskBoardTab,
 } from '../utils';
-import type { WorkspaceTaskView } from '@/lib/workspace-task-view';
+import { timeAgo, type WorkspaceTaskView } from '@/lib/workspace-task-view';
 
 type WorkflowTableProps = {
   groupedTasks: Record<TaskBoardStatus, WorkspaceTaskView[]>;
@@ -132,6 +132,22 @@ export function WorkflowTable({
   onClearFilters,
 }: WorkflowTableProps) {
   const { t } = useTranslation();
+  const [expandedStatuses, setExpandedStatuses] = useState<Set<TaskBoardStatus>>(
+    () => new Set(),
+  );
+
+  const toggleStatusExpanded = (status: TaskBoardStatus) => {
+    setExpandedStatuses(prev => {
+      const next = new Set(prev);
+      if (next.has(status)) {
+        next.delete(status);
+      } else {
+        next.add(status);
+      }
+      return next;
+    });
+  };
+
   const hasActiveFilters =
     activeTab !== 'allTasks' || statusFilter !== 'all' || agentFilter !== 'all';
   const rows = WORKFLOW_ROWS.filter(row => {
@@ -280,44 +296,70 @@ export function WorkflowTable({
           const Icon = row.icon;
           const tasks = groupedTasks[row.status] ?? [];
           const count = tasks.length;
-          const targetTask = tasks[0];
+          const isExpanded = expandedStatuses.has(row.status);
+          const canExpand = count > 0;
           return (
-            <div
-              key={row.status}
-              className="flex min-w-0 items-center gap-4 px-6 py-3.5 transition-colors hover:bg-gray-50/50"
-            >
-              <div className={cn('flex size-8 shrink-0 items-center justify-center rounded-full', row.iconBg)}>
-                <Icon className={cn('size-4', row.status === 'running' ? 'animate-spin' : '', row.color)} />
+            <div key={row.status}>
+              <div
+                role="button"
+                tabIndex={canExpand ? 0 : -1}
+                aria-expanded={canExpand ? isExpanded : undefined}
+                onClick={canExpand ? () => toggleStatusExpanded(row.status) : undefined}
+                onKeyDown={
+                  canExpand
+                    ? event => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          toggleStatusExpanded(row.status);
+                        }
+                      }
+                    : undefined
+                }
+                className={cn(
+                  'flex min-w-0 items-center gap-4 px-6 py-3.5 transition-colors',
+                  canExpand ? 'cursor-pointer hover:bg-gray-50/50' : 'cursor-default',
+                )}
+              >
+                <div className={cn('flex size-8 shrink-0 items-center justify-center rounded-full', row.iconBg)}>
+                  <Icon className={cn('size-4', row.status === 'running' ? 'animate-spin' : '', row.color)} />
+                </div>
+                <span className="w-36 shrink-0 truncate text-sm font-medium text-[hsl(0,0%,8%)]">
+                  {t(`status.${row.status}` as never)}
+                </span>
+                <span className="w-8 shrink-0 text-center text-sm font-bold text-[hsl(0,0%,8%)]">
+                  {count}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm text-gray-500">
+                  {t(row.descriptionKey as never)}
+                </span>
+                <div className="shrink-0">
+                  <AvatarStack count={Math.min(count, 7)} />
+                </div>
+                <ChevronRight
+                  className={cn(
+                    'ml-auto size-4 shrink-0 transition-transform',
+                    isExpanded ? 'rotate-90' : '',
+                    canExpand ? 'text-gray-400' : 'text-gray-300',
+                  )}
+                />
               </div>
-              <span className="w-36 shrink-0 truncate text-sm font-medium text-[hsl(0,0%,8%)]">
-                {t(`status.${row.status}` as never)}
-              </span>
-              <span className="w-8 shrink-0 text-center text-sm font-bold text-[hsl(0,0%,8%)]">
-                {count}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-sm text-gray-500">
-                {t(row.descriptionKey as never)}
-              </span>
-              <div className="shrink-0">
-                <AvatarStack count={Math.min(count, 7)} />
-              </div>
-              {targetTask ? (
-                <Link
-                  to={`/task/${targetTask.id}`}
-                  className="ml-auto flex size-8 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-400 transition-colors hover:border-gray-300 hover:text-gray-600"
-                  aria-label={t('common.details')}
-                >
-                  <ArrowRight className="size-3.5" />
-                </Link>
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  className="ml-auto flex size-8 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-300"
-                >
-                  <ArrowRight className="size-3.5" />
-                </button>
-              )}
+
+              {isExpanded && count > 0 ? (
+                <div className="divide-y divide-gray-100 border-t border-gray-100 bg-gray-50/40">
+                  {tasks.map(task => (
+                    <div
+                      key={task.id}
+                      className="flex min-w-0 items-center gap-3 py-2.5 pl-16 pr-6 text-sm"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-gray-700">
+                        {task.question}
+                      </span>
+                      <span className="shrink-0 text-xs text-gray-400">{task.agentLabel}</span>
+                      <span className="shrink-0 text-xs text-gray-400">{timeAgo(task.updatedAt)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           );
         })}

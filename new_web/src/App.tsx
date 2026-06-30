@@ -10,7 +10,6 @@ import PricingPage from '@/pages/pricing';
 import ProductResearchPage from '@/pages/product-research';
 import PublishTaskPage from '@/pages/publish-task';
 import TaskBoardPage from '@/pages/task-board';
-import TaskDetailPage from '@/pages/TaskDetailPage';
 import WorkspaceSettingsPage from '@/pages/workspace-settings';
 
 function App() {
@@ -62,7 +61,6 @@ function App() {
                 path="/overview/:projectId"
                 element={<Navigate to={DEFAULT_WORKSPACE_PATH} replace />}
               />
-              <Route path="/task/:taskId" element={<TaskDetailPage />} />
               <Route path="*" element={<DashboardNotFoundPage />} />
             </Route>
           </Route>
