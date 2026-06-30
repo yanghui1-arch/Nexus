@@ -11,6 +11,7 @@ import {
 
 export type TaskBoardData = {
   groupedTasks: Record<TaskBoardStatus, WorkspaceTaskView[]>;
+  visibleTasks: WorkspaceTaskView[];
   repoOptions: string[];
   repoFilter: string;
   setRepoFilter: (repo: string) => void;
@@ -44,6 +45,7 @@ export function useTaskBoardData(): TaskBoardData {
 
   return {
     groupedTasks,
+    visibleTasks,
     repoOptions,
     repoFilter,
     setRepoFilter,
