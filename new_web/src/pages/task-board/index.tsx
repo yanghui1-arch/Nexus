@@ -110,7 +110,13 @@ export default function TaskBoardPage() {
           </div>
         </div>
 
-        <ActivityFeed />
+        <div className="relative h-[620px] xl:h-auto">
+          <ActivityFeed
+            tasks={visibleTasks}
+            isLoading={isLoading}
+            className="absolute inset-0"
+          />
+        </div>
       </div>
     </div>
   );
