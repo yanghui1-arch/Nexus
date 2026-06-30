@@ -42,6 +42,7 @@ export interface ApiTask {
   agent: ApiAgentKind;
   agent_instance_id: string;
   category: ApiTaskCategory;
+  title: string | null;
   question: string;
   repo: string | null;
   project: string | null;

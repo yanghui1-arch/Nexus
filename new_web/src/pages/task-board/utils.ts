@@ -112,6 +112,7 @@ function taskMatchesTab(task: WorkspaceTaskView, tab: TaskBoardTab): boolean {
   const searchableText = [
     task.project,
     task.repo,
+    task.title,
     task.question,
     task.agentLabel,
   ]

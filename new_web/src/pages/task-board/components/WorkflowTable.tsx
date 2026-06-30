@@ -352,7 +352,7 @@ export function WorkflowTable({
                       className="flex min-w-0 items-center gap-3 py-2.5 pl-16 pr-6 text-sm"
                     >
                       <span className="min-w-0 flex-1 truncate text-gray-700">
-                        {task.question}
+                        {task.title}
                       </span>
                       <span className="shrink-0 text-xs text-gray-400">{task.agentLabel}</span>
                       <span className="shrink-0 text-xs text-gray-400">{timeAgo(task.updatedAt)}</span>

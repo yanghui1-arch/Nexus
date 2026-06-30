@@ -40,14 +40,14 @@ export function ActivityFeed({ tasks, className, isLoading }: ActivityFeedProps)
 
   const activities: ActivityItem[] = tasks
     .map((task): ActivityItem | null => {
-      const description = task.question;
+      const description = task.title;
       switch (task.status) {
         case 'merged':
           return {
             id: task.id,
             type: 'pr',
             title: prLabelFromUrl(task.externalPullRequestUrl) ?? t('taskBoard.pullRequest'),
-            description: task.result || description,
+            description,
             statusKey: 'status.merged',
             statusColor: 'text-green-600',
             dotColor: 'bg-green-500',
@@ -59,7 +59,7 @@ export function ActivityFeed({ tasks, className, isLoading }: ActivityFeedProps)
             id: task.id,
             type: 'pr',
             title: prLabelFromUrl(task.externalPullRequestUrl) ?? t('taskBoard.pullRequest'),
-            description: task.result || description,
+            description,
             statusKey: 'status.waiting_for_review',
             statusColor: 'text-orange-600',
             dotColor: 'bg-orange-500',
@@ -71,7 +71,7 @@ export function ActivityFeed({ tasks, className, isLoading }: ActivityFeedProps)
             id: task.id,
             type: 'failed',
             title: t('taskBoard.taskFailed'),
-            description: task.error || description,
+            description,
             statusKey: 'status.failed',
             statusColor: 'text-red-600',
             dotColor: 'bg-red-500',
